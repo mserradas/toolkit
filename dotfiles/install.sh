@@ -208,6 +208,13 @@ healthcheck() {
 
 # --- MAIN ---
 main() {
+    if [[ "$1" == "--check" ]]; then
+        echo -e "\n${BOLD}toolkit/dotfiles — healthcheck${NC}"
+        echo "----------------------------------------"
+        healthcheck
+        return
+    fi
+
     echo -e "\n${BOLD}toolkit/dotfiles — instalación automática${NC}"
     echo "----------------------------------------"
 
@@ -223,4 +230,4 @@ main() {
     echo -e "  Abre Ghostty para empezar.\n"
 }
 
-main
+main "$@"
