@@ -4,6 +4,18 @@ Configuración personal para el entorno de terminal en macOS.
 
 **Stack:** Ghostty + Fish + Tmux + Starship
 
+## Mac nueva — instalación rápida
+
+```sh
+git clone <tu-repo> toolkit
+cd toolkit/dotfiles
+./install.sh
+```
+
+> **Nota:** La primera vez que se ejecuta `git` en una Mac nueva, macOS muestra un popup para instalar las **Xcode Command Line Tools**. Hay que aceptarlo y esperar a que termine antes de continuar. Requiere macOS 13 o superior.
+
+---
+
 ## Requisitos previos
 
 ### 1. Homebrew
