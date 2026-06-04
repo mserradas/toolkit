@@ -46,7 +46,7 @@ read_only = " 🔒"
 "Pictures" = " "
 
 [cmd_duration]
-format = " took [ $duration]($style) "
+format = " ⏱ took [ $duration]($style) "
 style = "bold yellow"
 min_time = 500
 
