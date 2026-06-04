@@ -153,6 +153,59 @@ install_tmux_plugins() {
     fi
 }
 
+# --- HEALTHCHECK ---
+healthcheck() {
+    log "Healthcheck"
+
+    local ok=true
+
+    check() {
+        local label="$1"
+        local result="$2"
+        if [[ "$result" == "ok" ]]; then
+            success "$label"
+        else
+            echo -e "  ${RED}✗${NC} $label — $result"
+            ok=false
+        fi
+    }
+
+    # Binarios
+    installed brew      && check "Homebrew"           "ok" || check "Homebrew"           "no encontrado"
+    installed fish      && check "Fish"               "ok" || check "Fish"               "no encontrado"
+    installed tmux      && check "Tmux"               "ok" || check "Tmux"               "no encontrado"
+    installed starship  && check "Starship"           "ok" || check "Starship"           "no encontrado"
+    installed eza       && check "eza"                "ok" || check "eza"                "no encontrado"
+    installed fzf       && check "fzf"                "ok" || check "fzf"                "no encontrado"
+    installed atuin     && check "atuin"              "ok" || check "atuin"              "no encontrado"
+    installed zoxide    && check "zoxide"             "ok" || check "zoxide"             "no encontrado"
+    installed fnm       && check "fnm"                "ok" || check "fnm"                "no encontrado"
+    installed terminal-notifier && check "terminal-notifier" "ok" || check "terminal-notifier" "no encontrado"
+
+    # Configs
+    [[ -f ~/.config/ghostty/config ]]   && check "Config Ghostty"  "ok" || check "Config Ghostty"  "no encontrado en ~/.config/ghostty/config"
+    [[ -f ~/.config/fish/config.fish ]] && check "Config Fish"     "ok" || check "Config Fish"     "no encontrado en ~/.config/fish/config.fish"
+    [[ -f ~/.tmux.conf ]]               && check "Config Tmux"     "ok" || check "Config Tmux"     "no encontrado en ~/.tmux.conf"
+    [[ -f ~/.config/starship.toml ]]    && check "Config Starship" "ok" || check "Config Starship" "no encontrado en ~/.config/starship.toml"
+
+    # TPM y plugins
+    [[ -d ~/.tmux/plugins/tpm ]]             && check "TPM"              "ok" || check "TPM"              "no encontrado en ~/.tmux/plugins/tpm"
+    [[ -d ~/.tmux/plugins/tmux-yank ]]       && check "Plugin tmux-yank" "ok" || check "Plugin tmux-yank" "no instalado"
+    [[ -d ~/.tmux/plugins/tmux-resurrect ]]  && check "Plugin tmux-resurrect" "ok" || check "Plugin tmux-resurrect" "no instalado"
+    [[ -d ~/.tmux/plugins/tmux-ukiyo ]]      && check "Plugin tmux-ukiyo" "ok" || check "Plugin tmux-ukiyo" "no instalado"
+
+    # Shell por defecto
+    local fish_path
+    [[ -f /opt/homebrew/bin/fish ]] && fish_path="/opt/homebrew/bin/fish" || fish_path="/usr/local/bin/fish"
+    [[ "$SHELL" == "$fish_path" ]] && check "Fish como shell por defecto" "ok" || check "Fish como shell por defecto" "shell actual: $SHELL"
+
+    if [[ "$ok" == true ]]; then
+        echo -e "\n${GREEN}${BOLD}✓ Todo correcto${NC}"
+    else
+        echo -e "\n${YELLOW}${BOLD}! Algunos checks fallaron — revisa los errores arriba${NC}"
+    fi
+}
+
 # --- MAIN ---
 main() {
     echo -e "\n${BOLD}toolkit/dotfiles — instalación automática${NC}"
@@ -164,6 +217,7 @@ main() {
     setup_tpm
     copy_configs
     install_tmux_plugins
+    healthcheck
 
     echo -e "\n${GREEN}${BOLD}✓ Instalación completada${NC}"
     echo -e "  Abre Ghostty para empezar.\n"
