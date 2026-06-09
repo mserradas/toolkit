@@ -19,6 +19,17 @@ error()   { echo -e "  ${RED}✗${NC} $1"; exit 1; }
 
 installed() { command -v "$1" &>/dev/null; }
 
+jetbrains_mono_nerd_font_installed() {
+    local font_dir font_file
+    for font_dir in "$HOME/Library/Fonts" "/Library/Fonts"; do
+        [[ -d "$font_dir" ]] || continue
+        for font_file in "$font_dir"/JetBrainsMono*NerdFont*.{ttf,otf}; do
+            [[ -e "$font_file" ]] && return 0
+        done
+    done
+    return 1
+}
+
 # --- HOMEBREW ---
 install_homebrew() {
     log "Homebrew"
@@ -62,6 +73,8 @@ install_packages() {
     for cask in "${casks[@]}"; do
         if brew list --cask "$cask" &>/dev/null; then
             success "$cask ya instalado"
+        elif [[ "$cask" == "font-jetbrains-mono-nerd-font" ]] && jetbrains_mono_nerd_font_installed; then
+            success "$cask ya instalado (fuente detectada)"
         else
             brew install --cask "$cask" && success "$cask instalado"
         fi
@@ -145,11 +158,44 @@ copy_configs() {
 install_tmux_plugins() {
     log "Plugins de Tmux"
 
-    if [[ -f "$HOME/.tmux/plugins/tpm/bin/install_plugins" ]]; then
-        "$HOME/.tmux/plugins/tpm/bin/install_plugins"
+    local plugins_dir="$HOME/.tmux/plugins/"
+    local tpm_installer="${plugins_dir}tpm/bin/install_plugins"
+    local bootstrap_session="dotfiles-tpm-bootstrap-$$"
+    local started_bootstrap=false
+
+    cleanup_tmux_bootstrap() {
+        if [[ "$started_bootstrap" == true ]]; then
+            tmux kill-session -t "$bootstrap_session" &>/dev/null || true
+            started_bootstrap=false
+        fi
+        trap - RETURN
+    }
+
+    if [[ -f "$tpm_installer" ]]; then
+        if ! tmux has-session &>/dev/null; then
+            tmux new-session -d -s "$bootstrap_session"
+            started_bootstrap=true
+            trap cleanup_tmux_bootstrap RETURN
+        fi
+
+        local install_status=0
+        tmux set-environment -g TMUX_PLUGIN_MANAGER_PATH "$plugins_dir" || install_status=$?
+
+        if [[ "$install_status" -eq 0 ]]; then
+            "$tpm_installer" || install_status=$?
+        fi
+
+        if [[ "$started_bootstrap" == true ]]; then
+            cleanup_tmux_bootstrap
+        fi
+
+        if [[ "$install_status" -ne 0 ]]; then
+            return "$install_status"
+        fi
+
         success "Plugins instalados"
     else
-        warn "TPM no encontrado, instala los plugins manualmente con Ctrl+a + I"
+        warn "TPM no encontrado en ${plugins_dir}tpm; instala los plugins manualmente con Ctrl+a + I"
     fi
 }
 
