@@ -1,7 +1,7 @@
 ---
 description: Ejecutor de verificación. Corre tests, linters, type-checks y format-checkers, y reporta resultados con precisión. No modifica código de producción; si falta un test, propone el caso al arquitecto en vez de escribirlo por su cuenta.
 mode: subagent
-model: openai/gpt-5.5-fast
+model: openai/gpt-5.5
 temperature: 0.1
 reasoningEffort: medium
 textVerbosity: low

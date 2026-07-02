@@ -1,7 +1,7 @@
 ---
 description: Explorador de código read-only. Mapea módulos no familiares, ubica símbolos, lista el blast radius de un cambio y, opcionalmente, hace review independiente de un diff. No modifica nada y no ejecuta bash.
 mode: subagent
-model: openai/gpt-5.5-fast
+model: openai/gpt-5.5
 temperature: 0.1
 reasoningEffort: medium
 textVerbosity: low

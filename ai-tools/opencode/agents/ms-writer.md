@@ -1,7 +1,7 @@
 ---
 description: Escritor de documentación orientada al consumidor. Traduce el diff final verificado y el TDD/PRD a CHANGELOG, release notes, README y guías de usuario. No toca código ni PRDs ni TDDs.
 mode: subagent
-model: openai/gpt-5.5-fast
+model: openai/gpt-5.5
 temperature: 0.2
 reasoningEffort: medium
 textVerbosity: medium
