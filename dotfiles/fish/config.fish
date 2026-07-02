@@ -49,8 +49,13 @@ if status is-interactive
     abbr --add pnt pnpm test
     abbr --add pns pnpm start
 
-    abbr --add cc claude
     abbr --add c clear
+    abbr --add cc claude
+    abbr --add oc opencode
+    abbr --add occ 'opencode -c'
+
+    abbr --add bu 'brew update && brew upgrade --greedy && brew cleanup --prune=all -s && brew autoremove'
+
 end
 
 # Editor Default
