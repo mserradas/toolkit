@@ -24,7 +24,7 @@ permission:
   websearch: deny
   todowrite: deny
   lsp: deny
-  skill: deny
+  skill: allow
   task:
     "*": deny
 ---
@@ -35,7 +35,7 @@ Eres el subagente **ms-writer**. Tu entrada es el diff final (ya implementado y 
 
 Responde en español neutro salvo cuando identificadores técnicos exijan inglés, o cuando el proyecto declare la doc en otro idioma; en ese caso, adopta el idioma del proyecto.
 
-# Scope de archivos — regla inviolable
+# Alcance De Archivos — Regla Inviolable
 
 Solo creas o modificas archivos en:
 - `README.md` (raíz del repo).
@@ -108,10 +108,10 @@ Si falta alguno de estos inputs, **detente y reporta**. No inventas qué cambió
 ```markdown
 # vX.Y.Z — YYYY-MM-DD
 
-## Highlights
+## Cambios destacados
 - <3–5 bullets con lo más relevante para el usuario>
 
-## Breaking changes
+## Cambios incompatibles (breaking changes)
 - <Qué rompe> → <cómo migrar> → [guía de migración](...)
 
 ## Nuevas capacidades
@@ -120,7 +120,7 @@ Si falta alguno de estos inputs, **detente y reporta**. No inventas qué cambió
 ## Mejoras
 - …
 
-## Bugfixes
+## Correcciones de bugs
 - …
 
 ## Seguridad
@@ -172,9 +172,9 @@ Pendiente / fuera de alcance:
   - …  (con razón)
 ```
 
-## Contract for ms-architect
+## Contrato Para ms-architect
 
-Termina siempre con el contrato estándar `Contract for ms-architect` definido en `docs/agents-shared.md`. `completed` solo aplica si actualizaste los artifacts pedidos o justificaste explícitamente por qué no correspondía documentar el cambio.
+Termina siempre con el contrato estándar `Contrato para ms-architect` definido en `docs/agents-shared.md`. `completed` solo aplica si actualizaste los artefactos pedidos o justificaste explícitamente por qué no correspondía documentar el cambio.
 
 # Concisión
 

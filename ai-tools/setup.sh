@@ -63,8 +63,8 @@ relpath_py() {
 import os
 import sys
 
-src = sys.argv[1]
-dst = sys.argv[2]
+src = os.path.realpath(sys.argv[1])
+dst = os.path.realpath(sys.argv[2])
 print(os.path.relpath(src, start=dst))
 PY
 }
@@ -145,12 +145,13 @@ ensure_dir() {
 create_link_relative() {
   local source_abs="$1"
   local dest_path="$2"
-  local dest_parent target_rel
+  local dest_parent dest_parent_real target_rel
 
   [[ -e "$source_abs" ]] || die "No existe el origen: $source_abs"
 
   dest_parent="$(dirname "$dest_path")"
   ensure_dir "$dest_parent" || return 0
+  dest_parent_real="$(abspath_dir "$dest_parent")" || die "No se pudo resolver el destino: $dest_parent"
 
   if [[ -e "$dest_path" || -L "$dest_path" ]]; then
     if path_already_correct "$dest_path" "$source_abs"; then
@@ -168,7 +169,7 @@ create_link_relative() {
     fi
   fi
 
-  target_rel="$(relpath_py "$source_abs" "$dest_parent")"
+  target_rel="$(relpath_py "$source_abs" "$dest_parent_real")"
   ln -s -- "$target_rel" "$dest_path"
   ok "Enlazado: $dest_path -> $target_rel"
 }
@@ -184,6 +185,116 @@ with open(sys.argv[1], "r", encoding="utf-8") as fh:
 PY
 }
 
+resource_exists_kind() {
+  local path="$1"
+  local kind="$2"
+
+  case "$kind" in
+    file) [[ -f "$path" ]] ;;
+    dir) [[ -d "$path" ]] ;;
+    *) die "Tipo de recurso no soportado: $kind" ;;
+  esac
+}
+
+validate_required_resource() {
+  local source_dir="$1"
+  local name="$2"
+  local kind="$3"
+
+  resource_exists_kind "$source_dir/$name" "$kind" || die "No se encontro: $source_dir/$name"
+}
+
+validate_optional_json_resource() {
+  local source_dir="$1"
+  local name="$2"
+
+  if [[ -f "$source_dir/$name" ]]; then
+    validate_json_file "$source_dir/$name" || die "JSON invalido: $source_dir/$name"
+  fi
+}
+
+print_opencode_link_plan() {
+  local source_dir="$1"
+  local dest_dir="$2"
+  local entry name kind
+
+  info "Se crearan estos enlaces simbolicos:"
+  for entry in opencode.json:file agents:dir docs:dir; do
+    name="${entry%%:*}"
+    kind="${entry#*:}"
+    validate_required_resource "$source_dir" "$name" "$kind"
+    info "  $dest_dir/$name -> $source_dir/$name"
+  done
+
+  for entry in commands:dir modes:dir plugins:dir skills:dir tools:dir themes:dir tui.json:file opencode-notifier.json:file package.json:file package-lock.json:file AGENTS.md:file; do
+    name="${entry%%:*}"
+    kind="${entry#*:}"
+    if resource_exists_kind "$source_dir/$name" "$kind"; then
+      info "  $dest_dir/$name -> $source_dir/$name"
+    fi
+  done
+}
+
+install_opencode_resource() {
+  local source_dir="$1"
+  local dest_dir="$2"
+  local name="$3"
+  local kind="$4"
+  local required="$5"
+
+  if ! resource_exists_kind "$source_dir/$name" "$kind"; then
+    if [[ "$required" == "required" ]]; then
+      die "No se encontro: $source_dir/$name"
+    fi
+    return 0
+  fi
+
+  create_link_relative "$source_dir/$name" "$dest_dir/$name"
+}
+
+install_opencode_dependencies() {
+  local source_dir="$1"
+  local dest_dir="$2"
+  local -a npm_cmd
+
+  [[ -f "$source_dir/package.json" ]] || return 0
+
+  if ! path_already_correct "$dest_dir/package.json" "$source_dir/package.json"; then
+    warn "No se instalan dependencias npm: $dest_dir/package.json no apunta a este repo."
+    return 0
+  fi
+
+  if [[ -f "$source_dir/package-lock.json" ]] && ! path_already_correct "$dest_dir/package-lock.json" "$source_dir/package-lock.json"; then
+    warn "No se instalan dependencias npm: $dest_dir/package-lock.json no apunta a este repo."
+    return 0
+  fi
+
+  if ! command -v npm >/dev/null 2>&1; then
+    warn "No se instalan dependencias npm: no se encontro el comando npm."
+    return 0
+  fi
+
+  info ""
+  info "Los plugins locales de OpenCode necesitan dependencias npm en:"
+  info "  $dest_dir/node_modules"
+  info "node_modules no se versiona; se instala localmente en tu maquina."
+
+  if ! confirm "Instalar o actualizar dependencias npm de OpenCode"; then
+    warn "Dependencias npm omitidas. Los plugins locales pueden no cargar hasta instalar dependencias en $dest_dir."
+    return 0
+  fi
+
+  if [[ -f "$source_dir/package-lock.json" ]]; then
+    npm_cmd=(npm ci --ignore-scripts)
+  else
+    npm_cmd=(npm install --ignore-scripts)
+  fi
+
+  info "Ejecutando: ${npm_cmd[*]}"
+  (cd "$dest_dir" && "${npm_cmd[@]}")
+  ok "Dependencias npm instaladas en: $dest_dir/node_modules"
+}
+
 repo_root() {
   abspath_dir "$(dirname "${BASH_SOURCE[0]}")"
 }
@@ -194,27 +305,25 @@ opencode_config_dir() {
 }
 
 install_opencode() {
-  local root source_dir dest_dir
+  local root source_dir dest_dir entry name kind
   root="$(repo_root)"
   source_dir="$root/opencode"
   dest_dir="$(opencode_config_dir)"
 
   [[ -d "$source_dir" ]] || die "No se encontro la carpeta opencode en: $source_dir"
-  [[ -d "$source_dir/agents" ]] || die "No se encontro: $source_dir/agents"
-  [[ -d "$source_dir/docs" ]] || die "No se encontro: $source_dir/docs"
-  [[ -f "$source_dir/opencode.json" ]] || die "No se encontro: $source_dir/opencode.json"
-
+  validate_required_resource "$source_dir" "opencode.json" "file"
+  validate_required_resource "$source_dir" "agents" "dir"
+  validate_required_resource "$source_dir" "docs" "dir"
   validate_json_file "$source_dir/opencode.json" || die "JSON invalido: $source_dir/opencode.json"
+  validate_optional_json_resource "$source_dir" "tui.json"
+  validate_optional_json_resource "$source_dir" "opencode-notifier.json"
 
   info ""
   info "${C_BOLD}Instalacion OpenCode${C_RESET}"
   info "Origen:  $source_dir"
   info "Destino: $dest_dir"
   info ""
-  info "Se crearan estos enlaces simbolicos:"
-  info "  $dest_dir/opencode.json -> $source_dir/opencode.json"
-  info "  $dest_dir/agents        -> $source_dir/agents"
-  info "  $dest_dir/docs          -> $source_dir/docs"
+  print_opencode_link_plan "$source_dir" "$dest_dir"
 
   if ! confirm "Continuar"; then
     info "Saliendo."
@@ -222,9 +331,19 @@ install_opencode() {
   fi
 
   ensure_dir "$dest_dir" || die "No se pudo preparar el directorio destino: $dest_dir"
-  create_link_relative "$source_dir/opencode.json" "$dest_dir/opencode.json"
-  create_link_relative "$source_dir/agents" "$dest_dir/agents"
-  create_link_relative "$source_dir/docs" "$dest_dir/docs"
+  for entry in opencode.json:file agents:dir docs:dir; do
+    name="${entry%%:*}"
+    kind="${entry#*:}"
+    install_opencode_resource "$source_dir" "$dest_dir" "$name" "$kind" "required"
+  done
+
+  for entry in commands:dir modes:dir plugins:dir skills:dir tools:dir themes:dir tui.json:file opencode-notifier.json:file package.json:file package-lock.json:file AGENTS.md:file; do
+    name="${entry%%:*}"
+    kind="${entry#*:}"
+    install_opencode_resource "$source_dir" "$dest_dir" "$name" "$kind" "optional"
+  done
+
+  install_opencode_dependencies "$source_dir" "$dest_dir"
 
   ok ""
   ok "OpenCode instalado. Reinicia opencode para cargar la configuracion."
@@ -262,7 +381,7 @@ select_provider() {
     case "$choice_lc" in
       1|opencode|open-code) printf "%s" "opencode"; return 0 ;;
       0|all|todos|todo) printf "%s" "all"; return 0 ;;
-      q|x|salir|exit|quit) info "Saliendo."; exit 0 ;;
+      q|x|salir|exit|quit) printf "%s" "quit"; return 0 ;;
       *) warn "Opcion invalida." ;;
     esac
   done
@@ -302,6 +421,11 @@ main() {
     esac
   else
     provider="$(select_provider)"
+  fi
+
+  if [[ "$provider" == "quit" ]]; then
+    info "Saliendo."
+    exit 0
   fi
 
   info "Proveedor: $(provider_label "$provider")"

@@ -22,29 +22,66 @@ permission:
     "npm run test*": allow
     "npm run lint*": allow
     "npm run type*": allow
+    "npm run typecheck*": allow
     "npm run check*": allow
     "npm run format*": allow
     "pnpm test*": allow
     "pnpm run test*": allow
     "pnpm run lint*": allow
     "pnpm run type*": allow
+    "pnpm run typecheck*": allow
     "pnpm run check*": allow
     "pnpm run format*": allow
+    "pnpm exec eslint*": allow
+    "pnpm exec tsc *--noEmit*": allow
+    "pnpm exec vue-tsc*": allow
+    "pnpm exec prettier --check*": allow
+    "pnpm exec prettier -c*": allow
+    "pnpm exec vitest run*": allow
+    "pnpm exec jest*": allow
+    "pnpm exec stylelint*": allow
+    "pnpm exec biome check*": allow
+    "pnpm exec oxlint*": allow
+    "pnpm exec svelte-check*": allow
+    "pnpm exec astro check*": allow
+    "npx --no-install eslint*": allow
+    "npx --no-install tsc *--noEmit*": allow
+    "npx --no-install prettier --check*": allow
+    "npx --no-install prettier -c*": allow
+    "npx --no-install vitest run*": allow
+    "npx --no-install jest*": allow
     "yarn test*": allow
     "yarn run test*": allow
     "yarn run lint*": allow
     "yarn run type*": allow
+    "yarn run typecheck*": allow
     "yarn run check*": allow
     "yarn run format*": allow
     "bun test*": allow
     "bun run test*": allow
     "bun run lint*": allow
     "bun run type*": allow
+    "bun run typecheck*": allow
     "bun run check*": allow
     "bun run format*": allow
     "pytest*": allow
     "python -m pytest*": allow
     "python3 -m pytest*": allow
+    "uv run pytest*": allow
+    "uv run --frozen pytest*": allow
+    "uv run --locked pytest*": allow
+    "uv run ruff check*": allow
+    "uv run --frozen ruff check*": allow
+    "uv run --locked ruff check*": allow
+    "uv run ruff format --check*": allow
+    "uv run --frozen ruff format --check*": allow
+    "uv run --locked ruff format --check*": allow
+    "uv run mypy*": allow
+    "uv run --frozen mypy*": allow
+    "uv run --locked mypy*": allow
+    "uv run pyright*": allow
+    "uv run --frozen pyright*": allow
+    "uv run --locked pyright*": allow
     "ruff check*": allow
     "ruff format*": allow
     "black *": allow
@@ -162,9 +199,9 @@ Pendiente / fuera de alcance:
   - <si aplica>
 ```
 
-## Contract for ms-architect
+## Contrato Para ms-architect
 
-Termina siempre con el contrato estándar `Contract for ms-architect` definido en `docs/agents-shared.md`. Si el cambio no califica para fastlane, usa `status: not_applicable` o `blocked`, `skill_resolution.solved: false`, y explica el criterio fallido en `blockers`.
+Termina siempre con el contrato estándar `Contrato para ms-architect` definido en `docs/agents-shared.md`. Si el cambio no califica para fastlane, usa `status: not_applicable` o `blocked`, `skill_resolution.solved: false`, y explica el criterio fallido en `blockers`.
 
 Usa el modo compacto del contrato: una sola entrada de `artifacts` salvo que haya más de una evidencia realmente necesaria, `risks: []` si no hay riesgos y listas vacías para `assumptions` / `open_questions` cuando no apliquen. No repitas en el YAML lo que ya quedó claro en el reporte.
 

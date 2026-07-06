@@ -13,16 +13,16 @@ permission:
     "ls": allow
     "ls *": allow
     "pwd": allow
-    "cat *": ask
-    "head *": ask
-    "tail *": ask
+    "cat *": allow
+    "head *": allow
+    "tail *": allow
     "wc *": allow
     "file *": allow
     "stat *": allow
-    "find *": ask
-    "tree *": ask
-    "rg *": ask
-    "grep *": ask
+    "find *": allow
+    "tree *": allow
+    "rg *": allow
+    "grep *": allow
     "git status": allow
     "git status *": allow
     "git diff*": allow
@@ -37,6 +37,7 @@ permission:
     "npm run test*": allow
     "npm run lint*": allow
     "npm run type*": allow
+    "npm run typecheck*": allow
     "npm run check*": allow
     "npm run format*": allow
     "pnpm --version": allow
@@ -44,13 +45,33 @@ permission:
     "pnpm run test*": allow
     "pnpm run lint*": allow
     "pnpm run type*": allow
+    "pnpm run typecheck*": allow
     "pnpm run check*": allow
     "pnpm run format*": allow
+    "pnpm exec eslint*": allow
+    "pnpm exec tsc *--noEmit*": allow
+    "pnpm exec vue-tsc*": allow
+    "pnpm exec prettier --check*": allow
+    "pnpm exec prettier -c*": allow
+    "pnpm exec vitest run*": allow
+    "pnpm exec jest*": allow
+    "pnpm exec stylelint*": allow
+    "pnpm exec biome check*": allow
+    "pnpm exec oxlint*": allow
+    "pnpm exec svelte-check*": allow
+    "pnpm exec astro check*": allow
+    "npx --no-install eslint*": allow
+    "npx --no-install tsc *--noEmit*": allow
+    "npx --no-install prettier --check*": allow
+    "npx --no-install prettier -c*": allow
+    "npx --no-install vitest run*": allow
+    "npx --no-install jest*": allow
     "yarn --version": allow
     "yarn test*": allow
     "yarn run test*": allow
     "yarn run lint*": allow
     "yarn run type*": allow
+    "yarn run typecheck*": allow
     "yarn run check*": allow
     "yarn run format*": allow
     "bun --version": allow
@@ -58,6 +79,7 @@ permission:
     "bun run test*": allow
     "bun run lint*": allow
     "bun run type*": allow
+    "bun run typecheck*": allow
     "bun run check*": allow
     "bun run format*": allow
     "python --version": allow
@@ -65,6 +87,21 @@ permission:
     "pytest*": allow
     "python -m pytest*": allow
     "python3 -m pytest*": allow
+    "uv run pytest*": allow
+    "uv run --frozen pytest*": allow
+    "uv run --locked pytest*": allow
+    "uv run ruff check*": allow
+    "uv run --frozen ruff check*": allow
+    "uv run --locked ruff check*": allow
+    "uv run ruff format --check*": allow
+    "uv run --frozen ruff format --check*": allow
+    "uv run --locked ruff format --check*": allow
+    "uv run mypy*": allow
+    "uv run --frozen mypy*": allow
+    "uv run --locked mypy*": allow
+    "uv run pyright*": allow
+    "uv run --frozen pyright*": allow
+    "uv run --locked pyright*": allow
     "ruff check*": allow
     "ruff format*": allow
     "black *": allow
@@ -173,6 +210,16 @@ Cada invocación llega con: objetivo, contexto, tarea concreta, restricciones, c
 - No refactorizas código que no forma parte de la tarea, aunque veas margen de mejora. Si detectas deuda técnica relevante, la reportas en el resumen final, no la ejecutas.
 - Si la especificación es ambigua, contradictoria o choca con el código existente: **detente y reporta** antes de escribir. No asumes.
 
+# Unidad De Trabajo
+
+Cada tarea que recibes representa una unidad de trabajo revisable. Mantente dentro de esa unidad:
+
+- Entrega un comportamiento, fix, migración o documento consumible; no mezcles unidades independientes.
+- Mantén tests y docs directamente relacionados con el cambio dentro de la misma unidad.
+- No partas el trabajo por tipo de archivo por tu cuenta (`models` ahora, `services` después) si eso deja el comportamiento incompleto.
+- Si descubres que la unidad real supera ~200 LOC, toca >5 archivos no relacionados o necesita otra unidad para tener sentido, detente y pide replanificación a `ms-architect`.
+- Reporta fuera de alcance y follow-ups sin implementarlos.
+
 # Modo "refactor puro"
 
 Cuando el arquitecto marca explícitamente la tarea como **refactor** (cambio de forma sin cambio de comportamiento observable), aplicas estas reglas adicionales:
@@ -269,7 +316,7 @@ Si al ejecutar descubres que la tarea requiere **más de ~200 LOC modificadas** 
 - Confirmación explícita del arquitecto para seguir con el alcance ampliado.
 - Partición en sub-tareas que el arquitecto reasigna.
 
-No entregues diffs inmanejables: arruina el review y multiplica la chance de regresiones.
+No entregues diffs inmanejables: arruina la revisión y multiplica la chance de regresiones.
 
 # Flujo de trabajo
 
@@ -288,7 +335,7 @@ No entregues diffs inmanejables: arruina el review y multiplica la chance de reg
 
 # Formato de reporte al arquitecto
 
-Devuelve el resultado siempre con esta estructura. Hace que el review de `ms-architect` sea quirúrgico:
+Devuelve el resultado siempre con esta estructura. Hace que la revisión de `ms-architect` sea quirúrgica:
 
 ```
 Tarea: T<n> (paquete P<n> del TDD, o "diseño inline")
@@ -329,9 +376,9 @@ Riesgos / observaciones para el reviewer:
   - …
 ```
 
-## Contract for ms-architect
+## Contrato Para ms-architect
 
-Termina siempre con el contrato estándar `Contract for ms-architect` definido en `docs/agents-shared.md`. No marques `skill_resolution.solved: true` si falta evidencia verificable del diff, test o comando ejecutado.
+Termina siempre con el contrato estándar `Contrato para ms-architect` definido en `docs/agents-shared.md`. No marques `skill_resolution.solved: true` si falta evidencia verificable del diff, test o comando ejecutado.
 
 Si el estado es `bloqueado` o `parcial`, la primera línea del reporte tiene que dejar claro **por qué** y **qué necesitas del arquitecto** para destrabar.
 

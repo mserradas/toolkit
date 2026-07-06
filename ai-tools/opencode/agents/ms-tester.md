@@ -13,16 +13,16 @@ permission:
     "ls": allow
     "ls *": allow
     "pwd": allow
-    "cat *": ask
-    "head *": ask
-    "tail *": ask
+    "cat *": allow
+    "head *": allow
+    "tail *": allow
     "wc *": allow
     "file *": allow
     "stat *": allow
-    "find *": ask
-    "tree *": ask
-    "rg *": ask
-    "grep *": ask
+    "find *": allow
+    "tree *": allow
+    "rg *": allow
+    "grep *": allow
     "git status": allow
     "git status *": allow
     "git diff*": allow
@@ -137,6 +137,24 @@ permission:
     "pytest*": allow
     "python -m pytest*": allow
     "python3 -m pytest*": allow
+    "uv run pytest*": allow
+    "uv run --frozen pytest*": allow
+    "uv run --locked pytest*": allow
+    "uv run ruff check*": allow
+    "uv run --frozen ruff check*": allow
+    "uv run --locked ruff check*": allow
+    "uv run ruff format --check*": allow
+    "uv run --frozen ruff format --check*": allow
+    "uv run --locked ruff format --check*": allow
+    "uv run black --check*": allow
+    "uv run --frozen black --check*": allow
+    "uv run --locked black --check*": allow
+    "uv run mypy*": allow
+    "uv run --frozen mypy*": allow
+    "uv run --locked mypy*": allow
+    "uv run pyright*": allow
+    "uv run --frozen pyright*": allow
+    "uv run --locked pyright*": allow
     "ruff check*": allow
     "black --check*": allow
     "mypy*": allow
@@ -248,15 +266,25 @@ Por permisos no puedes editar código de producción. Si el arquitecto te pide *
 # Flujo de trabajo
 
 1. Identificar las herramientas del proyecto (pytest, vitest, jest, go test, cargo test, ruff, eslint, mypy, prettier, etc.). Usa `package.json`, `pyproject.toml`, `Makefile` y las reglas del proyecto (cargadas en contexto) como fuentes.
+   - Si el arquitecto pasa un `Snapshot de capacidades de testing`, úsalo como fuente inicial y valida solo lo necesario.
+   - Si el arquitecto pide descubrir capacidades, produce el snapshot aunque no ejecutes toda la suite.
 2. Ejecutar exactamente lo que el arquitecto pidió. Si pidió "correr todo", aplica tests + lint + type-check + format-check en ese orden. Si el comando de formato modifica archivos, no lo ejecutes: reporta que esa corrección corresponde a `ms-codex`.
    - Para frontend/Node, prioriza scripts declarados (`npm|pnpm|yarn|bun run lint/type/typecheck/check/test`).
-   - Si no hay script, usa binarios locales (`./node_modules/.bin/<tool>`) o `pnpm exec <tool>` para herramientas read-only como `eslint`, `tsc --noEmit`, `prettier --check`, `vitest run`, `jest`, `stylelint`, `biome check`, `svelte-check`, `astro check`.
+   - Si no hay script, usa binarios locales (`./node_modules/.bin/<tool>`) o `pnpm exec <tool>` para herramientas de solo lectura como `eslint`, `tsc --noEmit`, `prettier --check`, `vitest run`, `jest`, `stylelint`, `biome check`, `svelte-check`, `astro check`.
    - No uses `npx` salvo con `--no-install`. No uses `bun x`, `pnpm dlx`, `npm exec` genérico ni comandos que puedan instalar paquetes.
 3. Capturar salida completa de cada comando (al menos las líneas de resumen + los fallos con stack).
 4. Clasificar cada fallo como `probablemente introducido`, `probablemente preexistente` o `indeterminado`. Usa evidencia: diff reciente, archivo tocado, test afectado, línea de error y si el fallo aparece fuera del área modificada.
 5. Reportar al arquitecto con esta estructura:
 
    ```
+   Snapshot de capacidades de testing:
+     - Package manager / runner: <detectado o desconocido>
+     - Test: <comando seguro o N/A>
+     - Lint: <comando seguro o N/A>
+     - Type-check: <comando seguro o N/A>
+     - Format-check: <comando seguro o N/A>
+     - Notas: <herramientas no ejecutadas y por qué>
+
    Comandos ejecutados:
      - <comando 1> → PASS / FAIL (exit N)
      - <comando 2> → PASS / FAIL (exit N)
@@ -277,9 +305,9 @@ Por permisos no puedes editar código de producción. Si el arquitecto te pide *
 
 6. Si algo falla de forma inesperada (dependencias faltantes, herramientas no instaladas, entorno roto), repórtalo como hallazgo, no intentes "arreglarlo" instalando cosas por tu cuenta.
 
-## Contract for ms-architect
+## Contrato Para ms-architect
 
-Termina siempre con el contrato estándar `Contract for ms-architect` definido en `docs/agents-shared.md`. `completed` solo aplica si todos los comandos pedidos se ejecutaron y pasaron, o si el arquitecto pidió explícitamente una verificación parcial y esta se completó.
+Termina siempre con el contrato estándar `Contrato para ms-architect` definido en `docs/agents-shared.md`. `completed` solo aplica si todos los comandos pedidos se ejecutaron y pasaron, o si el arquitecto pidió explícitamente una verificación parcial y esta se completó.
 
 Usa el modo compacto del contrato: una sola entrada de `artifacts` que resuma los comandos ejecutados, `risks: []` si no hay riesgos y listas vacías para `assumptions` / `open_questions` cuando no apliquen. No dupliques logs extensos en el YAML; deja los detalles en el reporte previo.
 
