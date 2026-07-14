@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "vercel",
+  "diff_style": "auto",
+  "mouse": true,
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "prompt": {
+    "max_height": 14,
+    "max_width": "auto"
+  },
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": false
+  },
+  "plugin": [
+    "opencode-subagent-statusline@1.2.0"
+  ],
+  "plugin_enabled": {
+    "opencode-subagent-statusline": true
+  }
+}

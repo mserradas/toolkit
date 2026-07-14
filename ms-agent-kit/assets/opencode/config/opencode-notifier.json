@@ -1,0 +1,65 @@
+{
+  "notificationSystem": "osascript",
+  "suppressWhenFocused": false,
+  "minDuration": 5,
+  "showProjectName": true,
+  "showSessionTitle": true,
+  "showFullPath": false,
+  "showIcon": true,
+  "suppressGhosttySound": false,
+  "messages": {
+    "complete": "{projectName} — {sessionTitle}",
+    "permission": "{projectName} — Necesita permiso: {sessionTitle}",
+    "error": "{projectName} — Error: {sessionTitle}",
+    "question": "{projectName} — Esperando respuesta: {sessionTitle}",
+    "plan_exit": "{projectName} — Plan listo para revisar: {sessionTitle}"
+  },
+  "events": {
+    "complete": {
+      "sound": true,
+      "notification": true
+    },
+    "permission": {
+      "sound": true,
+      "notification": true
+    },
+    "error": {
+      "sound": true,
+      "notification": true
+    },
+    "question": {
+      "sound": false,
+      "notification": false
+    },
+    "plan_exit": {
+      "sound": false,
+      "notification": false
+    },
+    "subagent_complete": {
+      "sound": false,
+      "notification": false
+    },
+    "session_started": {
+      "sound": false,
+      "notification": false
+    },
+    "user_message": {
+      "sound": false,
+      "notification": false
+    },
+    "user_cancelled": {
+      "sound": false,
+      "notification": false
+    },
+    "client_connected": {
+      "sound": false,
+      "notification": false
+    }
+  },
+  "volumes": {
+    "complete": 0.5,
+    "error": 1,
+    "permission": 0.8,
+    "question": 0.6
+  }
+}

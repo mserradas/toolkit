@@ -1,5 +1,5 @@
 # Compiled output
-/dist
+dist/
 /tmp
 /out-tsc
 /bazel-out
@@ -24,3 +24,7 @@
 # System files
 .DS_Store
 Thumbs.db
+
+node_modules/
+coverage/
+*.tgz
