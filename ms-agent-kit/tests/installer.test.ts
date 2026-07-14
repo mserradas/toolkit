@@ -217,8 +217,38 @@ describe("transactional installer", () => {
 
     const artifacts = await buildArtifacts(["codex"], context)
     const plan = await createPlan(artifacts, context)
-    await expect(applyPlan(plan, context)).rejects.toThrow(/symlink|escapa/)
+    expect(plan.items).toContainEqual(
+      expect.objectContaining({ action: "conflict", reason: expect.stringMatching(/symlink|escapa/) }),
+    )
+    await expect(applyPlan(plan, context)).rejects.toThrow(/conflicto/)
     await expect(access(path.join(outside, "ms-codex.toml"))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("reports a dangling skill directory symlink as a planning conflict", async () => {
+    const context = await testContext()
+    const skillsRoot = path.join(context.projectRoot, ".claude", "skills")
+    await mkdir(skillsRoot, { recursive: true })
+    await symlink(
+      path.join(context.projectRoot, ".agents", "skills", "skill-creator"),
+      path.join(skillsRoot, "skill-creator"),
+    )
+
+    const artifacts = await buildArtifacts(["claude"], context)
+    const plan = await createPlan(artifacts, context)
+    expect(
+      plan.items.find(
+        (item) => item.artifact.kind === "skill" && item.artifact.name === "skill-creator",
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        action: "conflict",
+        reason: expect.stringMatching(/symlink roto/),
+      }),
+    )
+    await expect(applyPlan(plan, context)).rejects.toThrow(/conflicto/)
+    await expect(
+      access(path.join(context.projectRoot, ".claude", "agents", "ms-architect.md")),
+    ).rejects.toMatchObject({ code: "ENOENT" })
   })
 
   it("protects and restores an existing OpenCode configuration", async () => {

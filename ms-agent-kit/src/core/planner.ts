@@ -1,4 +1,5 @@
 import { hashContent, readExistingFile } from "./files.js"
+import { assertNoSymlinkEscape } from "./security.js"
 import { readState, stateLocation } from "./state.js"
 import {
   owningTargets,
@@ -30,7 +31,19 @@ export async function createPlan(
 
   for (const artifact of artifacts) {
     const desiredHash = hashContent(artifact.content)
-    const current = await readExistingFile(artifact.destination)
+    let current: Awaited<ReturnType<typeof readExistingFile>>
+    try {
+      await assertNoSymlinkEscape(artifact.root, artifact.destination)
+      current = await readExistingFile(artifact.destination)
+    } catch (error) {
+      items.push({
+        artifact,
+        action: "conflict",
+        reason: `destino no seguro: ${(error as Error).message}`,
+        desiredHash,
+      })
+      continue
+    }
     const previous = owned.get(artifact.destination)
 
     if (previous) {

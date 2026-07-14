@@ -39,6 +39,17 @@ async function nearestExistingParent(input: string): Promise<string> {
   }
 }
 
+async function resolveExistingPath(input: string): Promise<string> {
+  try {
+    return await realpath(input)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`Se rechaza una ruta con symlink roto: ${input}`)
+    }
+    throw error
+  }
+}
+
 export async function assertNoSymlinkEscape(root: string, destination: string): Promise<void> {
   assertPathWithin(root, destination)
 
@@ -54,8 +65,8 @@ export async function assertNoSymlinkEscape(root: string, destination: string): 
   const existingRoot = await nearestExistingParent(root)
   const existingParent = await nearestExistingParent(path.dirname(destination))
   const [resolvedRoot, resolvedParent] = await Promise.all([
-    realpath(existingRoot),
-    realpath(existingParent),
+    resolveExistingPath(existingRoot),
+    resolveExistingPath(existingParent),
   ])
 
   const relative = path.relative(resolvedRoot, resolvedParent)
