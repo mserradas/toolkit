@@ -86,3 +86,29 @@ export const OPENCODE_SECRET_BASH_RULES: Record<string, "deny"> = {
   "* **/*.p12": "deny",
   "* **/*.pfx": "deny",
 }
+
+export function isSensitivePath(input: string): boolean {
+  const normalized = input.replaceAll("\\", "/").replace(/^\.\//, "")
+  const segments = normalized.split("/").filter(Boolean)
+  const basename = segments.at(-1) ?? ""
+  const safeEnvironmentTemplates = new Set([".env.example", ".env.sample", ".env.template"])
+
+  if (basename === ".env" || (basename.startsWith(".env.") && !safeEnvironmentTemplates.has(basename))) {
+    return true
+  }
+  if (segments.some((segment) => ["secrets", ".ssh", ".credentials"].includes(segment))) {
+    return true
+  }
+  if (/\.(?:key|pem|p12|pfx)$/.test(basename)) return true
+
+  return [
+    ".aws/credentials",
+    ".config/gh/hosts.yml",
+    ".docker/config.json",
+    ".kube/config",
+    ".netrc",
+    ".npmrc",
+    ".pypirc",
+    "credentials.json",
+  ].some((candidate) => normalized === candidate || normalized.endsWith(`/${candidate}`))
+}

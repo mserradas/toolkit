@@ -11,6 +11,8 @@ Usa esta skill para revisar un objetivo concreto con dos jueces independientes a
 
 Úsala solo actuando como `ms-architect` u otro orquestador con delegación a subagentes. Si se carga dentro de un ejecutor o worker de solo lectura, detente y devuelve el control a `ms-architect`.
 
+La skill coordina jueces; no autoriza al orquestador a revisar el objetivo inline ni a ejecutar correcciones.
+
 El objetivo debe ser concreto:
 
 - diff,

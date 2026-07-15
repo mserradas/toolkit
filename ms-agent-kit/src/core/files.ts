@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto"
-import { chmod, lstat, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises"
+import { chmod, lstat, mkdir, open, readFile, rename, rm, rmdir, stat } from "node:fs/promises"
 import path from "node:path"
 import { assertNoSymlinkEscape } from "./security.js"
 
@@ -63,6 +63,30 @@ export async function atomicWriteFile(
 }
 
 export async function removeManagedFile(root: string, filePath: string): Promise<void> {
+  const resolvedRoot = path.resolve(root)
+  const resolvedFilePath = path.resolve(filePath)
+  if (resolvedFilePath === resolvedRoot) {
+    throw new Error(`Se rechaza eliminar el root administrado: ${root}`)
+  }
+
   await assertNoSymlinkEscape(root, filePath)
   await rm(filePath, { force: true })
+
+  let directory = path.dirname(resolvedFilePath)
+  while (directory !== resolvedRoot) {
+    try {
+      const info = await lstat(directory)
+      if (info.isSymbolicLink() || !info.isDirectory()) return
+      await rmdir(directory)
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === "ENOENT") {
+        directory = path.dirname(directory)
+        continue
+      }
+      if (code === "ENOTEMPTY" || code === "EEXIST" || code === "ENOTDIR") return
+      throw error
+    }
+    directory = path.dirname(directory)
+  }
 }

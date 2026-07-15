@@ -1,6 +1,6 @@
 {
   "notificationSystem": "osascript",
-  "suppressWhenFocused": false,
+  "suppressWhenFocused": true,
   "minDuration": 5,
   "showProjectName": true,
   "showSessionTitle": true,
@@ -29,11 +29,11 @@
     },
     "question": {
       "sound": false,
-      "notification": false
+      "notification": true
     },
     "plan_exit": {
       "sound": false,
-      "notification": false
+      "notification": true
     },
     "subagent_complete": {
       "sound": false,

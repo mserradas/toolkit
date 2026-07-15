@@ -10,9 +10,9 @@ El proyecto toma de Gentle AI cuatro ideas que sí aportan valor a una configura
 |---|---|---|---|---|
 | OpenCode | Markdown nativo en `agents/` | Comandos `/ms-*` | Skills aisladas en `opencode/skills` | Config, TUI, plugins, Context7, notifier y permisos |
 | Claude Code | Subagentes Markdown | Skills invocables como `/ms-*` | Skills nativas | Límites de tools y guard `PreToolUse` |
-| Codex | 12 especialistas como custom agents TOML | Skills invocables como `$ms-*` | Skills en `.agents/skills` | Perfiles, reglas de secretos y `$ms-architect` como orquestador padre |
+| Codex | 12 especialistas como custom agents TOML | Skills invocables como `$ms-*` | Skills en `.agents/skills` | Perfiles, `web_search`, reglas best-effort y `$ms-architect` como orquestador padre |
 
-El catálogo incluido contiene 13 agentes, 5 comandos, 9 skills, las reglas compartidas y una configuración reproducible de OpenCode.
+El catálogo incluido contiene 13 agentes, 5 comandos, 10 skills, las reglas compartidas y una configuración reproducible de OpenCode.
 OpenCode y Claude materializan los 13 agentes. Codex materializa 12 especialistas delegables y adapta `ms-architect` exclusivamente como skill de la tarea padre, evitando que un subagente orquestador quede bloqueado por la profundidad de delegación predeterminada.
 
 ## Requisitos
@@ -71,9 +71,9 @@ La instalación global de OpenCode crea:
 - `opencode.json` con plugins versionados, permisos globales, instrucciones y Context7.
 - `openai/gpt-5.6-sol` como modelo global y `ms-architect` como agente predeterminado.
 - `tui.json` con tus preferencias y `opencode-subagent-statusline`.
-- `opencode-notifier.json` con tus mensajes, eventos, sonidos y volúmenes.
+- `opencode-notifier.json` con avisos de finalización, permisos, errores, preguntas y salida de plan; las notificaciones se suprimen mientras OpenCode está enfocado.
 - `package.json` con el SDK requerido por plugins TypeScript locales.
-- El plugin local `ms-model-variants.ts`, agentes, comandos y documentación; las skills se instalan en `~/.config/opencode/skills`.
+- Los plugins locales `ms-model-variants.ts` y `ms-skill-registry.ts`, agentes, comandos y documentación; las skills se instalan en `~/.config/opencode/skills`.
 
 Context7 no guarda la clave en disco. Define la variable antes de iniciar OpenCode:
 
@@ -81,15 +81,15 @@ Context7 no guarda la clave en disco. Define la variable antes de iniciar OpenCo
 export CONTEXT7_API_KEY="tu-clave"
 ```
 
-Después de ejecutar `install`, inicia OpenCode normalmente. OpenCode usa Bun para descargar automáticamente `@warp-dot-dev/opencode-warp@0.1.7`, `@mohak34/opencode-notifier@0.2.8`, `opencode-subagent-statusline@1.2.0` y las dependencias del plugin local.
+Después de ejecutar `install`, inicia OpenCode normalmente. OpenCode usa Bun para descargar automáticamente `@mohak34/opencode-notifier@0.2.8`, `opencode-subagent-statusline@1.2.0` y las dependencias del plugin local.
 
 El esquema de OpenCode no admite `variant` en la raíz de `opencode.json`. La variante `high` se configura en el frontmatter de `ms-architect`; como es el agente predeterminado, las sesiones nuevas usan `openai/gpt-5.6-sol` con esa variante.
 
 En `--scope project`, `opencode.json` y `tui.json` se escriben en la raíz del proyecto, mientras que agentes, skills, plugins y `package.json` viven en `.opencode/`. `opencode-notifier.json` solo se instala en scope global porque el plugin usa una ubicación global.
 
-OpenCode, Codex y Claude mantienen copias físicas separadas de las nueve skills portables. Esto permite aislar sus catálogos: OpenCode usa `opencode/skills`, Codex `.agents/skills` y Claude `.claude/skills`. La adaptación `ms-skill-creator` queda reservada a Codex; OpenCode conserva el nombre nativo `skill-creator`.
+OpenCode, Codex y Claude mantienen copias físicas separadas de las diez skills portables de usuario. Esto permite aislar sus catálogos globales: OpenCode usa `opencode/skills`, Codex `.agents/skills` y Claude `.claude/skills`. En un repositorio, `.agents/skills` se trata como raíz portable compartida y se añade a cada registro. La adaptación `ms-skill-creator` queda reservada a Codex; OpenCode conserva el nombre nativo `skill-creator`.
 
-Cuando OpenCode y Codex conviven, inicia OpenCode con `OPENCODE_DISABLE_EXTERNAL_SKILLS=1`. Así OpenCode no escanea `.agents/skills`, evita mostrar las adaptaciones exclusivas de Codex (`ms-architect`, `ms-shared` y los workflows `ms-*`) y carga únicamente sus nueve skills privadas.
+Cuando OpenCode y Codex conviven, inicia OpenCode con `OPENCODE_DISABLE_EXTERNAL_SKILLS=1`. Así OpenCode no escanea los catálogos globales `~/.agents/skills` y `~/.claude/skills`, donde viven adaptaciones exclusivas de otros clientes. El plugin `ms-skill-registry.ts` vuelve a registrar explícitamente solo las skills compatibles de `.agents/skills` del repositorio actual, por lo que las skills de proyecto siguen disponibles. `ms-shared` no se instala como skill pública en Codex: sus reglas ya están embebidas donde se usan.
 
 ```bash
 # Bash/Zsh
@@ -111,6 +111,10 @@ Al actualizar desde la instalación compartida anterior, el plan crea las copias
 | `install` | Aplica el plan de forma transaccional |
 | `status` | Detecta archivos correctos, modificados o ausentes |
 | `uninstall` | Elimina archivos creados y restaura archivos reemplazados |
+| `workflow status` | Lee un ledger `ms-progress/v1` sin inferir estado desde prosa |
+| `workflow next` | Devuelve una única próxima acción segura o detiene el flujo |
+| `review fingerprint` | Calcula una huella SHA-256 del worktree (o staged) sin exponer el diff |
+| `skill-registry refresh` | Refresca `.atl/skill-registry.md` con cache y precedencia de proyecto |
 
 Opciones comunes:
 
@@ -134,7 +138,7 @@ OpenCode mantiene la experiencia original:
 @ms-scout localiza el flujo de autenticación
 ```
 
-Claude Code expone los workflows como slash skills. Cada `/ms-*` carga el contrato de `ms-architect` en la conversación principal, desde donde puede delegar a los subagentes instalados. También puedes iniciar una sesión completa con el arquitecto como agente principal:
+Claude Code expone los workflows como slash skills. Cada `/ms-*` se ejecuta en un contexto aislado con el agente declarado por el workflow; los flujos generales usan `ms-architect` y `/ms-skills` usa `ms-codex` con escritura limitada al registro. También puedes iniciar una sesión completa con el arquitecto como agente principal:
 
 ```text
 /ms-status mi-cambio
@@ -157,8 +161,8 @@ $ms-continue mi-cambio
 - Los assets de agentes son la fuente canónica del prompt: solo contienen `description` y el cuerpo de instrucciones.
 - `src/core/agent-catalog.ts` asigna modo, perfil de modelo y perfil de capacidades; `src/core/model-profiles.ts` y `src/core/profiles.ts` definen esos perfiles una sola vez para todos los adaptadores.
 - OpenCode compone su política funcional desde `src/core/opencode-role-permissions.ts` y añade las denegaciones de secretos desde `src/core/permissions.ts`.
-- Claude Code recibe `disallowedTools` por rol y un guard `PreToolUse` compartido. El guard bloquea secretos, restringe las escrituras documentales y aplica una allowlist de Bash a los agentes de solo lectura; los workflows `/ms-*` ejecutados en la conversación principal usan el mismo guard del arquitecto.
-- Codex recibe un perfil nativo por agente: `:read-only`, `:workspace` o lectura con rutas concretas de escritura. También instala `rules/ms-secrets.rules`, que bloquea volcados del entorno y lecturas directas habituales como `cat .env`.
+- Claude Code recibe `disallowedTools` por rol y un guard `PreToolUse` compartido. El guard bloquea secretos y comandos peligrosos también en agentes escritores, restringe las escrituras documentales y aplica una allowlist de Bash a los agentes de solo lectura. Cada workflow usa el guard del rol con el que se ejecuta.
+- Codex recibe un perfil nativo por agente: `:read-only`, `:workspace` o lectura con rutas concretas de escritura, además de `web_search = "cached"|"disabled"`. `rules/ms-secrets.rules` bloquea una matriz best-effort de volcados del entorno y lectores habituales (`cat`, `head`, `sed`, `awk`, `rg` y `grep`) sobre variantes sensibles; `doctor` valida bloqueos y casos permitidos como `.env.example` y `README.md`.
 - Los ejecutores pueden trabajar en el workspace, los agentes de lectura bloquean mutaciones directas y los documentadores solo escriben mediante las herramientas de edición en sus rutas asignadas.
 - `.env.example` sigue permitido; entornos reales, credenciales, keychains, llaves privadas y directorios `secrets/` se bloquean.
 - La carga del catálogo rechaza claves privadas y patrones comunes de tokens.
@@ -170,11 +174,11 @@ $ms-continue mi-cambio
 - Los backups se guardan con modo `0600`; los agentes, skills, políticas y documentación usan `0644`.
 - `uninstall` no toca un archivo que haya sido modificado después de instalarlo.
 
-Los agentes incorporan las reglas compartidas y su política de permisos en el artefacto generado. Claude Code y Codex no requieren modificar `settings.json`, `CLAUDE.md`, `AGENTS.md` ni `config.toml`. Para OpenCode, el instalador administra intencionalmente `opencode.json`, `tui.json` y los archivos de configuración indicados arriba.
+Los agentes incorporan una sola copia de las reglas compartidas y su política de permisos en el artefacto generado. OpenCode conserva `docs/agents-shared.md` como referencia humana, pero no lo vuelve a cargar globalmente. Claude Code y Codex no requieren modificar `settings.json`, `CLAUDE.md`, `AGENTS.md` ni `config.toml`. Para OpenCode, el instalador administra intencionalmente `opencode.json`, `tui.json` y los archivos de configuración indicados arriba.
 
 Los hooks de Claude se aplican a los agentes `ms-*` y a sus slash workflows. Las sesiones normales de Claude Code fuera de esos componentes conservan los permisos definidos por el usuario en `~/.claude/settings.json`; el instalador no reemplaza ese archivo.
 
-Las reglas de Codex son una defensa práctica, no un aislamiento absoluto frente a evasiones deliberadas mediante intérpretes o comandos indirectos. Las versiones actuales de Codex no aplican de forma fiable los `deny` de lectura definidos dentro de perfiles de usuario; el instalador conserva esos `deny` para compatibilidad futura y añade `execpolicy` para los casos habituales. Un bloqueo no eludible requiere una política administrada `requirements.toml` instalada por un administrador del sistema.
+Las reglas de Codex son una defensa práctica, no un aislamiento absoluto frente a evasiones deliberadas mediante intérpretes, opciones o comandos indirectos. `execpolicy` solo expresa prefijos de tokens exactos: la matriz cubre cantidades, programas y patrones comunes, pero no puede representar cualquier variante arbitraria sin denegar globalmente usos seguros de `head`, `sed`, `awk`, `rg` o `grep`. Las versiones actuales tampoco permiten desactivar Bash, preguntas o el catálogo global de skills por custom agent, ni separar WebFetch de WebSearch; `web_search` sigue la capacidad `webSearch` más restrictiva. Además, los permisos y overrides activos de la tarea padre pueden prevalecer. El instalador conserva instrucciones explícitas, perfiles de filesystem y `execpolicy` para los casos habituales. Un bloqueo no eludible requiere una política administrada `requirements.toml` instalada por un administrador del sistema.
 
 Si uno de esos archivos ya existe con contenido distinto, la instalación se detiene con conflicto. `--force` crea un backup y lo reemplaza completo; úsalo solo después de revisar `plan`. `uninstall` restaura el backup si el archivo no fue modificado posteriormente.
 
@@ -182,7 +186,7 @@ Si uno de esos archivos ya existe con contenido distinto, la instalación se det
 
 El instalador distribuye el toolkit portable, no aplicaciones ni credenciales. No instala los binarios de OpenCode, Claude Code o Codex, no registra cuentas o proveedores y no persiste claves API. Context7 queda configurado mediante `{env:CONTEXT7_API_KEY}`; los paquetes externos se declaran, pero los descarga OpenCode al arrancar.
 
-El plugin local `ms-model-variants.ts` sí se incluye porque forma parte del comportamiento de los agentes en OpenCode y no contiene credenciales.
+Los plugins locales `ms-model-variants.ts` y `ms-skill-registry.ts` sí se incluyen porque forman parte del comportamiento de los agentes en OpenCode y no contienen credenciales. El primero cachea durante 24 horas solo los providers conectados. El segundo mantiene el índice común `.atl/skill-registry.md` una vez inicializado y expone `ms_skill_registry_refresh` para que `/ms-skills` no dependa de un binario global. La primera ejecución explícita añade `.atl/` a `.gitignore`; Claude y Codex refrescan el mismo archivo mediante el fallback CLI.
 
 La allowlist de Bash de Claude evita comandos directos de mutación, redirecciones, encadenamiento y expansión de shell en agentes de lectura. No convierte la ejecución de tests o scanners en un sandbox de filesystem: esas herramientas pueden generar cachés o reportes como parte de su comportamiento normal. Para aislamiento estricto usa el sandbox o una política administrada de Claude Code.
 

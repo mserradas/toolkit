@@ -20,7 +20,8 @@ export interface CapabilityProfile {
   usesSkills: boolean
   asksQuestions: boolean
   orchestrates: boolean
-  web: boolean
+  webFetch: boolean
+  webSearch: boolean
 }
 
 const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
@@ -31,7 +32,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: true,
     asksQuestions: true,
     orchestrates: true,
-    web: true,
+    webFetch: true,
+    webSearch: false,
   },
   "code-writer": {
     writes: true,
@@ -40,7 +42,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: false,
     asksQuestions: false,
     orchestrates: false,
-    web: false,
+    webFetch: true,
+    webSearch: false,
   },
   "bug-investigator": {
     writes: false,
@@ -49,7 +52,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: false,
     asksQuestions: false,
     orchestrates: false,
-    web: false,
+    webFetch: true,
+    webSearch: false,
   },
   "design-writer": {
     writes: true,
@@ -58,7 +62,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: true,
     asksQuestions: true,
     orchestrates: false,
-    web: true,
+    webFetch: true,
+    webSearch: false,
   },
   "discovery-writer": {
     writes: true,
@@ -67,7 +72,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: false,
     asksQuestions: true,
     orchestrates: false,
-    web: true,
+    webFetch: true,
+    webSearch: false,
   },
   "fastlane-writer": {
     writes: true,
@@ -76,7 +82,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: false,
     asksQuestions: false,
     orchestrates: false,
-    web: false,
+    webFetch: false,
+    webSearch: false,
   },
   "prd-writer": {
     writes: true,
@@ -85,7 +92,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: false,
     asksQuestions: true,
     orchestrates: false,
-    web: true,
+    webFetch: true,
+    webSearch: false,
   },
   "progress-writer": {
     writes: true,
@@ -94,7 +102,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: false,
     asksQuestions: false,
     orchestrates: false,
-    web: false,
+    webFetch: false,
+    webSearch: false,
   },
   "code-scout": {
     writes: false,
@@ -103,7 +112,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: false,
     asksQuestions: false,
     orchestrates: false,
-    web: false,
+    webFetch: true,
+    webSearch: false,
   },
   "security-auditor": {
     writes: false,
@@ -112,7 +122,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: false,
     asksQuestions: false,
     orchestrates: false,
-    web: true,
+    webFetch: true,
+    webSearch: false,
   },
   "spec-writer": {
     writes: true,
@@ -121,7 +132,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: true,
     asksQuestions: true,
     orchestrates: false,
-    web: true,
+    webFetch: true,
+    webSearch: false,
   },
   "test-runner": {
     writes: false,
@@ -130,7 +142,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: false,
     asksQuestions: false,
     orchestrates: false,
-    web: false,
+    webFetch: true,
+    webSearch: false,
   },
   "documentation-writer": {
     writes: true,
@@ -150,7 +163,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: true,
     asksQuestions: false,
     orchestrates: false,
-    web: false,
+    webFetch: true,
+    webSearch: false,
   },
 }
 

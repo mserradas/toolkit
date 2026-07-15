@@ -24,7 +24,11 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "git rev-parse*": "allow",
       "opencode debug config": "allow",
       "opencode debug agent *": "allow",
-      "opencode debug skill": "allow"
+      "opencode debug skill": "allow",
+      "ms-agent-kit workflow status*": "allow",
+      "ms-agent-kit workflow next*": "allow",
+      "ms-agent-kit review fingerprint --scope worktree*": "allow",
+      "ms-agent-kit review fingerprint --scope staged*": "allow"
     },
     "webfetch": "allow",
     "websearch": "deny",
@@ -48,6 +52,7 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
   },
   "ms-codex": {
     "edit": "allow",
+    "ms_skill_registry_refresh": "allow",
     "bash": {
       "*": "ask",
       "ls": "allow",
@@ -63,6 +68,7 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "tree *": "allow",
       "mkdir -p .atl": "allow",
       "mkdir -p .atl/": "allow",
+      "ms-agent-kit skill-registry refresh*": "allow",
       "rg *": "allow",
       "grep *": "allow",
       "git status": "allow",

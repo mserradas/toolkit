@@ -5,6 +5,10 @@ description: "Escribe delegation briefs autosuficientes para subagentes. Úsala 
 
 # Delegation Brief
 
+## Gate De Rol
+
+Esta skill prepara delegaciones; no ejecuta la misión descrita. Úsala solo desde `ms-architect` u otro orquestador autorizado. Si eres un worker, no redactes una nueva delegación ni invoques agentes: devuelve el control al padre.
+
 Usa esta skill al preparar una tarea para otro agente. El objetivo es que el worker pueda ejecutar bien sin depender del contexto oculto de la conversación padre.
 
 ## Cuándo Activarla

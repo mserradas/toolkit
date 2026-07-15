@@ -25,8 +25,11 @@ Retomar una tarea desde el ledger operativo `docs/status/**` sin reconstruir tod
 
 ## Flujo
 
-1. **Resolver objetivo**: identifica slug/ruta/paquete y archivo `docs/status/**` correspondiente.
-2. **Reconstruir estado**: lee `Estado Actual`, `Próxima Acción`, tabla de paquetes, checkpoints y `Recibos De Revisión`.
+1. **Resolver estado nativo**: ejecuta `ms-agent-kit workflow next "$ARGUMENTS" --project . --json` cuando haya argumento, o `ms-agent-kit workflow next --project . --json` cuando no lo haya.
+   - Si devuelve `ready: true`, usa exclusivamente `action`, `activePackage` y el status estructurado para enrutar.
+   - Si devuelve `ready: false`, está bloqueado/cerrado, requiere usuario o necesita migración: informa la razón y no avances.
+   - Si el binario no está disponible, usa el fallback legacy y declara confianza baja.
+2. **Fallback legacy**: identifica slug/ruta/paquete, lee `Estado Actual`, `Próxima Acción`, paquetes, checkpoints y recibos. Antes de ejecutar, delega a `ms-progress` migrar el ledger a `ms-progress/v1`; no avances en la misma vuelta.
 3. **Validar vigencia**:
    - Si una revisión necesaria ya tiene recibo vigente y la huella coincide con el alcance actual, reutilízala.
    - Si el diff, archivos, paquete, lente o evidencia cambiaron, considera el recibo obsoleto y registra actualización con `ms-progress` antes de repetir la revisión mínima necesaria.
@@ -34,7 +37,7 @@ Retomar una tarea desde el ledger operativo `docs/status/**` sin reconstruir tod
    - `pending` / `in_progress` con paquete claro -> delega implementación o verificación según el ledger.
    - `blocked` -> pregunta al usuario o delega investigación solo si el bloqueo es técnico y acotado.
    - `Listo para verificar` -> delega `ms-tester` con comandos conocidos.
-   - `Verificado` con spec pendiente -> aplica `ms-spec-archive` si corresponde.
+   - `Verificado` con spec pendiente -> delega a `ms-spec` en modo cierre si corresponde.
    - `Cerrado` -> responde estado y no ejecutes nada.
 5. **Actualizar progreso**: tras aceptar un contrato, delega `ms-progress` para registrar paquete, checkpoint, verificación o recibo de revisión.
 6. **Cerrar la vuelta**: responde con el estado actual, acción ejecutada, evidencia y siguiente paso.

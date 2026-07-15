@@ -5,6 +5,10 @@ description: "Planifica cambios como unidades revisables. Úsala para planificac
 
 # Work Unit Commits
 
+## Gate De Rol
+
+Esta skill define unidades; no implementa ni modifica archivos. Puede usarla `ms-architect` para routing o `ms-designer` dentro de un TDD. Si eres un ejecutor, sigue la unidad recibida y no rediseñes el plan.
+
 Usa esta skill al decidir cómo dividir un cambio en paquetes, commits o PRs.
 
 ## Reglas

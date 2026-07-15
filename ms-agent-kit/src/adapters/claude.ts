@@ -4,7 +4,11 @@ import { frontmatterString, renderMarkdown } from "../core/frontmatter.js"
 import { capabilityProfile } from "../core/profiles.js"
 import { openCodeRolePermission } from "../core/opencode-role-permissions.js"
 import type { Artifact, BuildContext, Catalog, SourceMarkdown } from "../core/types.js"
-import { copySkillArtifacts, embeddedAgentBody, textArtifact } from "./common.js"
+import {
+  copySkillArtifacts,
+  embeddedAgentBody,
+  textArtifact,
+} from "./common.js"
 
 const CLAUDE_COMPATIBILITY = `
 - Interpreta task como la herramienta Agent de Claude Code.
@@ -31,10 +35,9 @@ function deniedTools(name: string): string[] {
   if (!profile.shell) denied.add("Bash")
   if (!profile.orchestrates) denied.add("Agent")
   if (!profile.usesSkills) denied.add("Skill")
-  if (!profile.web) {
-    denied.add("WebFetch")
-    denied.add("WebSearch")
-  }
+  if (!profile.asksQuestions) denied.add("AskUserQuestion")
+  if (!profile.webFetch) denied.add("WebFetch")
+  if (!profile.webSearch) denied.add("WebSearch")
   return [...denied]
 }
 
@@ -95,6 +98,24 @@ function readOnlyBashRules(catalog: Catalog): Record<string, string[]> {
   )
 }
 
+function bashDenyRules(catalog: Catalog): Record<string, string[]> {
+  return Object.fromEntries(
+    catalog.agents.map((agent) => {
+      const bash = openCodeRolePermission(agent.name).bash
+      if (bash === "deny") return [agent.name, ["*"]]
+      if (typeof bash !== "object" || bash === null || Array.isArray(bash)) {
+        return [agent.name, []]
+      }
+      // En los mapas OpenCode, `*` es el fallback y los allow mas especificos lo
+      // sustituyen. Para los roles cerrados ese fallback ya lo materializa la allowlist.
+      const rules = Object.entries(bash)
+        .filter(([pattern, action]) => pattern !== "*" && action === "deny")
+        .map(([pattern]) => pattern)
+      return [agent.name, rules]
+    }),
+  )
+}
+
 function claudeGuardSource(catalog: Catalog): string {
   const writeRules = Object.fromEntries(
     catalog.agents.map((agent) => [
@@ -102,13 +123,18 @@ function claudeGuardSource(catalog: Catalog): string {
       capabilityProfile(agentDefinition(agent.name).capabilityProfile).writePaths,
     ]),
   )
+  writeRules["workflow:ms-skills"] = [".atl/skill-registry.md"]
   const bashRules = readOnlyBashRules(catalog)
+  const bashDeny = bashDenyRules(catalog)
+  bashRules["workflow:ms-skills"] = ["ms-agent-kit skill-registry refresh*"]
+  bashDeny["workflow:ms-skills"] = bashDeny["ms-codex"] ?? []
   return String.raw`#!/usr/bin/env node
 import { realpathSync } from "node:fs"
 import path from "node:path"
 
 const WRITE_RULES = ${JSON.stringify(writeRules, null, 2)}
 const READ_ONLY_BASH_RULES = ${JSON.stringify(bashRules, null, 2)}
+const BASH_DENY_RULES = ${JSON.stringify(bashDeny, null, 2)}
 
 function secretPath(value) {
   const normalized = String(value || "").replaceAll("\\", "/")
@@ -247,24 +273,628 @@ function shellSegments(command) {
   return segments
 }
 
-function invokesEnvironmentDump(command) {
-  const segments = shellSegments(command)
-  if (!segments) return true
-  return segments.some((segment) => {
-    const words = shellWords(segment)
-    if (!words) return true
-    let index = words.findIndex((word) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word))
-    if (index < 0) return false
-    let executable = path.basename(words[index].replaceAll("\\", "/"))
-    if (["command", "builtin", "exec"].includes(executable)) {
-      index += 1
-      executable = path.basename((words[index] || "").replaceAll("\\", "/"))
-    } else if (executable === "sudo") {
-      return words.slice(index + 1).some((word) =>
-        ["env", "printenv"].includes(path.basename(word.replaceAll("\\", "/"))),
-      )
+function shellSequence(command) {
+  const sequence = []
+  let current = ""
+  let quote = null
+  let escaped = false
+  const flush = (operator) => {
+    if (current.trim()) sequence.push({ command: current.trim(), operator })
+    current = ""
+  }
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index]
+    if (escaped) {
+      current += character
+      escaped = false
+      continue
     }
-    return ["env", "printenv"].includes(executable)
+    if (character === "\\" && quote !== "'") {
+      current += character
+      escaped = true
+      continue
+    }
+    if (quote) {
+      current += character
+      if (character === quote) quote = null
+      continue
+    }
+    if (character === "'" || character === '"') {
+      quote = character
+      current += character
+      continue
+    }
+    if (character === "|" && command[index + 1] !== "|") {
+      const operator = command[index + 1] === "&" ? "|&" : "|"
+      flush(operator)
+      if (operator === "|&") index += 1
+    } else if (";&\n\r".includes(character) || (character === "|" && command[index + 1] === "|")) {
+      flush(character + (command[index + 1] === character ? character : ""))
+      if (command[index + 1] === character) index += 1
+    } else {
+      current += character
+    }
+  }
+  if (quote || escaped) return null
+  flush(null)
+  return sequence
+}
+
+function invocationStages(words) {
+  let expandedWords = [...words]
+  let index = expandedWords.findIndex((word) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word))
+  if (index < 0) return []
+  const stages = []
+  while (index < expandedWords.length) {
+    const executable = path.basename((expandedWords[index] || "").replaceAll("\\", "/"))
+    stages.push({ executable, args: expandedWords.slice(index + 1) })
+    if (executable === "command") {
+      index += 1
+      if (["-v", "-V"].includes(expandedWords[index])) return stages
+      while (["--", "-p"].includes(expandedWords[index])) index += 1
+      continue
+    }
+    if (executable === "builtin") {
+      index += 1
+      if (expandedWords[index] === "--") index += 1
+      continue
+    }
+    if (executable === "exec") {
+      index += 1
+      while (index < expandedWords.length) {
+        const argument = expandedWords[index]
+        if (argument === "--") {
+          index += 1
+          break
+        }
+        if (argument === "-a") {
+          index += 2
+        } else if (argument.startsWith("--argv0=")) {
+          index += 1
+        } else if (["-c", "-l"].includes(argument)) {
+          index += 1
+        } else {
+          break
+        }
+      }
+      continue
+    }
+    if (executable === "sudo") {
+      index += 1
+      while (index < expandedWords.length) {
+        const argument = expandedWords[index]
+        if (argument === "--") {
+          index += 1
+          break
+        }
+        if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(argument)) {
+          index += 1
+        } else if (
+          ["-u", "--user", "-g", "--group", "-h", "--host", "-p", "--prompt", "-C", "--close-from", "-T", "--command-timeout", "-R", "--chroot", "-D", "--chdir", "-r", "--role", "-t", "--type"].includes(argument)
+        ) {
+          index += 2
+        } else if (/^--(?:user|group|host|prompt|close-from|command-timeout|chroot|chdir|role|type)=/.test(argument)) {
+          index += 1
+        } else if (/^-[AbEHKnPSVvils]+$/.test(argument) || ["--non-interactive", "--preserve-env"].includes(argument) || argument.startsWith("--preserve-env=")) {
+          index += 1
+        } else {
+          break
+        }
+      }
+      continue
+    }
+    if (executable === "env") {
+      index += 1
+      while (index < expandedWords.length) {
+        const argument = expandedWords[index]
+        if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(argument)) {
+          index += 1
+        } else if (["-u", "--unset", "-C", "--chdir", "-P"].includes(argument)) {
+          if (!expandedWords[index + 1]) return null
+          index += 2
+        } else if (/^--(?:unset|chdir)=/.test(argument)) {
+          index += 1
+        } else if (["-S", "--split-string"].includes(argument)) {
+          const split = expandedWords[index + 1]
+          if (!split) return null
+          const splitWords = shellWords(split)
+          if (!splitWords || splitWords.length === 0) return null
+          expandedWords.splice(index, 2, ...splitWords)
+        } else if (argument.startsWith("--split-string=")) {
+          const split = argument.slice("--split-string=".length)
+          const splitWords = shellWords(split)
+          if (!splitWords || splitWords.length === 0) return null
+          expandedWords.splice(index, 1, ...splitWords)
+        } else if (argument === "--" || argument === "-i" || argument === "--ignore-environment") {
+          index += 1
+        } else if (argument.startsWith("-")) {
+          return null
+        } else {
+          break
+        }
+      }
+      continue
+    }
+    return stages
+  }
+  return stages
+}
+
+function normalizedInvocation(words) {
+  const stages = invocationStages(words)
+  if (!stages) return null
+  return stages[stages.length - 1] || null
+}
+
+function normalizedRemoveCandidate(args) {
+  let recursive = false
+  let forced = false
+  const operands = []
+  for (const argument of args) {
+    if (argument === "--") continue
+    if (argument === "--recursive") recursive = true
+    else if (argument === "--force") forced = true
+    else if (/^-[^-]/.test(argument)) {
+      const options = argument.slice(1)
+      if (options.includes("r") || options.includes("R")) recursive = true
+      if (options.includes("f")) forced = true
+    } else operands.push(argument)
+  }
+  const option = recursive && forced ? "-rf" : recursive ? "-r" : forced ? "-f" : ""
+  return option ? ["rm", option, ...operands].join(" ") : null
+}
+
+function gitSubcommand(args) {
+  const optionsWithValues = new Set([
+    "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--exec-path",
+  ])
+  let index = 0
+  while (index < args.length) {
+    const argument = args[index]
+    if (argument === "--") {
+      index += 1
+      break
+    }
+    if (optionsWithValues.has(argument)) {
+      index += 2
+    } else if ([...optionsWithValues].some((option) => argument.startsWith(option + "="))) {
+      index += 1
+    } else if (["--no-pager", "--paginate", "-P", "-p", "--bare"].includes(argument)) {
+      index += 1
+    } else {
+      break
+    }
+  }
+  return { name: args[index] || "", args: args.slice(index + 1) }
+}
+
+function invocationText(invocation) {
+  return [invocation.executable, ...invocation.args].join(" ").trim()
+}
+
+function canonicalDenyCandidates(command) {
+  const sequence = shellSequence(command)
+  if (!sequence) return []
+  const candidates = []
+  const canonicalSequence = []
+  for (const entry of sequence) {
+    const words = shellWords(entry.command)
+    if (!words) return []
+    const variants = []
+    const stages = invocationStages(words)
+    if (!stages) return []
+    for (const invocation of stages) {
+      variants.push(invocationText(invocation))
+      if (invocation.executable === "rm") {
+        const normalizedRemove = normalizedRemoveCandidate(invocation.args)
+        if (normalizedRemove) variants.push(normalizedRemove)
+      }
+      if (invocation.executable === "git") {
+        const subcommand = gitSubcommand(invocation.args)
+        if (subcommand.name) {
+          variants.push(invocationText({ executable: "git", args: [subcommand.name, ...subcommand.args] }))
+        }
+      }
+    }
+    candidates.push(...variants)
+    canonicalSequence.push(variants[variants.length - 1] || entry.command.trim())
+  }
+  candidates.push(
+    canonicalSequence
+      .map((entry, index) => entry + (sequence[index].operator ? " " + sequence[index].operator + " " : ""))
+      .join("")
+      .trim(),
+  )
+  return [...new Set(candidates.filter(Boolean))]
+}
+
+const MAX_SHELL_INSPECTION_DEPTH = 4
+const COMMAND_SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"])
+const UNSUPPORTED_EXECUTION_PREFIXES = new Set(["!", "time", "coproc"])
+
+function parenthesizedCommand(command, openIndex) {
+  let depth = 1
+  let quote = null
+  let escaped = false
+  for (let index = openIndex + 1; index < command.length; index += 1) {
+    const character = command[index]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (character === "\\" && quote !== "'") {
+      escaped = true
+      continue
+    }
+    if (quote) {
+      if (character === quote) quote = null
+      continue
+    }
+    if (character === "'" || character === '"') {
+      quote = character
+    } else if (character === "(") {
+      depth += 1
+    } else if (character === ")") {
+      depth -= 1
+      if (depth === 0) {
+        return { body: command.slice(openIndex + 1, index), end: index }
+      }
+    }
+  }
+  return null
+}
+
+function backtickCommand(command, openIndex) {
+  let escaped = false
+  for (let index = openIndex + 1; index < command.length; index += 1) {
+    const character = command[index]
+    if (escaped) {
+      // El significado de un backtick escapado depende del nivel de expansion.
+      if (character.charCodeAt(0) === 96) return null
+      escaped = false
+      continue
+    }
+    if (character === "\\") {
+      escaped = true
+    } else if (character.charCodeAt(0) === 96) {
+      return { body: command.slice(openIndex + 1, index), end: index }
+    }
+  }
+  return null
+}
+
+function substitutionCommands(command) {
+  const commands = []
+  let quote = null
+  let escaped = false
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (character === "\\" && quote !== "'") {
+      escaped = true
+      continue
+    }
+    if (quote === "'") {
+      if (character === quote) quote = null
+      continue
+    }
+    if (character === "'" && quote === null) {
+      quote = character
+      continue
+    }
+    if (character === '"') {
+      if (quote === '"') quote = null
+      else if (quote === null) quote = '"'
+      continue
+    }
+    const isDollarSubstitution = character === "$" && command[index + 1] === "("
+    const isProcessSubstitution =
+      (character === "<" || character === ">") && command[index + 1] === "("
+    if (isDollarSubstitution || isProcessSubstitution) {
+      // La expansion aritmetica no es codigo shell directamente, pero mezclarla
+      // con sustituciones requiere un parser completo: se cierra conservadoramente.
+      if (isDollarSubstitution && command[index + 2] === "(") return null
+      const parsed = parenthesizedCommand(command, index + 1)
+      if (!parsed) return null
+      commands.push(parsed.body)
+      index = parsed.end
+    } else if (character.charCodeAt(0) === 96) {
+      const parsed = backtickCommand(command, index)
+      if (!parsed) return null
+      commands.push(parsed.body)
+      index = parsed.end
+    } else if (character === "(" && quote === null) {
+      const parsed = parenthesizedCommand(command, index)
+      if (!parsed) return null
+      commands.push(parsed.body)
+      index = parsed.end
+    } else if (character === ")" && quote === null) {
+      return null
+    }
+  }
+  if (quote || escaped) return null
+  return commands
+}
+
+function envSplitCommands(args) {
+  const commands = []
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(argument)) continue
+    if (["-u", "--unset", "-C", "--chdir", "-P"].includes(argument)) {
+      if (!args[index + 1]) return null
+      index += 1
+      continue
+    }
+    if (/^--(?:unset|chdir)=/.test(argument) || ["-i", "--ignore-environment"].includes(argument)) {
+      continue
+    }
+    if (["-S", "--split-string"].includes(argument)) {
+      if (!args[index + 1]) return null
+      const trailing = args.slice(index + 2)
+      if (trailing.some((word) => !/^[A-Za-z0-9_@%+=:,./-]+$/.test(word))) return null
+      commands.push([args[index + 1], ...trailing].join(" "))
+      return commands
+    }
+    if (argument.startsWith("--split-string=")) {
+      const split = argument.slice("--split-string=".length)
+      if (!split) return null
+      const trailing = args.slice(index + 1)
+      if (trailing.some((word) => !/^[A-Za-z0-9_@%+=:,./-]+$/.test(word))) return null
+      commands.push([split, ...trailing].join(" "))
+      return commands
+    }
+    if (argument === "--") continue
+    if (argument.startsWith("-")) return null
+    break
+  }
+  return commands
+}
+
+const XARGS_SAFE_OPTIONS = new Set([
+  "-0", "--null", "-r", "--no-run-if-empty",
+])
+
+function isStaticXargsConsumer(words) {
+  if (words.length < 2) return false
+  const executable = path.basename((words[0] || "").replaceAll("\\", "/"))
+  if (executable !== "printf") return false
+  const args = words.slice(1)
+  if (args[0] === "--") args.shift()
+  const format = args[0]
+  return (
+    typeof format === "string" &&
+    !format.startsWith("-") &&
+    !hasUnresolvedParameterExpansion(format) &&
+    !hasActiveCodeGeneration(format)
+  )
+}
+
+function xargsCommand(args) {
+  let index = 0
+  while (index < args.length) {
+    const argument = args[index]
+    if (argument === "--") {
+      index += 1
+      break
+    }
+    if (XARGS_SAFE_OPTIONS.has(argument)) {
+      index += 1
+      continue
+    }
+    if (argument.startsWith("-")) return null
+    break
+  }
+  if (index >= args.length) return null
+  const command = args.slice(index)
+  return isStaticXargsConsumer(command) ? command : null
+}
+
+function shellLiteral(word) {
+  return "'" + String(word).replaceAll("'", "'\\''") + "'"
+}
+
+const SHELL_OPTIONS_WITH_VALUES = new Set([
+  "-o", "+o", "-O", "+O", "--rcfile", "--init-file", "--startup-file",
+])
+const SHELL_OPTIONS_WITHOUT_VALUES = new Set([
+  "--debugger", "--dump-po-strings", "--dump-strings", "--emacs", "--globalrcs",
+  "--help", "--interactive", "--login", "--noediting", "--noemacs", "--noglobalrcs",
+  "--noprofile", "--norc", "--norcs", "--posix", "--pretty-print", "--privileged",
+  "--rcs", "--restricted", "--shinstdin", "--singlecommand", "--verbose", "--version",
+  "--xtrace",
+])
+
+function shellCommand(args) {
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]
+    if (argument === "-c") {
+      if (!args[index + 1]) return null
+      return args[index + 1]
+    }
+    if (argument === "--") return ""
+    if (SHELL_OPTIONS_WITH_VALUES.has(argument)) {
+      if (!args[index + 1]) return null
+      index += 1
+      continue
+    }
+    if (["--rcfile=", "--init-file=", "--startup-file="].some((prefix) => argument.startsWith(prefix))) {
+      if (argument.endsWith("=")) return null
+      continue
+    }
+    if (SHELL_OPTIONS_WITHOUT_VALUES.has(argument)) continue
+    if (/^[-+][^-]+$/.test(argument)) {
+      if (argument.slice(1).includes("c")) return null
+      continue
+    }
+    if (args.slice(index + 1).includes("-c")) return null
+    return ""
+  }
+  return ""
+}
+
+function invocationCommands(command) {
+  const sequence = shellSequence(command)
+  if (!sequence) return null
+  const commands = []
+  for (const entry of sequence) {
+    const words = shellWords(entry.command)
+    if (!words) return null
+    const stages = invocationStages(words)
+    if (!stages) return null
+    for (const invocation of stages) {
+      if (invocation.executable === "env") {
+        const splitCommands = envSplitCommands(invocation.args)
+        if (!splitCommands) return null
+        commands.push(...splitCommands.map((inner) => ({ command: inner, interpreted: true })))
+      }
+      if (invocation.executable === "xargs") {
+        const words = xargsCommand(invocation.args)
+        if (!words) return null
+        commands.push({ command: words.map(shellLiteral).join(" "), interpreted: false })
+      }
+    }
+    const invocation = stages[stages.length - 1]
+    if (!invocation || !COMMAND_SHELLS.has(invocation.executable)) continue
+    const nestedCommand = shellCommand(invocation.args)
+    if (nestedCommand === null) return null
+    if (nestedCommand) commands.push({ command: nestedCommand, interpreted: true })
+  }
+  return commands
+}
+
+function hasActiveCodeGeneration(command) {
+  let quote = null
+  let escaped = false
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (character === "\\" && quote !== "'") {
+      escaped = true
+      continue
+    }
+    if (quote === "'") {
+      if (character === quote) quote = null
+      continue
+    }
+    if (character === "'") {
+      quote = "'"
+      continue
+    }
+    if (character === '"') {
+      quote = quote === '"' ? null : '"'
+      continue
+    }
+    if (character.charCodeAt(0) === 96) return true
+    if (character === "$" && command[index + 1] === "(") return true
+    if ((character === "<" || character === ">") && command[index + 1] === "(") return true
+  }
+  return false
+}
+
+function hasUnresolvedParameterExpansion(command) {
+  let escaped = false
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (character === "\\") {
+      escaped = true
+      continue
+    }
+    if (character !== "$") continue
+    const next = command[index + 1] || ""
+    if (next === "(") continue
+    if (next === "{" || /[A-Za-z0-9_@*#?$!\-]/.test(next)) return true
+  }
+  return false
+}
+
+const UNSUPPORTED_SHELL_CONTROL_WORDS = new Set([
+  "if", "then", "elif", "else", "fi",
+  "for", "while", "until", "select", "in", "do", "done",
+  "case", "esac", "{", "}",
+])
+
+function hasUnsupportedShellControl(command) {
+  const sequence = shellSequence(command)
+  if (!sequence) return true
+  return sequence.some((entry) => {
+    const words = shellWords(entry.command)
+    if (!words) return true
+    const first = words.find((word) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) || ""
+    return UNSUPPORTED_SHELL_CONTROL_WORDS.has(first)
+  })
+}
+
+function hasUnsupportedExecutionPrefix(command) {
+  const sequence = shellSequence(command)
+  if (!sequence) return true
+  return sequence.some((entry) => {
+    const words = shellWords(entry.command)
+    if (!words) return true
+    const stages = invocationStages(words)
+    if (!stages) return true
+    return stages.some((stage) => UNSUPPORTED_EXECUTION_PREFIXES.has(stage.executable))
+  })
+}
+
+function matchesDenyRule(agent, command) {
+  const segments = shellSegments(command)
+  const sequence = shellSequence(command)
+  if (!segments || !sequence) return null
+  const candidates = [command.trim(), ...segments, ...canonicalDenyCandidates(command)]
+  const denyRules = BASH_DENY_RULES[agent] || []
+  return denyRules.some((pattern) =>
+    candidates.some((candidate) => commandPatternRegex(pattern).test(candidate)),
+  )
+}
+
+function passesRecursiveDenyRules(agent, command, depth = 0) {
+  if (depth > MAX_SHELL_INSPECTION_DEPTH) return false
+  if (
+    invokesEnvironmentDump(command) ||
+    hasUnsupportedShellControl(command) ||
+    hasUnsupportedExecutionPrefix(command)
+  ) return false
+  const denied = matchesDenyRule(agent, command)
+  if (denied === null || denied) return false
+  const substitutions = substitutionCommands(command)
+  const invocations = invocationCommands(command)
+  if (!substitutions || !invocations) return false
+  if (
+    invocations.some(
+      (invocation) =>
+        invocation.interpreted &&
+        (hasUnresolvedParameterExpansion(invocation.command) ||
+          hasActiveCodeGeneration(invocation.command)),
+    )
+  ) return false
+  return [...substitutions, ...invocations.map((invocation) => invocation.command)].every(
+    (inner) => passesRecursiveDenyRules(agent, inner, depth + 1),
+  )
+}
+
+function invokesEnvironmentDump(command) {
+  const sequence = shellSequence(command)
+  if (!sequence) return true
+  return sequence.some((entry) => {
+    const words = shellWords(entry.command)
+    if (!words) return true
+    const stages = invocationStages(words)
+    if (!stages) return true
+    if (stages.some((stage) => stage.executable === "printenv")) return true
+    return stages.some(
+      (stage, index) => stage.executable === "env" && index === stages.length - 1,
+    )
   })
 }
 
@@ -343,6 +973,7 @@ function unsafeReadOnlyArguments(words) {
 }
 
 function allowedReadOnlyCommand(agent, command) {
+  if (!passesRecursiveDenyRules(agent, command)) return false
   const rules = READ_ONLY_BASH_RULES[agent]
   if (!rules) return true
   if (unsafeShellSyntax(command)) return false
@@ -384,6 +1015,7 @@ try {
   const pathValues = [toolInput.file_path, toolInput.path, toolInput.notebook_path].filter(Boolean)
 
   if (tool === "Glob" && toolInput.pattern) pathValues.push(toolInput.pattern)
+  if (tool === "Grep" && toolInput.glob) pathValues.push(toolInput.glob)
   if (pathValues.some(secretPath)) {
     console.error("Bloqueado por ms-agent-kit: acceso a una ruta sensible")
     process.exit(2)
@@ -400,7 +1032,7 @@ try {
       process.exit(2)
     }
     if (!allowedReadOnlyCommand(process.argv[2], command)) {
-      console.error("Bloqueado por ms-agent-kit: comando fuera de la allowlist de solo lectura")
+      console.error("Bloqueado por ms-agent-kit: comando denegado para este agente")
       process.exit(2)
     }
   }
@@ -421,7 +1053,7 @@ try {
 
 function claudeCommand(
   command: SourceMarkdown,
-  architect: SourceMarkdown,
+  agents: SourceMarkdown[],
   sharedRules: string,
   guardPath: string,
 ): string {
@@ -430,17 +1062,24 @@ function claudeCommand(
     "description",
     `Ejecuta ${command.name}`,
   )
+  const requestedAgent = frontmatterString(command.frontmatter, "agent", "ms-architect")
+  const agent = agents.find((candidate) => candidate.name === requestedAgent)
+  if (!agent) throw new Error(`El workflow ${command.name} referencia el agente inexistente ${requestedAgent}`)
+  const guardScope = command.name === "ms-skills" ? "workflow:ms-skills" : agent.name
+  const frontmatter: Record<string, unknown> = {
+    name: command.name,
+    description,
+    "disable-model-invocation": true,
+    context: "fork",
+    agent: agent.name,
+    hooks: claudeGuardHooks(guardPath, guardScope),
+  }
   return renderMarkdown(
-    {
-      name: command.name,
-      description,
-      "disable-model-invocation": true,
-      hooks: claudeGuardHooks(guardPath, architect.name),
-    },
+    frontmatter,
     [
       "# Adaptacion Claude Code",
-      "Ejecuta este workflow en la conversacion principal con el rol de ms-architect. Puedes delegar directamente a los custom agents ms-* mediante Agent. Usa $ARGUMENTS como entrada literal.",
-      embeddedAgentBody(sharedRules, architect.body, CLAUDE_COMPATIBILITY),
+      `Ejecuta este workflow con el rol de ${agent.name}. Usa $ARGUMENTS como entrada literal.`,
+      embeddedAgentBody(sharedRules, agent.body, CLAUDE_COMPATIBILITY),
       "# Workflow",
       command.body,
     ].join("\n\n"),
@@ -513,7 +1152,7 @@ export function buildClaudeArtifacts(catalog: Catalog, context: BuildContext): A
         name: command.name,
         root,
         destination: path.join(skillsRoot, command.name, "SKILL.md"),
-        content: claudeCommand(command, architect, catalog.sharedRules, guardPath),
+        content: claudeCommand(command, catalog.agents, catalog.sharedRules, guardPath),
       }),
     )
   }

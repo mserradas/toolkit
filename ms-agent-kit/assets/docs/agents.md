@@ -12,7 +12,7 @@ Idea temprana -> ms-discovery -> experimentos / decisión de PRD
 PRD aprobado -> ms-architect -> ms-spec si aporta -> ms-designer -> TDD
 Cambio acotado -> ms-architect -> ms-fastlane -> revisión/smoke -> cierre
 Cambio con scope claro -> ms-architect -> ms-codex -> verificación si aplica -> cierre
-TDD aprobado -> ms-architect -> paquetes -> ms-progress -> verificación -> ms-spec-archive si hubo spec -> cierre
+TDD aprobado -> ms-architect -> work units -> ms-progress -> verificación -> cierre de spec si aplica -> cierre
 Retomar trabajo -> /ms-continue <slug> -> lee docs/status/** -> ejecuta una siguiente acción clara
 ```
 
@@ -24,7 +24,7 @@ Retomar trabajo -> /ms-continue <slug> -> lee docs/status/** -> ejecuta una sigu
 | `/ms-continue [slug|ruta]` | Retoma un workflow desde `docs/status/**`, valida recibos de revisión y ejecuta solo la próxima acción clara |
 | `/ms-models [filtro]` | Diagnóstico de solo lectura de modelos, variante activa, variantes disponibles y recomendaciones para agentes `ms-*` |
 | `/ms-doctor [full]` | Health check read-only de OpenCode, agentes `ms-*`, comandos, skills, plugins, cache y permisos de secretos |
-| `/ms-skills [refresh|check|list]` | Refresca o revisa `.atl/skill-registry.md`, índice simple de skills disponibles por trigger y ruta exacta |
+| `/ms-skills [refresh|check|list]` | Refresca o revisa `.atl/skill-registry.md`, índice común de skills instaladas en roots estándar |
 
 ## Mejoras inspiradas por Gentle AI
 
@@ -36,16 +36,16 @@ Se incorporan ideas útiles sin añadir una segunda familia de agentes:
 - **Gatekeeper entre fases**: antes de avanzar, `ms-architect` valida contrato, existencia de artefactos, coherencia de rutas/comandos, drift contra la entrada y siguiente acción.
 - **Contrato de idioma**: conversación en el idioma del usuario; artefactos persistentes en el idioma del repo o inglés técnico por defecto.
 - **Test capabilities snapshot**: `ms-tester` reporta los comandos detectados/ejecutables para que el arquitecto los reutilice en verificaciones posteriores.
-- **`ms-project-init`**: protocolo ligero para detectar stack, arquitectura, comandos de verificación y riesgos desconocidos antes de cambios grandes.
-- **`ms-work-unit`**: protocolo para partir trabajo en unidades revisables con tests/docs acoplados al comportamiento que verifican.
+- **`ms-project-init`**: skill ligera para detectar stack, arquitectura, comandos de verificación y riesgos desconocidos antes de cambios grandes.
+- **`work-unit-commits`**: skill para partir trabajo en unidades revisables con tests/docs acoplados al comportamiento que verifican.
 - **`ms-spec`**: spec funcional ligera para cerrar comportamiento, reglas, criterios y contratos antes del TDD cuando el cambio lo justifica.
-- **`ms-spec-archive`**: protocolo ligero tipo OpenSpec archive; al cerrar una implementación con spec, `ms-spec` actualiza estado, evidencia y drift para que la spec siga siendo útil.
-- **`ms-progress`**: ledger simple en `docs/status/**` para retomar paquetes y fases en otra ventana sin usar el TDD como tracker.
-- **`/ms-continue`**: comando para retomar desde `docs/status/**`, reconstruir el punto activo y lanzar una sola siguiente acción clara.
-- **Recibos de revisión**: `ms-progress` registra revisiones aceptadas con alcance, huella y evidencia para no repetir auditorías/reviews equivalentes al retomar.
+- **Cierre de spec**: modo de `ms-spec` inspirado en OpenSpec archive; actualiza estado, evidencia y drift para que la spec siga siendo útil.
+- **`ms-progress/v1`**: ledger estructurado en `docs/status/**` para retomar paquetes y fases en otra ventana sin usar el TDD como tracker.
+- **`/ms-continue`**: comando para retomar desde `docs/status/**`; la utilidad `workflow next` valida el esquema y devuelve una sola siguiente acción o se detiene.
+- **Recibos de revisión**: `ms-progress` registra revisiones aceptadas con alcance, huella y evidencia; `review fingerprint` calcula una huella reproducible del worktree o staged sin exponer el diff.
 - **Preguntas interactivas con `question`**: `ms-architect`, `ms-plan` y `ms-discovery` usan el selector nativo de OpenCode para decisiones bloqueantes, entrevistas de producto y pausas entre fases.
 - **`ms-doctor`**: comando de diagnóstico read-only para validar configuración, permisos, agentes, comandos, skills, plugins y cache.
-- **`ms-skills` / skill registry**: índice `.atl/skill-registry.md` inspirado en Gentle AI para que `ms-architect` encuentre skills por trigger sin resumirlas ni duplicarlas.
+- **`ms-skills` / skill registry**: un índice común, como Gentle AI, para que `ms-architect` encuentre skills globales y de proyecto instaladas en roots estándar sin duplicar artefactos por cliente.
 - **Context7 MCP**: documentación actual de librerías/frameworks/APIs desde `https://mcp.context7.com/mcp`, usada antes de `webfetch` cuando aplica.
 - **`ms-model-variants`**: plugin local inspirado en Gentle AI que cachea modelos/variantes en `~/.config/opencode/cache/model-variants.json`; `/ms-models` lo usa para revisar asignaciones sin cambiar agentes automáticamente.
 - **Presupuesto de velocidad/contexto**: el orquestador se mantiene delgado, evita delegaciones duplicadas, agrupa estado por ola y usa modelos rápidos en agentes operativos sin bajar el modelo de juicio para diseño, implementación compleja o seguridad.
@@ -60,6 +60,7 @@ Se incorporan ideas útiles sin añadir una segunda familia de agentes:
 | `chained-pr` | Diseñar PRs encadenados/stacked cuando se supera el presupuesto de revisión |
 | `judgment-day` | Doble juez ciego para revisar diffs, specs, TDDs o slices de alto riesgo |
 | `delegation-brief` | Preparar tareas autosuficientes para subagentes con contexto, límites, DoD y evidencia esperada |
+| `ms-project-init` | Crear un snapshot operativo mínimo de stack, arquitectura, verificación y riesgos antes de nivel 4 o repos desconocidos |
 | `skill-creator` | Crear nuevas skills concisas y reutilizables |
 | `skill-improver` | Auditar y mejorar skills existentes |
 | `skill-registry` | Indexar skills por trigger, scope y ruta exacta en `.atl/skill-registry.md` |
@@ -126,13 +127,13 @@ Solo `ms-architect`, `ms-spec`, `ms-designer` y `ms-writer` tienen `skill: allow
 - `ms-architect` ejecuta siempre un Security Smoke Gate tras cambios de `ms-codex` o `ms-fastlane`; si el diff contiene señales reales de secretos/config sensible o lógica de seguridad, invoca `ms-security-auditor` en modo ligero. Una ruta sensible con cambios solo visuales no basta para escalar.
 - `ms-architect` aplica Gatekeeper de Fases antes de avanzar entre spec, TDD, implementación, verificación, documentación y cierre.
 - `ms-architect` aplica el guard de carga de revisión en cambios nivel 3-4: presupuesto por defecto 400 líneas cambiadas por paquete/PR; si se excede, divide o pide excepción explícita.
-- `ms-architect` usa `ms-project-init` cuando no hay snapshot confiable de stack/comandos o antes de un nivel 4.
-- `ms-architect` usa `ms-work-unit` para partir nivel 3-4 por comportamiento entregable, no por tipo de archivo.
+- `ms-architect` carga la skill `ms-project-init` cuando no hay snapshot confiable de stack/comandos o antes de un nivel 4.
+- `ms-architect` carga `work-unit-commits` para partir nivel 3-4 por comportamiento entregable, no por tipo de archivo.
 - `ms-architect` usa `ms-spec` solo para cambios nivel 3-4, features ambiguas, contratos públicos, datos, seguridad, migraciones o decisiones irreversibles; no lo usa en fastlane ni nivel 2 claro.
-- `ms-architect` usa `ms-spec-archive` antes del cierre final si una implementación nivel 3-4 tuvo spec funcional y el resultado afecta comportamiento observable. La spec se marca `Implementado`, `Verificado`, `Archivado` o `Reemplazado` con evidencia; no se borra.
+- `ms-architect` delega el modo de cierre de `ms-spec` antes del cierre final si una implementación nivel 3-4 tuvo spec funcional y el resultado afecta comportamiento observable. La spec se marca `Implementado`, `Verificado`, `Archivado` o `Reemplazado` con evidencia; no se borra.
 - `ms-architect` usa `judgment-day` cuando el usuario pide doble juez/revisión adversarial o cuando un diff/TDD/spec de alto riesgo necesita confirmación independiente; no aplica a fastlane ni cambios triviales.
 - `ms-architect` usa `delegation-brief` antes de delegar paquetes nivel 3-4, TDD/spec, bugs, reviews, auditorías, verificaciones o retries; fastlane y nivel 2 trivial pueden usar brief corto.
-- `ms-architect` usa `.atl/skill-registry.md` si existe para decidir qué skill cargar o pasar a un subagente. Si falta o cambió el set de skills, recomienda `/ms-skills refresh`.
+- `ms-architect` usa `.atl/skill-registry.md` para decidir qué skill cargar o pasar a un subagente. Si falta o cambió el set de skills, recomienda `/ms-skills refresh`.
 - `ms-architect` usa `ms-progress` después de aceptar paquetes, verificaciones, revisiones, bloqueos o cierres de fase en nivel 3-4. `/ms-status` lee `docs/status/**` como fuente primaria de progreso si existe; `/ms-continue` lo usa para ejecutar la próxima acción.
 - `ms-spec` no diseña arquitectura técnica ni implementación; produce comportamiento, reglas, casos borde y criterios verificables en `docs/spec/**`, y al cierre registra evidencia, estado final y drift.
 - `ms-designer` no asigna ejecutores; solo diseña el TDD.
@@ -159,15 +160,15 @@ Solo `ms-architect`, `ms-spec`, `ms-designer` y `ms-writer` tienen `skill: allow
 
 ## Runtime compartido
 
-OpenCode carga [agents-shared.md](agents-shared.md), no este README. Ese archivo contiene solo las instrucciones compartidas mínimas y el contrato estándar `Contrato para ms-architect`.
+OpenCode no carga `agents-shared.md` globalmente. El instalador embebe esas reglas una sola vez en cada agente generado y conserva [agents-shared.md](agents-shared.md) como referencia humana.
 
-OpenCode carga plugins locales desde `plugins/**`. Actualmente se incluye [ms-model-variants.ts](../plugins/ms-model-variants.ts), que cachea modelos y variantes de providers en `~/.config/opencode/cache/model-variants.json` al iniciar OpenCode. Es pasivo: no modifica agentes, modelos, permisos ni archivos de proyecto. Si el cache no existe, reinicia OpenCode una vez para que el plugin pueda generarlo.
+OpenCode carga dos plugins locales desde `plugins/**`: [ms-model-variants.ts](../plugins/ms-model-variants.ts), que cachea durante 24 horas solo los providers conectados, y [ms-skill-registry.ts](../plugins/ms-skill-registry.ts), que refresca un registry ya inicializado. Ninguno modifica archivos del proyecto durante el primer arranque.
 
-OpenCode carga plugins npm y MCPs desde `opencode.json`. `ms-agent-kit` declara Warp, notifier y Context7; la clave de Context7 se resuelve exclusivamente desde `CONTEXT7_API_KEY`, nunca desde el catálogo. Los agentes con acceso a documentación deben preferir Context7 antes de `webfetch` cuando aplique.
+OpenCode carga plugins npm y MCPs desde `opencode.json`. `ms-agent-kit` declara notifier y Context7; la clave de Context7 se resuelve exclusivamente desde `CONTEXT7_API_KEY`, nunca desde el catálogo. Los agentes con acceso a documentación deben preferir Context7 antes de `webfetch` cuando aplique.
 
 OpenCode instala automáticamente los plugins npm con Bun al arrancar. El `package.json` del directorio de configuración declara `@opencode-ai/plugin` para el plugin TypeScript local; no se distribuyen `node_modules`, locks ni cachés.
 
-El índice de skills vive en `.atl/skill-registry.md` cuando se ejecuta `/ms-skills refresh`. Es un índice de rutas, no una copia compactada de las skills; si se instalan, renombran o borran skills, vuelve a ejecutar `/ms-skills refresh`.
+El índice único vive en `.atl/skill-registry.md`; su cache es `.atl/.skill-registry.cache.json`. Es un índice de rutas, no una copia compactada ni un inventario de built-ins. Escanea exactamente `<root>/<skill>/SKILL.md` en las roots estándar de OpenCode, Claude Code, Codex y Agent Skills, con precedencia de proyecto. La primera ejecución explícita de `/ms-skills refresh` inicializa `.atl/` en `.gitignore`; después OpenCode puede refrescarlo al arrancar.
 
 La TUI carga las preferencias portables desde `tui.json`, incluido `opencode-subagent-statusline`. El estado y cache del plugin se generan localmente y no se distribuyen.
 

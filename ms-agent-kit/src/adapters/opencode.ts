@@ -7,8 +7,13 @@ import {
   OPENCODE_SECRET_READ_RULES,
 } from "../core/permissions.js"
 import { openCodeRolePermission } from "../core/opencode-role-permissions.js"
+import { restrictOpenCodeSkillPermission } from "../core/skill-visibility.js"
 import type { Artifact, BuildContext, Catalog } from "../core/types.js"
-import { copySkillArtifacts, embeddedAgentBody, textArtifact } from "./common.js"
+import {
+  copySkillArtifacts,
+  embeddedAgentBody,
+  textArtifact,
+} from "./common.js"
 
 const OPENCODE_COMPATIBILITY = `
 - Este archivo es autocontenido: las reglas de docs/agents-shared.md estan incorporadas arriba.
@@ -28,7 +33,7 @@ function configRootFor(context: BuildContext): string {
   return context.scope === "user" ? rootFor(context) : context.projectRoot
 }
 
-function openCodeConfig(openCodeRoot: string): string {
+function openCodeConfig(): string {
   const defaultAgent = agentDefinition(OPENCODE_DEFAULT_AGENT)
   const defaultModel = modelProfile(defaultAgent.modelProfile)
   return `${JSON.stringify(
@@ -36,15 +41,11 @@ function openCodeConfig(openCodeRoot: string): string {
       $schema: "https://opencode.ai/config.json",
       model: defaultModel.openCodeModel,
       default_agent: OPENCODE_DEFAULT_AGENT,
-      instructions: [path.join(openCodeRoot, "docs", "agents-shared.md")],
-      plugin: [
-        "@warp-dot-dev/opencode-warp@0.1.7",
-        "@mohak34/opencode-notifier@0.2.8",
-      ],
+      plugin: ["@mohak34/opencode-notifier@0.2.8"],
       permission: {
         bash: OPENCODE_SECRET_BASH_RULES,
         read: OPENCODE_SECRET_READ_RULES,
-        skill: "allow",
+        skill: restrictOpenCodeSkillPermission("allow"),
       },
       mcp: {
         context7: {
@@ -88,6 +89,7 @@ function secureFrontmatter(
     ...frontmatter,
     permission: {
       ...currentPermission,
+      skill: restrictOpenCodeSkillPermission(currentPermission.skill),
       read: secureRule(currentPermission.read, OPENCODE_SECRET_READ_RULES),
       bash: secureRule(currentPermission.bash, OPENCODE_SECRET_BASH_RULES),
     },
@@ -106,7 +108,7 @@ export function buildOpenCodeArtifacts(catalog: Catalog, context: BuildContext):
       name: "opencode.json",
       root: configRoot,
       destination: path.join(configRoot, "opencode.json"),
-      content: openCodeConfig(root),
+      content: openCodeConfig(),
     }),
   )
 
@@ -157,7 +159,7 @@ export function buildOpenCodeArtifacts(catalog: Catalog, context: BuildContext):
         name: command.name,
         root,
         destination: path.join(root, "commands", command.fileName),
-        content: command.raw,
+        content: renderMarkdown(command.frontmatter, command.body),
       }),
     )
   }

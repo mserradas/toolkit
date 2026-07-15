@@ -35,7 +35,7 @@ Revisa lo mínimo necesario:
 - `~/.config/opencode/docs/agents.md`
 - `~/.config/opencode/plugins/*.ts`
 - `~/.config/opencode/cache/model-variants.json` si existe
-- `skills/*/SKILL.md` y `.atl/skill-registry.md` si existe en el proyecto actual
+- roots de skills de OpenCode, Claude Code, Codex y `.agents/skills`; además `.atl/skill-registry.md` si existe en el proyecto actual
 
 Usa `opencode debug agent <agente>` para validar al menos:
 
@@ -59,15 +59,17 @@ Evalúa:
 - `ms-architect` tiene `question: allow` y permisos de solo lectura.
 - Subagentes no orquestadores tienen `task: deny`.
 - Cada agente generado contiene denegaciones de secretos y `opencode.json` conserva la denylist global.
-- `docs/agents-shared.md` está cargado en `instructions`.
-- Comandos `/ms-status`, `/ms-models`, `/ms-doctor` y `/ms-skills` existen.
+- Cada agente `ms-*` es autocontenido e incorpora una sola vez las reglas compartidas.
+- `docs/agents-shared.md` existe como referencia humana y no está cargado en `instructions`.
+- Comandos `/ms-status`, `/ms-continue`, `/ms-models`, `/ms-doctor` y `/ms-skills` existen.
 - Plugin `ms-model-variants` existe y el cache está presente o se informa cómo generarlo.
-- Plugins npm Warp y notifier están declarados con versión.
+- Plugin `ms-skill-registry` existe; si `.atl/skill-registry.md` existe, usa schema `ms-skill-registry/v3`, no declara target y su cache/fingerprint son coherentes.
+- El plugin npm notifier está declarado con versión.
 - `opencode-subagent-statusline` está declarado y habilitado en `tui.json`.
 - MCP `context7` está habilitado y usa `{env:CONTEXT7_API_KEY}` en vez de una clave literal.
 - `package.json` declara una versión compatible de `@opencode-ai/plugin`.
 - Skills instaladas tienen frontmatter mínimo `name` y `description`.
-- Si existe `.atl/skill-registry.md`, parece actualizado respecto a skills locales.
+- Si existe `.atl/skill-registry.md`, parece actualizado respecto a las roots estándar y no contiene `skill-registry`, built-ins anidados ni workflows internos reservados. Comprueba que no queden variantes `skill-registry.<cliente>.md` administradas.
 
 ## Salida
 
@@ -81,7 +83,7 @@ Estado general: OK | advertencias | requiere atención
 Config:
   opencode.json: OK | no encontrado | fallo
   tui.json: OK | no encontrado | fallo
-  instructions compartidas: OK | fallo
+  reglas compartidas autocontenidas: OK | fallo
   permisos de secretos: OK | advertencia | fallo
 
 Agentes:
@@ -99,7 +101,7 @@ Skills:
 
 Plugins / cache:
   ms-model-variants: OK | no encontrado | cache pendiente
-  Warp: OK | no declarado
+  ms-skill-registry: OK | no encontrado | cache pendiente | desactualizado
   notifier: OK | no declarado | config ausente
   subagent-statusline: OK | no declarado | deshabilitado
 

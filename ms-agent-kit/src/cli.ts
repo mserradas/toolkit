@@ -12,6 +12,9 @@ import { DEFAULT_ASSETS_ROOT, loadCatalog } from "./core/catalog.js"
 import { parseMarkdown } from "./core/frontmatter.js"
 import { applyPlan, installationStatus, uninstallTargets } from "./core/installer.js"
 import { createPlan } from "./core/planner.js"
+import { fingerprintReview } from "./core/review.js"
+import { ensureAtlIgnored, refreshSkillRegistry } from "./core/skill-registry.js"
+import { nextWorkflowAction, readWorkflowStatus } from "./core/workflow.js"
 import {
   TARGETS,
   owningTargets,
@@ -34,6 +37,10 @@ Uso:
   ms-agent-kit install [opciones]
   ms-agent-kit status [opciones]
   ms-agent-kit uninstall [opciones]
+  ms-agent-kit workflow status [slug|ruta] [--project <ruta>] [--json]
+  ms-agent-kit workflow next [slug|ruta] [--project <ruta>] [--json]
+  ms-agent-kit review fingerprint [--scope worktree|staged] [--project <ruta>] [--json]
+  ms-agent-kit skill-registry refresh [--project <ruta>] [--home <ruta>] [--force] [--no-gitignore] [--json]
 
 Opciones:
   --target <valor>    opencode, claude, codex o all. Puede repetirse.
@@ -60,6 +67,41 @@ interface CliOptions {
 interface MenuOption<T> {
   label: string
   value: T
+}
+
+interface LocalOptions {
+  projectRoot: string
+  homeDir: string
+  force: boolean
+  json: boolean
+  scope: string
+  noGitignore: boolean
+  positionals: string[]
+}
+
+function localOptions(args: string[]): LocalOptions {
+  const parsed = parseArgs({
+    args,
+    options: {
+      project: { type: "string" },
+      home: { type: "string" },
+      force: { type: "boolean", default: false },
+      json: { type: "boolean", default: false },
+      scope: { type: "string", default: "worktree" },
+      "no-gitignore": { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+    strict: true,
+  })
+  return {
+    projectRoot: path.resolve(parsed.values.project ?? process.cwd()),
+    homeDir: path.resolve(parsed.values.home ?? homedir()),
+    force: parsed.values.force,
+    json: parsed.values.json,
+    scope: parsed.values.scope,
+    noGitignore: parsed.values["no-gitignore"],
+    positionals: parsed.positionals,
+  }
 }
 
 function parseTargets(values: string[] | undefined): Target[] {
@@ -350,20 +392,69 @@ async function checkCodexSecretRules(
     throw error
   }
 
+  const cases = [
+    { args: ["cat", ".env"], forbidden: true },
+    { args: ["cat", ".env.secret"], forbidden: true },
+    { args: ["/bin/cat", ".env.local"], forbidden: true },
+    { args: ["head", "-n", "1", ".npmrc"], forbidden: true },
+    { args: ["head", "-c", "50", ".env"], forbidden: true },
+    { args: ["head", "-5", ".env"], forbidden: true },
+    { args: ["sed", "-n", "1p", ".env"], forbidden: true },
+    { args: ["sed", "-n", "2p", ".env"], forbidden: true },
+    { args: ["awk", "{print}", ".netrc"], forbidden: true },
+    { args: ["awk", "/DATABASE_URL/", ".env"], forbidden: true },
+    { args: ["rg", "TOKEN", ".env.secret"], forbidden: true },
+    { args: ["rg", "DATABASE_URL", ".env"], forbidden: true },
+    { args: ["rg", "-n", "TOKEN", ".env.secret"], forbidden: true },
+    { args: ["grep", "PASSWORD", ".env.production"], forbidden: true },
+    { args: ["grep", "DATABASE_URL", ".env"], forbidden: true },
+    { args: ["grep", "-n", "PASSWORD", ".env"], forbidden: true },
+    { args: ["env"], forbidden: true },
+    { args: ["git", "diff", "--", ".env"], forbidden: true },
+    { args: ["git", "show", "HEAD:.env"], forbidden: true },
+    { args: ["cat", ".env.example"], forbidden: false },
+    { args: ["cat", "README.md"], forbidden: false },
+    { args: ["sed", "-n", "1p", "README.md"], forbidden: false },
+    { args: ["rg", "TOKEN", ".env.example"], forbidden: false },
+    { args: ["head", "-c", "50", ".env.example"], forbidden: false },
+    { args: ["rg", "-n", "TOKEN", ".env.example"], forbidden: false },
+    { args: ["grep", "-n", "PASSWORD", "README.md"], forbidden: false },
+    { args: ["git", "diff", "--", ".env.example"], forbidden: false },
+    { args: ["git", "show", "HEAD:.env.example"], forbidden: false },
+  ] as const
+
   try {
-    const { stdout } = await execFileAsync("codex", [
-      "execpolicy",
-      "check",
-      "--rules",
-      rulePath,
-      "--",
-      "cat",
-      ".env",
-    ])
-    const result = JSON.parse(stdout) as { decision?: string }
-    return result.decision === "forbidden"
-      ? { status: "passed", detail: "Codex bloquea cat .env" }
-      : { status: "failed", detail: `Decision inesperada: ${result.decision ?? "ausente"}` }
+    const results = await Promise.all(
+      cases.map(async (testCase) => {
+        const { stdout } = await execFileAsync("codex", [
+          "execpolicy",
+          "check",
+          "--rules",
+          rulePath,
+          "--",
+          ...testCase.args,
+        ])
+        const result = JSON.parse(stdout) as { decision?: string }
+        const isForbidden = result.decision === "forbidden"
+        return { ...testCase, decision: result.decision, passed: isForbidden === testCase.forbidden }
+      }),
+    )
+    const failed = results.filter((result) => !result.passed)
+    if (failed.length === 0) {
+      return {
+        status: "passed",
+        detail: `Defensa practica best-effort validada: ${results.length}/${results.length} casos`,
+      }
+    }
+    return {
+      status: "failed",
+      detail: `Matriz best-effort incompleta (${results.length - failed.length}/${results.length}): ${failed
+        .map(
+          (result) =>
+            `${result.args.join(" ")} esperaba ${result.forbidden ? "forbidden" : "no forbidden"} y obtuvo ${result.decision ?? "sin decision"}`,
+        )
+        .join("; ")}`,
+    }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return { status: "unavailable", detail: "No se encontro el binario codex" }
@@ -541,6 +632,69 @@ async function runStatus(options: CliOptions): Promise<void> {
   for (const item of status) process.stdout.write(`[${item.status}] ${item.target} ${item.path}\n`)
 }
 
+async function runWorkflow(args: string[]): Promise<void> {
+  const options = localOptions(args)
+  const [operation, requested, ...extra] = options.positionals
+  if (!operation || !["status", "next"].includes(operation) || extra.length > 0) {
+    throw new Error("Uso: ms-agent-kit workflow <status|next> [slug|ruta] [--project <ruta>] [--json]")
+  }
+  const status = await readWorkflowStatus(options.projectRoot, requested)
+  const payload = operation === "next" ? nextWorkflowAction(status) : status
+  if (options.json) {
+    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
+    return
+  }
+  if (operation === "status") {
+    process.stdout.write(
+      `Workflow ${status.slug ?? "desconocido"}: ${status.status ?? "legacy"}; fase ${status.phase ?? "desconocida"}; próxima ${status.nextAction ?? "no estructurada"}; confianza ${status.confidence}\n`,
+    )
+    if (status.warnings.length > 0) process.stdout.write(`Avisos: ${status.warnings.join("; ")}\n`)
+    return
+  }
+  const next = payload as ReturnType<typeof nextWorkflowAction>
+  process.stdout.write(
+    `Workflow ${status.slug ?? "desconocido"}: ${next.ready ? "listo" : "detenido"}; acción ${next.action ?? "ninguna"}. ${next.reason}\n`,
+  )
+}
+
+async function runReview(args: string[]): Promise<void> {
+  const options = localOptions(args)
+  const [operation, ...extra] = options.positionals
+  if (operation !== "fingerprint" || extra.length > 0) {
+    throw new Error("Uso: ms-agent-kit review fingerprint [--scope worktree|staged] [--project <ruta>] [--json]")
+  }
+  if (options.scope !== "worktree" && options.scope !== "staged") {
+    throw new Error("Scope de review no soportado: usa --scope worktree o --scope staged")
+  }
+  const fingerprint = await fingerprintReview(options.projectRoot, options.scope)
+  process.stdout.write(
+    options.json
+      ? `${JSON.stringify(fingerprint, null, 2)}\n`
+      : `${fingerprint.fingerprint} (${fingerprint.fileCount} archivos, +${fingerprint.additions}/-${fingerprint.deletions})\n`,
+  )
+}
+
+async function runSkillRegistry(args: string[]): Promise<void> {
+  const options = localOptions(args)
+  const [operation, ...extra] = options.positionals
+  if (operation !== "refresh" || extra.length > 0) {
+    throw new Error(
+      "Uso: ms-agent-kit skill-registry refresh [--project <ruta>] [--home <ruta>] [--force] [--no-gitignore] [--json]",
+    )
+  }
+  if (!options.noGitignore) await ensureAtlIgnored(options.projectRoot)
+  const result = await refreshSkillRegistry({
+    projectRoot: options.projectRoot,
+    homeDir: options.homeDir,
+    force: options.force,
+  })
+  process.stdout.write(
+    options.json
+      ? `${JSON.stringify(result, null, 2)}\n`
+      : `Skill registry ${result.cacheHit ? "sin cambios" : "actualizado"}: ${result.skills} skills en ${result.registryPath}\n`,
+  )
+}
+
 async function runUninstall(options: CliOptions): Promise<void> {
   if (!(await confirm(`Desinstalar ${options.targets.join(", ")}?`, options.yes))) {
     process.stdout.write("Desinstalacion cancelada\n")
@@ -571,6 +725,19 @@ async function main(): Promise<void> {
   const [command, ...args] = input
   if (command === "help" || command === "--help" || command === "-h") {
     process.stdout.write(HELP)
+    return
+  }
+
+  if (command === "workflow") {
+    await runWorkflow(args)
+    return
+  }
+  if (command === "review") {
+    await runReview(args)
+    return
+  }
+  if (command === "skill-registry") {
+    await runSkillRegistry(args)
     return
   }
 

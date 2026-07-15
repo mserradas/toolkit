@@ -33,12 +33,12 @@ describe("transactional installer", () => {
 
     expect(firstPlan.items.every((item) => item.action === "create")).toBe(true)
     const result = await applyPlan(firstPlan, context)
-    expect(result.created).toBe(91)
+    expect(result.created).toBe(94)
 
     const secondPlan = await createPlan(artifacts, context)
     expect(secondPlan.items.every((item) => item.action === "unchanged")).toBe(true)
     const status = await installationStatus(["opencode", "claude", "codex"], context)
-    expect(status).toHaveLength(91)
+    expect(status).toHaveLength(94)
     expect(status.every((item) => item.status === "ok")).toBe(true)
   })
 
@@ -63,6 +63,7 @@ describe("transactional installer", () => {
 
     await uninstallTargets(["opencode"], context)
     await expect(access(openCodeSkill.destination)).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(access(openCodeSkill.root)).resolves.toBeUndefined()
     await expect(access(codexSkill.destination)).resolves.toBeUndefined()
   })
 
@@ -127,6 +128,70 @@ describe("transactional installer", () => {
 
     expect(result.removed).toBe(1)
     await expect(access(legacyPath)).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(access(path.dirname(legacyPath))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("removes the obsolete public Codex ms-shared skill during an update", async () => {
+    const context = await testContext()
+    const legacyPath = path.join(context.projectRoot, ".agents", "skills", "ms-shared", "SKILL.md")
+    const legacyArtifacts = [
+      {
+        target: "codex" as const,
+        kind: "skill" as const,
+        name: "ms-shared",
+        root: path.join(context.projectRoot, ".agents", "skills"),
+        destination: legacyPath,
+        content: Buffer.from("---\nname: ms-shared\ndescription: legacy\n---\n"),
+        mode: 0o644,
+      },
+    ]
+    await applyPlan(await createPlan(legacyArtifacts, context), context)
+
+    const currentArtifacts = await buildArtifacts(["codex"], context)
+    expect(currentArtifacts).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: "skill", name: "ms-shared" })]),
+    )
+    const migrationPlan = await createPlan(currentArtifacts, context)
+    expect(migrationPlan.obsolete).toContainEqual(
+      expect.objectContaining({
+        action: "remove",
+        file: expect.objectContaining({ path: legacyPath }),
+      }),
+    )
+
+    const result = await applyPlan(migrationPlan, context)
+    expect(result.removed).toBe(1)
+    await expect(access(legacyPath)).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(access(path.dirname(legacyPath))).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(access(legacyArtifacts[0]!.root)).resolves.toBeUndefined()
+  })
+
+  it("keeps user content next to an obsolete managed skill", async () => {
+    const context = await testContext()
+    const skillDirectory = path.join(context.projectRoot, ".agents", "skills", "legacy")
+    const legacyPath = path.join(skillDirectory, "SKILL.md")
+    const userPath = path.join(skillDirectory, "notes.txt")
+    const legacyArtifacts = [
+      {
+        target: "codex" as const,
+        kind: "skill" as const,
+        name: "legacy",
+        root: path.join(context.projectRoot, ".agents", "skills"),
+        destination: legacyPath,
+        content: Buffer.from("---\nname: legacy\ndescription: legacy\n---\n"),
+        mode: 0o644,
+      },
+    ]
+    await applyPlan(await createPlan(legacyArtifacts, context), context)
+    await writeFile(userPath, "contenido del usuario\n", "utf8")
+
+    const currentArtifacts = await buildArtifacts(["codex"], context)
+    const result = await applyPlan(await createPlan(currentArtifacts, context), context)
+
+    expect(result.removed).toBe(1)
+    await expect(access(legacyPath)).rejects.toMatchObject({ code: "ENOENT" })
+    expect(await readFile(userPath, "utf8")).toBe("contenido del usuario\n")
+    await expect(access(skillDirectory)).resolves.toBeUndefined()
   })
 
   it("backs up an external conflict and restores it on uninstall", async () => {

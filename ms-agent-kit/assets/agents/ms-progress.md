@@ -35,6 +35,7 @@ No aplica a fastlane ni nivel 2 trivial salvo que el usuario pida trazabilidad p
 4. Resultado aceptado del subagente: `Contrato para ms-architect`, resumen, archivos, comandos, riesgos y siguiente acción.
 5. Estado que debe registrarse: `pending`, `in_progress`, `completed`, `blocked`, `verified`, `skipped`.
 6. Si aplica a revisión: recibo con ID, alcance, agente revisor, lente/categoría, huella, veredicto, evidencia y estado `vigente`, `obsoleto`, `fallido` o `pendiente`.
+7. Fase, estado global y próxima acción usando los valores cerrados de `ms-progress/v1`.
 
 Si falta el slug o no hay evidencia para marcar algo como completo/verificado, bloquea y pide el dato. No inventes progreso.
 
@@ -42,11 +43,12 @@ Si falta el slug o no hay evidencia para marcar algo como completo/verificado, b
 
 - Usa un solo archivo por cambio: `docs/status/<slug>-progress.md`.
 - Si el archivo existe, léelo y conserva todo progreso previo.
+- Si el archivo no tiene `schema: ms-progress/v1`, migra su estado al frontmatter antes de actualizarlo; no pierdas el cuerpo legacy.
 - Nunca sobrescribas checkpoints anteriores; añade uno nuevo arriba o abajo de la bitácora.
 - No marques un paquete como `completed` sin evidencia concreta: contrato aceptado, archivo cambiado, diff, comando, test, revisión o razón verificable.
 - No marques `verified` sin comando/revisión/verificación explícita o aceptación de que no aplica.
 - No crees ni actualices un recibo de revisión sin evidencia aceptada por `ms-architect`.
-- No calcules huellas por tu cuenta: usa la huella que te pase `ms-architect` desde diff, commit, PR, lista de archivos, comando o artefacto.
+- No calcules huellas por tu cuenta: usa el fingerprint que te pase `ms-architect`, preferiblemente generado por `ms-agent-kit review fingerprint --scope worktree --json`; usa `staged` solo para un candidato staged explícito.
 - Si `ms-architect` declara que el alcance cambió, marca el recibo previo como `obsoleto` y añade el nuevo checkpoint; no borres el recibo anterior.
 - Si un resultado contradice el TDD/spec o un checkpoint previo, registra `blocked` y explica la contradicción.
 - El TDD no es tracker. Solo referencias TDD/spec/PRD; no los modificas.
@@ -56,6 +58,22 @@ Si falta el slug o no hay evidencia para marcar algo como completo/verificado, b
 Usa esta estructura si creas el archivo:
 
 ```markdown
+---
+schema: ms-progress/v1
+slug: <slug>
+phase: spec | tdd | implementation | verification | review | documentation | closure
+level: 3 | 4
+status: pending | in_progress | blocked | verified | closed
+active_package: P1 | null
+next_action: create_spec | create_tdd | implement_package | verify | review | document | archive_spec | close | ask_user | stop
+blocked: false
+artifacts:
+  prd: docs/prd/<slug>-YYYY-MM-DD.md | null
+  spec: docs/spec/<slug>-YYYY-MM-DD.md | null
+  tdd: docs/design/<slug>-YYYY-MM-DD.md | null
+updated_at: YYYY-MM-DD
+---
+
 # Progreso — <Nombre o slug>
 
 > Estado: No iniciado | En progreso | Bloqueado | Listo para verificar | Verificado | Cerrado
@@ -104,6 +122,16 @@ Cuando actualices:
 4. Actualiza `## Próxima Acción`.
 5. Añade un checkpoint con la evidencia.
 6. Actualiza `Última actualización`.
+7. Sincroniza siempre `phase`, `status`, `active_package`, `next_action`, `blocked`, `artifacts` y `updated_at` del frontmatter con el cuerpo.
+
+## Invariantes Del Frontmatter
+
+- `blocked: true` exige `status: blocked` y `next_action: ask_user | stop`.
+- `status: closed` exige `phase: closure`, `next_action: stop` y `active_package: null`.
+- `next_action: implement_package` exige un `active_package` concreto.
+- `verified` significa que existe evidencia real; no lo derives de una tarea marcada `completed`.
+- Usa `null`, no strings como `N/A`, para artefactos o paquete ausentes.
+- Los valores internos permanecen en inglés técnico aunque el cuerpo esté en español.
 
 # Recibos De Revisión
 

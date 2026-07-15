@@ -1,91 +1,40 @@
 ---
-description: Refresca o revisa el índice de skills del proyecto
+description: Refresca o revisa el índice común de skills del proyecto
 agent: ms-codex
 ---
 
-Eres `ms-codex` ejecutando `/ms-skills`.
+Eres `ms-codex` ejecutando `/ms-skills` con alcance exclusivo sobre `.atl/skill-registry.md` y `.atl/.skill-registry.cache.json`.
 
 Argumento: `$ARGUMENTS`
 
-## Objetivo
+## Modos
 
-Mantener un índice local de skills inspirado en Gentle AI, pero simple: `.atl/skill-registry.md`.
-
-Modos:
-
-- Sin argumentos o `refresh`: escanea skills y escribe `.atl/skill-registry.md`.
-- `check` o `list`: escanea y reporta sin escribir.
-
-## Alcance Permitido
-
-Puedes escribir solo:
-
-- `.atl/skill-registry.md`
-
-No edites:
-
-- skills existentes,
-- agentes,
-- comandos,
-- `opencode.json`,
-- `tui.json`,
-- `.gitignore`,
-- archivos de código del proyecto.
-
-No ejecutes instalaciones ni comandos mutantes. Usa lectura/glob/grep y herramientas de edición de OpenCode. Si necesitas crear `.atl/`, hazlo únicamente como parte de escribir `.atl/skill-registry.md`.
-
-## Fuentes A Escanear
-
-Escanea si existen:
-
-- `.agents/skills/*/SKILL.md`
-- `skills/*/SKILL.md`
-- `.opencode/skills/*/SKILL.md`
-- `.claude/skills/*/SKILL.md`
-- `~/.agents/skills/*/SKILL.md`
-- `~/.config/opencode/skills/*/SKILL.md`
-- `~/.codex/skills/*/SKILL.md`
-- `~/.claude/skills/*/SKILL.md`
+- Sin argumentos o `refresh`: si existe `ms_skill_registry_refresh`, invócala con `force: false`.
+- `force`: si existe `ms_skill_registry_refresh`, invócala con `force: true`.
+- `check` o `list`: lee `.atl/skill-registry.md` si existe y reporta schema, fingerprint y skills; no escribas.
+- Solo cuando la herramienta custom no exista, usa `ms-agent-kit skill-registry refresh --project . --json`; añade `--force` para el modo `force`.
 
 ## Reglas
 
-- Lee solo frontmatter y primeras líneas necesarias para extraer `name` y `description`.
-- Si falta `name`, usa el nombre de carpeta.
-- Si falta `description`, marca `sin description`.
-- Deduplica por `name`; prioridad: proyecto > usuario y, dentro del mismo scope, `.agents/skills` > rutas específicas de cliente.
-- Excluye `_shared`, `skill-registry` y `sdd-*` salvo que `$ARGUMENTS` incluya `--include-internal`.
-- Usa rutas absolutas en la tabla para que `ms-architect` pueda pasarlas a subagentes.
-- No resumas la skill ni inventes triggers.
-
-## Formato Del Archivo
-
-```markdown
-# Skill Registry
-
-> Generated: YYYY-MM-DD
-> Source: /ms-skills
-> Contract: índice de skills; cada `SKILL.md` sigue siendo la fuente de verdad.
-
-| Skill | Scope | Trigger / description | Path |
-|---|---|---|---|
-| cognitive-doc-design | user | Diseña documentación clara... | /Users/.../SKILL.md |
-```
+- En OpenCode usa siempre `ms_skill_registry_refresh`; no abras Bash ni compruebes si el binario está en `PATH`.
+- El registro es común para OpenCode, Claude Code y Codex. Indexa solo el layout estándar `<root>/<skill>/SKILL.md`; no generes variantes por cliente.
+- La herramienta calcula precedencia proyecto > usuario, deduplicación por nombre, cache por huella y escritura atómica.
+- La primera ejecución explícita garantiza `.atl/` en `.gitignore`; los refrescos automáticos posteriores solo actúan si el registro ya existe.
+- No edites skills, agentes, comandos, configuración ni código del proyecto.
+- Si el fallback CLI falla, reporta el error y conserva el registro previo; no lo construyas manualmente.
+- No leas cuerpos completos de skills durante `check`; el registry es un índice y cada `SKILL.md` sigue siendo la fuente de verdad.
 
 ## Salida
-
-Devuelve:
 
 ```text
 ## MS Skills
 
-Modo: refresh | check
-Registry: .atl/skill-registry.md | no escrito
-Skills indexadas: <n>
-Duplicados omitidos: <n>
-Rutas escaneadas:
-  - <ruta>: <n>
-Observaciones:
-  - <faltan descriptions, duplicados, rutas no existentes, etc.>
+Modo: refresh | force | check
+Registry: .atl/skill-registry.md | no encontrado
+Cache: hit | actualizado | no comprobado
+Skills indexadas: <n | desconocido>
+Fingerprint: <sha256 | desconocido>
+Observaciones: []
 ```
 
-Termina con resumen breve de cambios. No incluyas contenido completo del registry en la respuesta.
+No incluyas el registry completo en la respuesta.

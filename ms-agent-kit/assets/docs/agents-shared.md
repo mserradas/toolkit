@@ -33,10 +33,10 @@
 
 ## Skill Registry
 
-- Si existe `.atl/skill-registry.md`, `ms-architect` lo usa como índice de skills disponibles antes de cargar skills o pasarlas a una delegación.
+- `ms-architect` usa `.atl/skill-registry.md` como índice común de las skills instaladas en las roots estándar de OpenCode, Claude Code y Codex.
 - El registry no reemplaza ningún `SKILL.md`: solo contiene nombre, trigger/description, scope y ruta exacta.
 - Los subagentes reciben rutas exactas de skills cuando el brief lo requiera. No deben depender de resúmenes inventados.
-- Si el registry falta o parece desactualizado, recomienda `/ms-skills refresh`.
+- El registro combina las roots nativas y portables de los tres clientes, deduplica por nombre y da precedencia al proyecto. OpenCode expone `ms_skill_registry_refresh`; Claude y Codex usan el fallback universal de `/ms-skills refresh`.
 
 ## Recibos De Revisión
 
@@ -47,68 +47,18 @@
 - Un recibo no reemplaza tests, verificación funcional ni el Security Smoke Gate. Solo evita repetir la misma revisión con el mismo alcance.
 - `ms-progress` no calcula huellas: solo registra la huella y evidencia que le pasa `ms-architect`.
 
-## Protocolos Compartidos
+## Fuentes De Protocolos
 
-Estos son protocolos, no agentes. Los coordina `ms-architect` usando agentes existentes.
+Las reglas compartidas no duplican protocolos completos. `ms-architect` los carga solo cuando activa su trigger:
 
-### `ms-project-init`
+- Inicialización de contexto: skill `ms-project-init`.
+- División en unidades revisables: skill `work-unit-commits`.
+- Briefs autosuficientes: skill `delegation-brief`.
+- Doble juez: skill `judgment-day`.
+- Cierre y archivo de spec: modo de cierre del agente `ms-spec`.
+- Estado reanudable: agente `ms-progress` y esquema `ms-progress/v1`.
 
-Usalo cuando el repo sea nuevo para la sesion, falten comandos de verificacion confiables, empiece un nivel 4 o el usuario pida un flujo formal. Objetivo: crear un snapshot operativo minimo antes de disenar o ejecutar.
-
-Payload esperado dentro del reporte o como `artifacts[].summary`; no reemplaza el `Contrato para ms-architect`, que sigue siendo la salida final obligatoria:
-
-```yaml
-Project context snapshot:
-  root: "<ruta o repo>"
-  stack: []
-  package_manager: null
-  architecture_notes: []
-  verification:
-    test: null
-    lint: null
-    typecheck: null
-    format_check: null
-  docs:
-    prd_dir: "docs/prd"
-    spec_dir: "docs/spec"
-    design_dir: "docs/design"
-    status_dir: "docs/status"
-  risks_or_unknowns: []
-```
-
-Reglas:
-
-- No instala dependencias ni ejecuta comandos mutantes.
-- Si hay que mapear codigo, `ms-architect` usa `ms-scout`.
-- Si hay que descubrir comandos, `ms-architect` usa `ms-tester` con `Snapshot de capacidades de testing`.
-- El snapshot se reutiliza mientras no cambien manifests, lockfiles, scripts o estructura relevante.
-
-### `ms-work-unit`
-
-Usalo para nivel 3-4, TDDs, paquetes grandes o cualquier cambio que pueda superar 200 LOC. Objetivo: partir el trabajo por valor revisable, no por tipo de archivo.
-
-Reglas:
-
-- Una unidad de trabajo entrega un comportamiento, fix, migracion o doc consumible.
-- No partir por capas aisladas si ninguna capa funciona sola (`models`, luego `services`, luego `tests`).
-- Tests y docs viajan con el cambio que verifican o explican.
-- Cada unidad tiene inicio, fin, alcance fuera de scope, DoD y rollback razonable.
-- Si una unidad supera 400 lineas cambiadas esperadas, se divide o requiere excepcion explicita.
-
-### `ms-spec-archive`
-
-Usalo para cerrar una spec despues de una implementacion nivel 3-4 o cualquier cambio que haya usado `docs/spec/**`.
-
-Objetivo: mantener la spec alineada con el comportamiento final verificado sin adoptar todo OpenSpec.
-
-Reglas:
-
-- `ms-architect` lo coordina y delega la edicion a `ms-spec`.
-- No aplica a fastlane, nivel 2 claro, copy/estilo/docs internas ni cambios sin spec previa.
-- No marca una spec como `Verificado` sin evidencia de implementacion y verificacion.
-- Si hubo drift funcional, `ms-spec` actualiza requisitos/casos/criterios y lo registra en `Cambios Posteriores / Drift`.
-- Si una spec queda obsoleta, se marca `Archivado` o `Reemplazado` con fuente vigente; no se borra.
-- El TDD, progreso y contratos son evidencia; la spec sigue describiendo comportamiento observable, no tareas internas.
+La skill o el agente indicado es la fuente normativa. Este archivo conserva únicamente invariantes transversales y el contrato común.
 
 ## Contrato Para ms-architect
 

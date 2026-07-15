@@ -22,7 +22,7 @@ Usa la minima inspeccion de solo lectura necesaria:
 - `~/.config/opencode/cache/model-variants.json`
 - `~/.config/opencode/docs/agents.md` si necesitas recordar el rol de cada agente
 
-Si `~/.config/opencode/cache/model-variants.json` no existe, indica que el plugin todavia no ha generado cache y recomienda reiniciar OpenCode una vez. Aun asi, revisa los agentes y da recomendaciones conservadoras basadas en su rol.
+El cache conserva durante 24 horas solo los providers conectados que devuelve OpenCode. Si no existe, indica que el plugin todavia no lo ha generado y recomienda reiniciar OpenCode una vez. Aun asi, revisa los agentes y da recomendaciones conservadoras basadas en su rol.
 
 ## Criterios
 
@@ -46,7 +46,7 @@ Cache:
 
 Resumen:
   Modelo default: <provider/model | desconocido>
-  Providers habilitados: <lista | desconocido>
+  Providers cacheados: <providerFilter | lista | desconocido>
   Agentes revisados: <n>
 
 Tabla:
