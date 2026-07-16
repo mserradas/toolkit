@@ -421,6 +421,7 @@ describe("Claude permission guard", () => {
     const { guardPath, projectRoot } = await setupGuard()
     const deniedCommands = [
       "sh -c '$(printf rm) -f archivo'",
+      String.raw`sh -c "printf \"'\"; \$(printf rm) -f archivo"`,
       "sh -c '`printf rm` -f archivo'",
       "sh -c 'printf %s $((1 + 1))'",
       "bash -c 'cat <(printf seguro)'",
@@ -432,6 +433,7 @@ describe("Claude permission guard", () => {
     ]
     const allowedCommands = [
       `sh -c "printf '%s\\n' '\\$(printf rm)'"`,
+      String.raw`sh -c "printf \"'\""`,
       `printf '%s\\n' '$(printf rm)'`,
       "env -S 'printf %s literal'",
     ]

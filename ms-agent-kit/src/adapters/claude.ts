@@ -787,7 +787,7 @@ function hasActiveCodeGeneration(command) {
       if (character === quote) quote = null
       continue
     }
-    if (character === "'") {
+    if (character === "'" && quote === null) {
       quote = "'"
       continue
     }

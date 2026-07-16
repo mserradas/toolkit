@@ -236,6 +236,37 @@ La matriz roja adicional es:
 | `xargs -0 printf '%s\n'` | permitido como consumidor estático seguro |
 | `xargs -a entradas printf '%s\n'` | bloqueado por fuente alternativa no modelada |
 
+### P6.2 — transición de comillas en código interpretado
+
+Esta ronda corrige exclusivamente una transición inválida de `hasActiveCodeGeneration`. Cuando el escáner ya está dentro de comillas dobles (`quote === '"'`), una comilla simple es texto ordinario para el shell. La implementación actual la interpreta como apertura de quoting simple, pierde el cierre doble posterior y puede dejar de detectar una sustitución activa que aparece después.
+
+El invariante de quoting es cerrado:
+
+1. `'` solo abre quoting simple desde el estado no citado (`quote === null`).
+2. Dentro de `"..."`, `'` no cambia el estado; el siguiente `"` conserva su función de cierre.
+3. Después de cerrar las comillas dobles, `$()`, backticks, `$((...))` y `<(...)`/`>(...)` vuelven a estar activos y se detectan con las reglas de P6.
+4. Dentro de `'...'`, esas mismas formas continúan siendo texto literal y no generan un falso positivo.
+5. P6.2 no amplía permisos ni modifica la política de consumidores de `xargs` definida en P6.1.
+
+La matriz roja guard-only es:
+
+| Caso | Resultado esperado |
+| --- | --- |
+| `sh -c "printf \"'\"; \$(printf rm) -f archivo"` | código 2: la comilla simple literal no oculta la sustitución activa posterior |
+| `sh -c "printf \"'\""` | código 0: el apóstrofe sin generación activa sigue permitido |
+
+El primer caso debe añadirse a las entradas denegadas de la regresión de código generado y el segundo a sus entradas permitidas. El cambio verde mínimo modifica una sola transición de `hasActiveCodeGeneration`: la rama que abre quoting simple exige `quote === null`. No se reescribe el parser ni se añaden excepciones por comando.
+
+El uso de `basename === "printf"` como prueba de identidad del ejecutable no demuestra qué binario resolverá `PATH`. Ambas revisiones lo conservan como riesgo teórico documentado: no existe una reproducción confirmada que entre en el modelo actual y queda expresamente fuera de P6.2. Tampoco entran brace globs, variables en posición de ejecutable ni otros hallazgos no confirmados.
+
+### Definition of Done de P6.2
+
+- la regresión con comilla simple literal seguida de sustitución activa termina con código 2;
+- el caso seguro con apóstrofe y sin generación activa termina con código 0;
+- la corrección se limita a la transición de `'` desde estado no citado en `hasActiveCodeGeneration`;
+- P6 y P6.1 permanecen intactos y sus regresiones continúan siendo requisitos;
+- el riesgo teórico de identidad de `printf` permanece documentado y no provoca cambios de permisos en esta ronda.
+
 ## Rollback
 
 Revertir únicamente el paquete posterior en `src/adapters/claude.ts` y `tests/claude-guard.test.ts`. El documento de diseño puede conservarse como registro de la decisión. El rollback restaura el comportamiento anterior sin migraciones, cambios de estado ni impacto en OpenCode o Codex.
