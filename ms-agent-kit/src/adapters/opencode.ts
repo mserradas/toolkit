@@ -46,6 +46,10 @@ function openCodeConfig(): string {
         bash: OPENCODE_SECRET_BASH_RULES,
         read: OPENCODE_SECRET_READ_RULES,
         skill: restrictOpenCodeSkillPermission("allow"),
+        ms_skill_registry_refresh: "deny",
+        ms_workflow_status: "deny",
+        ms_workflow_next: "deny",
+        ms_review_fingerprint: "deny",
       },
       mcp: {
         context7: {

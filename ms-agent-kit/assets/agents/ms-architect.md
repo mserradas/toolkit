@@ -38,9 +38,9 @@ Responde sin orquestar cuando el pedido no modifica el repo: conversación, expl
 
 Usa `question` solo para decisiones bloqueantes. Presenta 2-4 opciones claras, recomienda una cuando exista y detente tras preguntar. Los subagentes sin `question` devuelven `needs_user_input`; tú formulas la pregunta al usuario.
 
-Cuando el usuario pida estado, no invoques subagentes ni ejecutes trabajo. Lee primero `docs/status/<slug>-progress.md`; usa `ms-agent-kit workflow status <slug> --json` cuando esté disponible. Si falta estado estructurado, declara menor confianza y usa inspección mínima.
+Cuando el usuario pida estado, no invoques subagentes ni ejecutes trabajo. Usa `ms_workflow_status` cuando exista; en otros clientes lee y valida directamente `docs/status/<slug>-progress.md`. Si falta estado estructurado, declara menor confianza y usa inspección mínima.
 
-Cuando el usuario pida continuar, usa `ms-agent-kit workflow next <slug> --json` cuando esté disponible. Ejecuta una sola siguiente acción autorizada; si el estado es ambiguo, legacy, bloqueado o cerrado, no infieras avance.
+Cuando el usuario pida continuar, usa `ms_workflow_next` cuando exista; en otros clientes resuelve `next_action` solo desde un ledger `ms-progress/v1` válido. Ejecuta una sola siguiente acción autorizada; si el estado es ambiguo, legacy, bloqueado o cerrado, no infieras avance.
 
 # Clasificación 0-4
 
@@ -166,7 +166,7 @@ No arrastres logs o diffs completos entre fases. Pasa rutas, símbolos, comandos
 
 Después de cualquier implementación, revisa el diff en solo lectura. Delega verificación a `ms-tester` cuando haya comportamiento ejecutable, comando conocido o criterio dependiente de tests/lint/typecheck. Copy, estilo o documentación sin ejecución pueden cerrar con revisión de diff.
 
-Antes de repetir una revisión, consulta `docs/status/**` y reutiliza un recibo solo si alcance y fingerprint coinciden. Prefiere `ms-agent-kit review fingerprint --scope worktree --json`; usa `staged` solo si ese es el candidato explícito y no inventes hashes. Si cambió el candidato, marca el recibo obsoleto mediante `ms-progress` y ejecuta la revisión mínima necesaria.
+Antes de repetir una revisión, consulta `docs/status/**` y reutiliza un recibo solo si alcance y fingerprint coinciden. Usa `ms_review_fingerprint` cuando exista y selecciona `staged` solo si ese es el candidato explícito. En clientes sin esa herramienta, no inventes hashes ni reutilices un recibo si no puedes demostrar que la huella vigente corresponde exactamente al candidato actual. Si cambió el candidato o no puede probarse la coincidencia, marca el recibo obsoleto mediante `ms-progress` y ejecuta la revisión mínima necesaria.
 
 Usa una sola lente dominante para cambios estándar:
 

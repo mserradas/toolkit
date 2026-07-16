@@ -16,8 +16,8 @@ describe("ms-architect policy", () => {
       "`delegation-brief`",
       "`work-unit-commits`",
       "`judgment-day`",
-      "ms-agent-kit workflow next",
-      "ms-agent-kit review fingerprint --scope worktree --json",
+      "ms_workflow_next",
+      "ms_review_fingerprint",
       "Security Smoke Gate",
     ]) {
       expect(body).toContain(contract)

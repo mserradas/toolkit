@@ -185,7 +185,7 @@ function starlarkStrings(values: readonly string[]): string {
 }
 
 function codexSecretRules(): string {
-  return `# Administrado por ms-agent-kit. Defensa practica best-effort para lecturas directas habituales.
+  return `# Política ms-* administrada. Defensa practica best-effort para lecturas directas habituales.
 # prefix_rule usa prefijos exactos: estas reglas no son un sandbox ni cubren interpretes,
 # opciones, cantidades, programas o patrones no enumerados. No se deniegan globalmente
 # head, sed, awk, rg ni grep porque tambien tienen usos seguros. .env.example se mantiene permitido.

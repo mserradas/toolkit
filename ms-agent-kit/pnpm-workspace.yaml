@@ -7,3 +7,5 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - tsx@4.23.1
+  - '@opencode-ai/plugin@1.18.2'
+  - '@opencode-ai/sdk@1.18.2'

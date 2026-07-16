@@ -1,128 +1,177 @@
-# Dotfiles
+# Dotfiles — entorno de terminal para macOS
 
-Configuración personal para el entorno de terminal en macOS.
+Instala y configura un entorno de terminal completo basado en Ghostty, Fish, Tmux y Starship. El proceso es automático, repetible y crea backups antes de reemplazar configuraciones existentes.
 
-**Stack:** Ghostty + Fish + Tmux + Starship
+## Resultado
 
-## Mac nueva — instalación rápida
+| Componente | Función |
+|---|---|
+| Ghostty | Emulador de terminal con tema Catppuccin Mocha, splits y fuente Nerd Font |
+| Fish | Shell interactivo con abreviaciones e integración de herramientas |
+| Tmux + TPM | Sesiones persistentes, plugins, navegación y popup auxiliar |
+| Starship | Prompt con estado Git, duración y versiones de runtimes |
+| Herramientas | `eza`, `fzf`, `atuin`, `zoxide`, `fnm`, `git`, `pnpm` y `terminal-notifier` |
 
-```sh
-git clone <tu-repo> toolkit
-cd toolkit/dotfiles
+Ghostty arranca Fish y abre o recupera automáticamente la sesión Tmux `work`.
+
+## Requisitos
+
+- macOS; la configuración incluida está optimizada para Apple Silicon.
+- Conexión a Internet.
+- Una cuenta con permisos para usar `sudo` y cambiar el shell con `chsh`.
+- Xcode Command Line Tools para `git`. macOS ofrece instalarlas la primera vez que se ejecuta el comando.
+
+El instalador añade Homebrew si no está disponible. La configuración incluida está optimizada para Apple Silicon y usa `/opt/homebrew`; en Macs Intel hay que ajustar las rutas indicadas en [Compatibilidad](#compatibilidad).
+
+## Camino rápido
+
+Desde la raíz del repositorio:
+
+```bash
+cd dotfiles
 ./install.sh
 ```
 
-> **Nota:** La primera vez que se ejecuta `git` en una Mac nueva, macOS muestra un popup para instalar las **Xcode Command Line Tools**. Hay que aceptarlo y esperar a que termine antes de continuar. Requiere macOS 13 o superior.
+Durante la ejecución pueden aparecer solicitudes de Homebrew, `sudo` o `chsh`. Al terminar:
 
----
+1. Cierra la terminal actual.
+2. Abre Ghostty.
+3. Comprueba que Fish y la sesión Tmux `work` se inician correctamente.
 
-## Requisitos previos
+Verifica toda la instalación en cualquier momento:
 
-### 1. Homebrew
-
-```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```bash
+./install.sh --check
 ```
 
----
+## Qué hace el instalador
 
-## Instalación
+| Orden | Acción | Comportamiento al repetirla |
+|---:|---|---|
+| 1 | Instala Homebrew | Se omite si ya existe |
+| 2 | Instala aplicaciones, paquetes y fuente | Homebrew omite lo que ya está instalado |
+| 3 | Registra Fish en `/etc/shells` y lo configura como shell predeterminado | Solo cambia lo necesario |
+| 4 | Instala TPM en `~/.tmux/plugins/tpm` | Conserva la instalación existente |
+| 5 | Copia las configuraciones | Crea un `.backup` y reemplaza el destino |
+| 6 | Instala los plugins de Tmux | Usa el instalador de TPM, incluso sin una sesión Tmux previa |
+| 7 | Ejecuta el healthcheck | Informa de binarios, archivos o plugins ausentes |
 
-### 2. Terminal y Shell
+### Paquetes instalados
 
-```sh
-brew install --cask ghostty
-brew install fish
+```text
+Aplicaciones: Ghostty
+Fuente:       JetBrainsMono Nerd Font Mono
+Shell:        fish
+Terminal:     tmux, starship
+Navegación:   eza, fzf, zoxide
+Historial:    atuin
+Runtimes:     fnm
+Utilidades:   git, pnpm, terminal-notifier
 ```
 
-Establecer fish como shell por defecto:
+## Archivos administrados
 
-```sh
-echo /opt/homebrew/bin/fish | sudo tee -a /etc/shells
-chsh -s /opt/homebrew/bin/fish
+| Fuente del repositorio | Destino | Backup previo |
+|---|---|---|
+| `ghostty/config` | `~/.config/ghostty/config` | `~/.config/ghostty/config.backup` |
+| `fish/config.fish` | `~/.config/fish/config.fish` | `~/.config/fish/config.fish.backup` |
+| `tmux/.tmux.conf` | `~/.tmux.conf` | `~/.tmux.conf.backup` |
+| `starship/starship.toml` | `~/.config/starship.toml` | `~/.config/starship.toml.backup` |
+
+Cada ejecución actualiza el backup único del destino antes de copiar la nueva configuración. Si necesitas conservar varias versiones históricas, guárdalas fuera de esas rutas antes de reinstalar.
+
+## Mantener las configuraciones
+
+El flujo recomendado es editar la configuración activa, sincronizarla al repositorio y revisar el diff:
+
+```bash
+cd dotfiles
+./sync.sh
+git diff -- .
 ```
 
-### 3. Tmux
+`sync.sh` copia hacia el repositorio las configuraciones actuales de Ghostty, Fish, Tmux y Starship. No crea backups dentro del repositorio; revisa siempre el diff antes de hacer commit.
 
-```sh
-brew install tmux
-```
+## Atajos principales
 
-Instalar TPM (gestor de plugins de tmux):
+### Ghostty
 
-```sh
-git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
-```
-
-Copiar la config de tmux:
-
-```sh
-cp tmux/.tmux.conf ~/.tmux.conf
-```
-
-Abrir tmux e instalar los plugins con `Ctrl+a` + `I`.
-
-### 4. Starship
-
-```sh
-brew install starship
-```
-
-### 5. Fuente
-
-```sh
-brew install --cask font-jetbrains-mono-nerd-font
-```
-
-Seleccionar `JetBrainsMono Nerd Font Mono` en la config de Ghostty.
-
----
-
-## Herramientas de shell
-
-Todas usadas en la config de fish:
-
-```sh
-brew install eza          # ls moderno con iconos
-brew install fzf          # búsqueda difusa
-brew install atuin        # historial de comandos
-brew install zoxide       # cd inteligente
-brew install fnm          # gestor de versiones de Node
-brew install terminal-notifier  # notificaciones macOS
-```
-
-### Opcional
-
-```sh
-brew install pnpm         # gestor de paquetes Node (abreviaciones configuradas)
-brew install git          # control de versiones
-```
-
----
-
-## Copiar configuraciones
-
-```sh
-# Ghostty
-cp ghostty/config ~/.config/ghostty/config
-
-# Fish
-cp fish/config.fish ~/.config/fish/config.fish
-
-# Starship
-cp starship/starship.toml ~/.config/starship.toml
-```
-
----
-
-## Plugins de Tmux
-
-Se instalan automáticamente con TPM (`Ctrl+a` + `I`):
-
-| Plugin | Función |
+| Atajo | Acción |
 |---|---|
-| tmux-yank | Copiar al portapapeles del sistema |
-| vim-tmux-navigator | Navegación entre paneles tmux y vim |
-| tmux-resurrect | Guardar y restaurar sesiones |
-| tmux-which-key | Menú de atajos de teclado |
-| tmux-ukiyo | Tema Catppuccin Mocha para la barra |
+| `Alt+V` | Crear split a la derecha |
+| `Alt+D` | Crear split debajo |
+| `Alt+H/J/K/L` | Navegar entre splits |
+| `Ctrl+Shift+H/J/K/L` | Redimensionar splits |
+| `Cmd+K` | Limpiar pantalla |
+
+### Tmux
+
+| Atajo | Acción |
+|---|---|
+| `Ctrl+A` | Prefijo de Tmux |
+| `Ctrl+A`, `V` | Split horizontal conservando el directorio actual |
+| `Ctrl+A`, `D` | Split vertical conservando el directorio actual |
+| `Alt+G` | Abrir o cerrar la sesión flotante `scratch` |
+| `Ctrl+A`, `I` | Instalar plugins manualmente con TPM |
+| `Ctrl+A`, `K` | Cerrar las demás sesiones tras confirmación |
+
+### Fish
+
+La configuración inicializa Starship, FZF, Atuin, Zoxide y FNM solo en sesiones interactivas. También define abreviaciones para Git, navegación, `eza`, pnpm y los clientes `claude` y `opencode`.
+
+Consulta la lista completa en [`fish/config.fish`](./fish/config.fish).
+
+## Recuperación
+
+No existe un desinstalador automático. Para recuperar una configuración anterior:
+
+```bash
+cp ~/.config/fish/config.fish.backup ~/.config/fish/config.fish
+cp ~/.config/ghostty/config.backup ~/.config/ghostty/config
+cp ~/.tmux.conf.backup ~/.tmux.conf
+cp ~/.config/starship.toml.backup ~/.config/starship.toml
+```
+
+Restaura únicamente los backups que existan y que hayas revisado. Los paquetes instalados con Homebrew se eliminan por separado mediante `brew uninstall` o `brew uninstall --cask`.
+
+## Troubleshooting
+
+### `git` abre el instalador de Xcode
+
+Acepta la instalación de las Command Line Tools, espera a que termine y vuelve a ejecutar el comando inicial.
+
+### Fish no es el shell activo
+
+Abre una sesión nueva y comprueba:
+
+```bash
+echo "$SHELL"
+./install.sh --check
+```
+
+En Apple Silicon debe mostrar `/opt/homebrew/bin/fish`.
+
+### Faltan plugins de Tmux
+
+Abre Tmux y ejecuta `Ctrl+A`, seguido de `I`. Después repite el healthcheck.
+
+### No aparecen iconos
+
+Comprueba que Ghostty usa `JetBrainsMono Nerd Font Mono` y que la fuente aparece en `~/Library/Fonts` o `/Library/Fonts`.
+
+### No llegan notificaciones
+
+Autoriza a `terminal-notifier` o Ghostty en Ajustes del Sistema → Notificaciones.
+
+## Compatibilidad
+
+- `install.sh` detecta Homebrew en `/opt/homebrew` y `/usr/local`.
+- `fish/config.fish` y la orden de inicio de Ghostty usan `/opt/homebrew`, por lo que una Mac Intel requiere sustituir esa ruta por `/usr/local`.
+- La copia al portapapeles de Tmux usa `pbcopy` en macOS y `clip` fuera de macOS, pero el instalador completo está diseñado para macOS.
+
+## Límites
+
+- El proyecto instala un setup personal y reemplaza los cuatro archivos de configuración declarados.
+- No gestiona secretos ni credenciales.
+- No elimina automáticamente paquetes, plugins o configuraciones.
+- `sync.sh` asume que todos los archivos de destino existen.

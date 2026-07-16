@@ -123,10 +123,14 @@ function claudeGuardSource(catalog: Catalog): string {
       capabilityProfile(agentDefinition(agent.name).capabilityProfile).writePaths,
     ]),
   )
-  writeRules["workflow:ms-skills"] = [".atl/skill-registry.md"]
+  writeRules["workflow:ms-skills"] = [
+    ".atl/skill-registry.md",
+    ".atl/.skill-registry.cache.json",
+    ".gitignore",
+  ]
   const bashRules = readOnlyBashRules(catalog)
   const bashDeny = bashDenyRules(catalog)
-  bashRules["workflow:ms-skills"] = ["ms-agent-kit skill-registry refresh*"]
+  bashRules["workflow:ms-skills"] = []
   bashDeny["workflow:ms-skills"] = bashDeny["ms-codex"] ?? []
   return String.raw`#!/usr/bin/env node
 import { realpathSync } from "node:fs"
@@ -1017,7 +1021,7 @@ try {
   if (tool === "Glob" && toolInput.pattern) pathValues.push(toolInput.pattern)
   if (tool === "Grep" && toolInput.glob) pathValues.push(toolInput.glob)
   if (pathValues.some(secretPath)) {
-    console.error("Bloqueado por ms-agent-kit: acceso a una ruta sensible")
+    console.error("Bloqueado por la política ms-*: acceso a una ruta sensible")
     process.exit(2)
   }
 
@@ -1028,11 +1032,11 @@ try {
       .map((value) => value.replace(/^["']+|["']+$/g, ""))
       .filter(Boolean)
     if (invokesEnvironmentDump(command) || commandWords.some(secretPath)) {
-      console.error("Bloqueado por ms-agent-kit: comando con secretos o variables de entorno")
+      console.error("Bloqueado por la política ms-*: comando con secretos o variables de entorno")
       process.exit(2)
     }
     if (!allowedReadOnlyCommand(process.argv[2], command)) {
-      console.error("Bloqueado por ms-agent-kit: comando denegado para este agente")
+      console.error("Bloqueado por la política ms-*: comando denegado para este agente")
       process.exit(2)
     }
   }
@@ -1040,12 +1044,12 @@ try {
   if (["Write", "Edit", "NotebookEdit"].includes(tool)) {
     const destination = toolInput.file_path || toolInput.notebook_path || toolInput.path
     if (!allowedWrite(process.argv[2], destination)) {
-      console.error("Bloqueado por ms-agent-kit: escritura fuera del alcance del agente")
+      console.error("Bloqueado por la política ms-*: escritura fuera del alcance del agente")
       process.exit(2)
     }
   }
 } catch (error) {
-  console.error("Bloqueado por ms-agent-kit: entrada de hook invalida")
+  console.error("Bloqueado por la política ms-*: entrada de hook invalida")
   process.exit(2)
 }
 `

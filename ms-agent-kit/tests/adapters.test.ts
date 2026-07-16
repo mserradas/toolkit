@@ -39,7 +39,8 @@ describe("platform adapters", () => {
   })
 
   it("builds the full catalog without destination collisions", async () => {
-    const artifacts = await buildArtifacts(["opencode", "claude", "codex"], await context())
+    const buildContext = await context()
+    const artifacts = await buildArtifacts(["opencode", "claude", "codex"], buildContext)
     const counts = Object.fromEntries(
       ["opencode", "claude", "codex"].map((target) => [
         target,
@@ -47,9 +48,17 @@ describe("platform adapters", () => {
       ]),
     )
 
-    expect(counts).toEqual({ opencode: 35, claude: 30, codex: 29 })
-    expect(artifacts).toHaveLength(94)
+    expect(counts).toEqual({ opencode: 36, claude: 30, codex: 29 })
+    expect(artifacts).toHaveLength(95)
     expect(new Set(artifacts.map((artifact) => artifact.destination)).size).toBe(artifacts.length)
+    expect(
+      artifacts.every((artifact) =>
+        !artifact.content
+          .toString("utf8")
+          .replaceAll(buildContext.projectRoot, "<project>")
+          .includes("ms-agent-kit"),
+      ),
+    ).toBe(true)
     const openCodeSkill = artifacts.find(
       (artifact) =>
         artifact.target === "opencode" &&
@@ -105,6 +114,9 @@ describe("platform adapters", () => {
     expect(parsed.frontmatter.permission).toMatchObject({
       edit: "deny",
       question: "allow",
+      ms_workflow_status: "allow",
+      ms_workflow_next: "allow",
+      ms_review_fingerprint: "allow",
       task: {
         "*": "deny",
         "ms-codex": "allow",
@@ -126,8 +138,8 @@ describe("platform adapters", () => {
     expect(parsed.body).toContain("# Reglas Compartidas MS")
     expect(parsed.body).toContain("Contrato para ms-architect")
     expect(parsed.body).toContain("ms-project-init")
-    expect(parsed.body).toContain("ms-agent-kit workflow next")
-    expect(parsed.body).toContain("ms-agent-kit review fingerprint --scope worktree --json")
+    expect(parsed.body).toContain("ms_workflow_next")
+    expect(parsed.body).toContain("ms_review_fingerprint")
     const skill = artifacts.find(
       (artifact) => artifact.kind === "skill" && artifact.name === "cognitive-doc-design",
     )
@@ -159,6 +171,11 @@ describe("platform adapters", () => {
         (artifact) => artifact.kind === "plugin" && artifact.name === "ms-skill-registry.ts",
       ),
     ).toBeDefined()
+    expect(
+      artifacts.find(
+        (artifact) => artifact.kind === "plugin" && artifact.name === "ms-workflow-tools.ts",
+      ),
+    ).toBeDefined()
     const coder = artifacts.find(
       (artifact) => artifact.kind === "agent" && artifact.name === "ms-codex",
     )
@@ -184,7 +201,7 @@ describe("platform adapters", () => {
     const packageFile = configurations.find((artifact) => artifact.name === "package.json")
     const notifier = configurations.find((artifact) => artifact.name === "opencode-notifier.json")
 
-    expect(artifacts).toHaveLength(36)
+    expect(artifacts).toHaveLength(37)
     expect(configurations).toHaveLength(4)
     expect(opencode?.destination).toBe(path.join(buildContext.homeDir, ".config", "opencode", "opencode.json"))
     const openCodeConfig = JSON.parse(opencode!.content.toString("utf8"))
@@ -199,6 +216,10 @@ describe("platform adapters", () => {
       },
       permission: {
         read: { "**/.env": "deny" },
+        ms_skill_registry_refresh: "deny",
+        ms_workflow_status: "deny",
+        ms_workflow_next: "deny",
+        ms_review_fingerprint: "deny",
         skill: {
           "*": "allow",
           "ms-architect": "deny",
@@ -218,7 +239,7 @@ describe("platform adapters", () => {
       attention: { enabled: true, notifications: true, sound: false },
     })
     expect(JSON.parse(packageFile!.content.toString("utf8"))).toMatchObject({
-      dependencies: { "@opencode-ai/plugin": "1.17.20" },
+      dependencies: { "@opencode-ai/plugin": "1.18.2", yaml: "^2.9.0" },
     })
     expect(JSON.parse(notifier!.content.toString("utf8"))).toMatchObject({
       notificationSystem: "osascript",

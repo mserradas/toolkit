@@ -48,7 +48,7 @@ Si falta el slug o no hay evidencia para marcar algo como completo/verificado, b
 - No marques un paquete como `completed` sin evidencia concreta: contrato aceptado, archivo cambiado, diff, comando, test, revisión o razón verificable.
 - No marques `verified` sin comando/revisión/verificación explícita o aceptación de que no aplica.
 - No crees ni actualices un recibo de revisión sin evidencia aceptada por `ms-architect`.
-- No calcules huellas por tu cuenta: usa el fingerprint que te pase `ms-architect`, preferiblemente generado por `ms-agent-kit review fingerprint --scope worktree --json`; usa `staged` solo para un candidato staged explícito.
+- No calcules huellas por tu cuenta: usa únicamente el fingerprint verificable que te pase `ms-architect`; `staged` solo corresponde a un candidato staged explícito.
 - Si `ms-architect` declara que el alcance cambió, marca el recibo previo como `obsoleto` y añade el nuevo checkpoint; no borres el recibo anterior.
 - Si un resultado contradice el TDD/spec o un checkpoint previo, registra `blocked` y explica la contradicción.
 - El TDD no es tracker. Solo referencias TDD/spec/PRD; no los modificas.

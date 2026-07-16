@@ -33,12 +33,12 @@ describe("transactional installer", () => {
 
     expect(firstPlan.items.every((item) => item.action === "create")).toBe(true)
     const result = await applyPlan(firstPlan, context)
-    expect(result.created).toBe(94)
+    expect(result.created).toBe(95)
 
     const secondPlan = await createPlan(artifacts, context)
     expect(secondPlan.items.every((item) => item.action === "unchanged")).toBe(true)
     const status = await installationStatus(["opencode", "claude", "codex"], context)
-    expect(status).toHaveLength(94)
+    expect(status).toHaveLength(95)
     expect(status.every((item) => item.status === "ok")).toBe(true)
   })
 

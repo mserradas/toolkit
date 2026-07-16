@@ -12,16 +12,16 @@ Argumento: `$ARGUMENTS`
 - Sin argumentos o `refresh`: si existe `ms_skill_registry_refresh`, invócala con `force: false`.
 - `force`: si existe `ms_skill_registry_refresh`, invócala con `force: true`.
 - `check` o `list`: lee `.atl/skill-registry.md` si existe y reporta schema, fingerprint y skills; no escribas.
-- Solo cuando la herramienta custom no exista, usa `ms-agent-kit skill-registry refresh --project . --json`; añade `--force` para el modo `force`.
+- Cuando la herramienta custom no exista, localiza y lee el `SKILL.md` instalado de `skill-registry` en la root nativa del cliente y ejecuta directamente su contrato sobre las roots estándar; no requiere el tool `skill`. En modo `force`, ignora la cache previa y reconstruye el índice.
 
 ## Reglas
 
-- En OpenCode usa siempre `ms_skill_registry_refresh`; no abras Bash ni compruebes si el binario está en `PATH`.
+- En OpenCode usa siempre `ms_skill_registry_refresh`; no abras Bash para reconstruir el índice.
 - El registro es común para OpenCode, Claude Code y Codex. Indexa solo el layout estándar `<root>/<skill>/SKILL.md`; no generes variantes por cliente.
 - La herramienta calcula precedencia proyecto > usuario, deduplicación por nombre, cache por huella y escritura atómica.
 - La primera ejecución explícita garantiza `.atl/` en `.gitignore`; los refrescos automáticos posteriores solo actúan si el registro ya existe.
 - No edites skills, agentes, comandos, configuración ni código del proyecto.
-- Si el fallback CLI falla, reporta el error y conserva el registro previo; no lo construyas manualmente.
+- Si el cliente no puede completar el contrato portable, reporta el error y conserva el registro previo; no inventes entradas ni fingerprints.
 - No leas cuerpos completos de skills durante `check`; el registry es un índice y cada `SKILL.md` sigue siendo la fuente de verdad.
 
 ## Salida

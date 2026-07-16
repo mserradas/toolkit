@@ -21,10 +21,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@clack/prompts": "^1.7.0",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "1.17.20",
+    "@opencode-ai/plugin": "1.18.2",
     "@types/node": "^26.1.1",
     "tsx": "^4.23.1",
     "typescript": "^7.0.2",

@@ -151,7 +151,7 @@ Solo `ms-architect`, `ms-spec`, `ms-designer` y `ms-writer` tienen `skill: allow
 - `ms-architect` usa el camino mínimo para cambios de bajo riesgo: no invoca scout, spec, TDD, writer, auditoría ni tester por prudencia genérica si no se activan disparadores explícitos.
 - Todo subagente que no orquesta declara `task: deny` explícito.
 - Los agentes `ms-*` declaran `websearch`, `todowrite` y `lsp` en `deny`. `skill` queda permitido solo en `ms-architect`, `ms-spec`, `ms-designer` y `ms-writer` para skills generales; ejecutores y agentes de solo lectura lo mantienen en `deny`.
-- Los artefactos generados por `ms-agent-kit` incorporan una denylist de secretos por agente para lectura directa y comandos evidentes: `.env`, `.env.local`, entornos reales (`production`, `staging`, `test`, `development`), `.ssh`, `.aws/credentials`, `credentials.json`, `.npmrc`, `.netrc`, `.kube/config`, llaves `*.pem`/`*.key` y `secrets/**`. Es una red práctica de protección, no una política de bloqueo general; `.env.example` sigue permitido.
+- Los artefactos instalados incorporan una denylist de secretos por agente para lectura directa y comandos evidentes: `.env`, `.env.local`, entornos reales (`production`, `staging`, `test`, `development`), `.ssh`, `.aws/credentials`, `credentials.json`, `.npmrc`, `.netrc`, `.kube/config`, llaves `*.pem`/`*.key` y `secrets/**`. Es una red práctica de protección, no una política de bloqueo general; `.env.example` sigue permitido.
 - La lectura genérica vía bash (`cat`, `head`, `tail`, `find`, `tree`, `rg`, `grep`) queda permitida en agentes operativos de lectura/código/verificación (`ms-codex`, `ms-tester`, `ms-debugger`, `ms-security-auditor`, `ms-scout`) para reducir fricción. Las denegaciones añadidas al generar el agente se evalúan después de esos permisos.
 - `ms-debugger` tiene `env` y `printenv*` en `deny` para evitar exposición accidental de secretos.
 - `ms-codex` deja en `ask` instalaciones, publicación/red (`git push`, `ssh`, `scp`, `nc`) y comandos desconocidos; comandos destructivos de git/filesystem quedan en `deny` directamente.
@@ -162,9 +162,9 @@ Solo `ms-architect`, `ms-spec`, `ms-designer` y `ms-writer` tienen `skill: allow
 
 OpenCode no carga `agents-shared.md` globalmente. El instalador embebe esas reglas una sola vez en cada agente generado y conserva [agents-shared.md](agents-shared.md) como referencia humana.
 
-OpenCode carga dos plugins locales desde `plugins/**`: [ms-model-variants.ts](../plugins/ms-model-variants.ts), que cachea durante 24 horas solo los providers conectados, y [ms-skill-registry.ts](../plugins/ms-skill-registry.ts), que refresca un registry ya inicializado. Ninguno modifica archivos del proyecto durante el primer arranque.
+OpenCode carga tres plugins locales desde `plugins/**`: [ms-model-variants.ts](../plugins/ms-model-variants.ts), que cachea durante 24 horas solo los providers conectados; [ms-skill-registry.ts](../plugins/ms-skill-registry.ts), que refresca un registry ya inicializado; y [ms-workflow-tools.ts](../plugins/ms-workflow-tools.ts), que valida ledgers y calcula huellas de revisión sin depender de ejecutables externos. Ninguno modifica archivos del proyecto durante el primer arranque.
 
-OpenCode carga plugins npm y MCPs desde `opencode.json`. `ms-agent-kit` declara notifier y Context7; la clave de Context7 se resuelve exclusivamente desde `CONTEXT7_API_KEY`, nunca desde el catálogo. Los agentes con acceso a documentación deben preferir Context7 antes de `webfetch` cuando aplique.
+OpenCode carga plugins npm y MCPs desde `opencode.json`. La configuración declara notifier y Context7; la clave de Context7 se resuelve exclusivamente desde `CONTEXT7_API_KEY`, nunca desde el catálogo. Los agentes con acceso a documentación deben preferir Context7 antes de `webfetch` cuando aplique.
 
 OpenCode instala automáticamente los plugins npm con Bun al arrancar. El `package.json` del directorio de configuración declara `@opencode-ai/plugin` para el plugin TypeScript local; no se distribuyen `node_modules`, locks ni cachés.
 

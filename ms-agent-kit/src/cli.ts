@@ -5,7 +5,6 @@ import { readdir, readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 import process from "node:process"
-import { createInterface } from "node:readline/promises"
 import { parseArgs, promisify } from "node:util"
 import { buildArtifacts } from "./adapters/index.js"
 import { DEFAULT_ASSETS_ROOT, loadCatalog } from "./core/catalog.js"
@@ -15,6 +14,15 @@ import { createPlan } from "./core/planner.js"
 import { fingerprintReview } from "./core/review.js"
 import { ensureAtlIgnored, refreshSkillRegistry } from "./core/skill-registry.js"
 import { nextWorkflowAction, readWorkflowStatus } from "./core/workflow.js"
+import {
+  finishWithoutChanges,
+  plannedChangeCount,
+  planNeedsConfirmation,
+  promptConfirmation,
+  promptInstallOptions,
+  showInstallSummary,
+  type PlanSummaryCounts,
+} from "./interactive.js"
 import {
   TARGETS,
   owningTargets,
@@ -62,11 +70,6 @@ interface CliOptions {
   yes: boolean
   dryRun: boolean
   json: boolean
-}
-
-interface MenuOption<T> {
-  label: string
-  value: T
 }
 
 interface LocalOptions {
@@ -168,8 +171,8 @@ function cliOptions(args: string[]): CliOptions {
   }
 }
 
-function planSummary(plan: InstallPlan): Record<string, number> {
-  const summary: Record<string, number> = {
+function planSummary(plan: InstallPlan): PlanSummaryCounts {
+  const summary: PlanSummaryCounts = {
     create: 0,
     update: 0,
     adopt: 0,
@@ -183,6 +186,17 @@ function planSummary(plan: InstallPlan): Record<string, number> {
   for (const item of plan.items) summary[item.action] = (summary[item.action] ?? 0) + 1
   for (const item of plan.obsolete) summary[item.action] = (summary[item.action] ?? 0) + 1
   return summary
+}
+
+function printInteractivePlan(plan: InstallPlan, options: CliOptions): void {
+  showInstallSummary({
+    targets: options.targets,
+    scope: options.context.scope,
+    homeDir: options.context.homeDir,
+    projectRoot: options.context.projectRoot,
+    statePath: plan.statePath,
+    counts: planSummary(plan),
+  })
 }
 
 function printPlan(plan: InstallPlan, asJson: boolean): void {
@@ -236,80 +250,32 @@ function printPlan(plan: InstallPlan, asJson: boolean): void {
   process.stdout.write(`Estado: ${plan.statePath}\n`)
 }
 
-async function confirm(question: string, yes: boolean): Promise<boolean> {
+async function confirm(question: string, yes: boolean): Promise<boolean | null> {
   if (yes) return true
   if (!process.stdin.isTTY) {
     throw new Error("Se requiere --yes cuando no hay una terminal interactiva")
   }
-  const prompt = createInterface({ input: process.stdin, output: process.stdout })
-  try {
-    const answer = (await prompt.question(`${question} [y/N] `)).trim().toLowerCase()
-    return answer === "y" || answer === "yes" || answer === "s" || answer === "si"
-  } finally {
-    prompt.close()
-  }
+  return promptConfirmation(question)
 }
 
-async function selectOption<T>(
-  prompt: ReturnType<typeof createInterface>,
-  question: string,
-  options: MenuOption<T>[],
-): Promise<T> {
-  while (true) {
-    process.stdout.write(`\n${question}\n`)
-    options.forEach((option, index) => {
-      process.stdout.write(`  ${index + 1}. ${option.label}\n`)
-    })
-    const answer = (await prompt.question(`Selecciona una opcion [1-${options.length}]: `)).trim()
-    const index = Number.parseInt(answer, 10) - 1
-    const selected = options[index]
-    if (selected) return selected.value
-    process.stdout.write("Opcion invalida. Intentalo de nuevo.\n")
-  }
-}
-
-async function interactiveInstallOptions(): Promise<CliOptions> {
+async function interactiveInstallOptions(): Promise<CliOptions | null> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error("El asistente requiere una terminal interactiva")
   }
-
-  process.stdout.write("\nms-agent-kit - instalacion interactiva\n")
-  const prompt = createInterface({ input: process.stdin, output: process.stdout })
-  try {
-    const targets = await selectOption(prompt, "Que cliente quieres configurar?", [
-      { label: "OpenCode", value: ["opencode"] as Target[] },
-      { label: "Claude Code", value: ["claude"] as Target[] },
-      { label: "Codex", value: ["codex"] as Target[] },
-      { label: "Todos", value: [...TARGETS] },
-    ])
-    const scope = await selectOption<InstallScope>(prompt, "Donde quieres instalar la configuracion?", [
-      { label: "Usuario (global)", value: "user" },
-      { label: "Proyecto", value: "project" },
-    ])
-
-    let projectRoot = process.cwd()
-    if (scope === "project") {
-      const answer = (
-        await prompt.question(`Ruta del proyecto [${projectRoot}]: `)
-      ).trim()
-      if (answer) projectRoot = path.resolve(answer)
-    }
-
-    return {
-      targets,
-      context: {
-        assetsRoot: DEFAULT_ASSETS_ROOT,
-        homeDir: path.resolve(homedir()),
-        projectRoot: path.resolve(projectRoot),
-        scope,
-      },
-      force: false,
-      yes: false,
-      dryRun: false,
-      json: false,
-    }
-  } finally {
-    prompt.close()
+  const selected = await promptInstallOptions(process.cwd())
+  if (!selected) return null
+  return {
+    targets: selected.targets,
+    context: {
+      assetsRoot: DEFAULT_ASSETS_ROOT,
+      homeDir: path.resolve(homedir()),
+      projectRoot: selected.projectRoot,
+      scope: selected.scope,
+    },
+    force: false,
+    yes: false,
+    dryRun: false,
+    json: false,
   }
 }
 
@@ -589,25 +555,44 @@ async function runInstall(options: CliOptions, resolveConflicts = false): Promis
     printPlan(plan, options.json)
     return
   }
-  if (!options.json) printPlan(plan, false)
+  if (!options.json) {
+    if (resolveConflicts) printInteractivePlan(plan, activeOptions)
+    else printPlan(plan, false)
+  }
   if (plan.items.some((item) => item.action === "conflict")) {
     if (!resolveConflicts) {
       throw new Error("Hay conflictos. Revisa el plan o repite con --force")
     }
     const conflictCount = plan.items.filter((item) => item.action === "conflict").length
     const replace = await confirm(
-      `Hay ${conflictCount} conflictos. Crear backups y reemplazar esos archivos completos?`,
+      `Hay ${conflictCount} conflictos. ¿Crear backups y reemplazar esos archivos completos?`,
       false,
     )
+    if (replace === null) return
     if (!replace) {
       process.stdout.write("Instalacion cancelada\n")
       return
     }
     activeOptions = { ...options, force: true }
     plan = await buildCliPlan(activeOptions)
-    printPlan(plan, false)
+    printInteractivePlan(plan, activeOptions)
   }
-  if (!(await confirm("Aplicar este plan?", activeOptions.yes))) {
+  const counts = planSummary(plan)
+  if (resolveConflicts && !planNeedsConfirmation(counts)) {
+    await applyPlan(plan, activeOptions.context)
+    finishWithoutChanges()
+    return
+  }
+  const changes = plannedChangeCount(counts)
+  const question =
+    changes === 1
+      ? "¿Aplicar 1 cambio?"
+      : changes > 1
+        ? `¿Aplicar ${changes} cambios?`
+        : "¿Continuar con este plan?"
+  const shouldApply = await confirm(question, activeOptions.yes)
+  if (shouldApply === null) return
+  if (!shouldApply) {
     process.stdout.write("Instalacion cancelada\n")
     return
   }
@@ -696,7 +681,9 @@ async function runSkillRegistry(args: string[]): Promise<void> {
 }
 
 async function runUninstall(options: CliOptions): Promise<void> {
-  if (!(await confirm(`Desinstalar ${options.targets.join(", ")}?`, options.yes))) {
+  const shouldUninstall = await confirm(`Desinstalar ${options.targets.join(", ")}?`, options.yes)
+  if (shouldUninstall === null) return
+  if (!shouldUninstall) {
     process.stdout.write("Desinstalacion cancelada\n")
     return
   }
@@ -718,7 +705,8 @@ async function main(): Promise<void> {
       process.stdout.write(HELP)
       return
     }
-    await runInstall(await interactiveInstallOptions(), true)
+    const options = await interactiveInstallOptions()
+    if (options) await runInstall(options, true)
     return
   }
 

@@ -25,10 +25,10 @@ Retomar una tarea desde el ledger operativo `docs/status/**` sin reconstruir tod
 
 ## Flujo
 
-1. **Resolver estado nativo**: ejecuta `ms-agent-kit workflow next "$ARGUMENTS" --project . --json` cuando haya argumento, o `ms-agent-kit workflow next --project . --json` cuando no lo haya.
+1. **Resolver estado nativo**: si existe `ms_workflow_next`, invócala con `requested: "$ARGUMENTS"` cuando haya argumento o sin `requested` cuando no lo haya. Si no existe, lee y valida directamente el frontmatter `ms-progress/v1` del ledger antes de resolver la siguiente acción.
    - Si devuelve `ready: true`, usa exclusivamente `action`, `activePackage` y el status estructurado para enrutar.
    - Si devuelve `ready: false`, está bloqueado/cerrado, requiere usuario o necesita migración: informa la razón y no avances.
-   - Si el binario no está disponible, usa el fallback legacy y declara confianza baja.
+   - Sin herramienta nativa, solo trata `next_action` como autoritativa cuando todo el contrato estructurado sea válido y coherente; no infieras campos ausentes desde la prosa.
 2. **Fallback legacy**: identifica slug/ruta/paquete, lee `Estado Actual`, `Próxima Acción`, paquetes, checkpoints y recibos. Antes de ejecutar, delega a `ms-progress` migrar el ledger a `ms-progress/v1`; no avances en la misma vuelta.
 3. **Validar vigencia**:
    - Si una revisión necesaria ya tiene recibo vigente y la huella coincide con el alcance actual, reutilízala.

@@ -29,9 +29,10 @@ Si `$ARGUMENTS` está vacío, infiere el objetivo probable solo desde la convers
 
 Usa la mínima inspección de solo lectura necesaria:
 
-- Ejecuta primero `ms-agent-kit workflow status "$ARGUMENTS" --project . --json` cuando haya argumento, o `ms-agent-kit workflow status --project . --json` cuando no lo haya.
+- Si existe `ms_workflow_status`, invócala primero con `requested: "$ARGUMENTS"` cuando haya argumento o sin `requested` cuando no lo haya.
 - Si devuelve `structured: true`, esa salida es autoritativa para fase, nivel, estado, paquete, artefactos y próxima acción. No los reinfieras desde prosa.
-- Si el comando no está disponible, no encuentra un ledger o devuelve `structured: false`, aplica el fallback legacy de abajo y declara confianza baja.
+- Si la herramienta no existe, valida directamente el frontmatter de `docs/status/<slug>-progress.md` contra `ms-progress/v1`. Solo considera alta la confianza si están presentes y son coherentes `schema`, `slug`, `phase`, `level`, `status`, `active_package`, `next_action`, `blocked`, `artifacts` y `updated_at`.
+- Si no encuentra un ledger, es legacy o el contrato estructurado es inválido, aplica la inspección de abajo y declara confianza baja.
 - Workspace root y estado git: `pwd`, `git rev-parse`, `git status`, `git diff --name-only`, `git diff --stat`.
 - Artefactos existentes: `docs/prd/**`, `docs/spec/**`, `docs/design/**`, `docs/status/**`.
 - Si existe `docs/status/<slug>-progress.md`, trátalo como fuente primaria de progreso operativo.

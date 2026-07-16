@@ -568,6 +568,14 @@ describe("Claude permission guard", () => {
       tool_name: "Write",
       tool_input: { file_path: path.join(projectRoot, ".atl/skill-registry.md") },
     })
+    const allowedCache = await runGuard(guardPath, projectRoot, "workflow:ms-skills", {
+      tool_name: "Write",
+      tool_input: { file_path: path.join(projectRoot, ".atl/.skill-registry.cache.json") },
+    })
+    const allowedGitignore = await runGuard(guardPath, projectRoot, "workflow:ms-skills", {
+      tool_name: "Edit",
+      tool_input: { file_path: path.join(projectRoot, ".gitignore") },
+    })
     const blockedSource = await runGuard(guardPath, projectRoot, "workflow:ms-skills", {
       tool_name: "Edit",
       tool_input: { file_path: path.join(projectRoot, "src/index.ts") },
@@ -578,6 +586,8 @@ describe("Claude permission guard", () => {
     })
 
     expect(allowedRegistry.code).toBe(0)
+    expect(allowedCache.code).toBe(0)
+    expect(allowedGitignore.code).toBe(0)
     expect(blockedSource.code).toBe(2)
     expect(blockedShell.code).toBe(2)
   })
