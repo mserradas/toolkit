@@ -34,7 +34,7 @@ export async function readState(context: BuildContext): Promise<InstallState> {
       throw new Error(`Estado incompatible en ${location.path}`)
     }
     if (parsed.scope !== context.scope) {
-      throw new Error(`El scope del estado no coincide en ${location.path}`)
+      throw new Error(`El alcance del estado no coincide en ${location.path}`)
     }
     return parsed
   } catch (error) {

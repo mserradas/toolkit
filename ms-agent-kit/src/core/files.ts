@@ -17,7 +17,7 @@ export async function readExistingFile(filePath: string): Promise<ExistingFile |
   try {
     const linkInfo = await lstat(filePath)
     if (linkInfo.isSymbolicLink()) {
-      throw new Error(`Se rechaza un archivo administrado que es symlink: ${filePath}`)
+      throw new Error(`Se rechaza un archivo administrado que es un enlace simbólico (symlink): ${filePath}`)
     }
     if (!linkInfo.isFile()) {
       throw new Error(`El destino existe y no es un archivo regular: ${filePath}`)
@@ -66,7 +66,7 @@ export async function removeManagedFile(root: string, filePath: string): Promise
   const resolvedRoot = path.resolve(root)
   const resolvedFilePath = path.resolve(filePath)
   if (resolvedFilePath === resolvedRoot) {
-    throw new Error(`Se rechaza eliminar el root administrado: ${root}`)
+    throw new Error(`Se rechaza eliminar la raíz administrada: ${root}`)
   }
 
   await assertNoSymlinkEscape(root, filePath)

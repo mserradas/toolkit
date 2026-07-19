@@ -51,14 +51,14 @@ export async function createPlan(
         items.push({
           artifact,
           action: "update",
-          reason: "archivo administrado ausente; se recreara",
+          reason: "archivo administrado ausente; se recreará",
           desiredHash,
         })
       } else if (current.hash === desiredHash) {
         items.push({
           artifact,
           action: "unchanged",
-          reason: "ya esta actualizado",
+          reason: "ya está actualizado",
           currentHash: current.hash,
           desiredHash,
         })
@@ -66,7 +66,7 @@ export async function createPlan(
         items.push({
           artifact,
           action: "update",
-          reason: "actualizacion segura de un archivo administrado",
+          reason: "actualización segura de un archivo administrado",
           currentHash: current.hash,
           desiredHash,
         })
@@ -74,7 +74,7 @@ export async function createPlan(
         items.push({
           artifact,
           action: "update",
-          reason: "archivo administrado modificado; --force adopta la version actual como backup",
+          reason: "archivo administrado modificado; `--force` adopta la versión actual como copia de seguridad",
           currentHash: current.hash,
           desiredHash,
         })
@@ -82,7 +82,7 @@ export async function createPlan(
         items.push({
           artifact,
           action: "conflict",
-          reason: "el archivo cambio desde la ultima instalacion",
+          reason: "el archivo cambió desde la última instalación",
           currentHash: current.hash,
           desiredHash,
         })
@@ -96,7 +96,7 @@ export async function createPlan(
       items.push({
         artifact,
         action: "adopt",
-        reason: "contenido identico existente; se registrara sin reescribir",
+        reason: "contenido idéntico existente; se registrará sin reescribir",
         currentHash: current.hash,
         desiredHash,
       })
@@ -104,7 +104,7 @@ export async function createPlan(
       items.push({
         artifact,
         action: "update",
-        reason: "conflicto externo aceptado con --force; se creara backup",
+        reason: "conflicto externo aceptado con `--force`; se creará una copia de seguridad",
         currentHash: current.hash,
         desiredHash,
       })
@@ -135,7 +135,7 @@ export async function createPlan(
         action: "detach",
         obsoleteTargets,
         remainingTargets,
-        reason: "la ruta ya no pertenece a esos targets, pero sigue compartida por otro",
+        reason: "la ruta ya no pertenece a esos clientes, pero sigue compartida por otro",
       })
       continue
     }
@@ -147,7 +147,7 @@ export async function createPlan(
         action: "skip",
         obsoleteTargets,
         remainingTargets,
-        reason: "archivo obsoleto modificado despues de instalar; no se eliminara",
+        reason: "archivo obsoleto modificado después de instalar; no se eliminará",
         currentHash: current.hash,
       })
       continue
@@ -159,8 +159,8 @@ export async function createPlan(
       obsoleteTargets,
       remainingTargets,
       reason: file.original.existed
-        ? "artefacto obsoleto; se restaurara el archivo original"
-        : "artefacto administrado obsoleto; se eliminara",
+        ? "artefacto obsoleto; se restaurará el archivo original"
+        : "artefacto administrado obsoleto; se eliminará",
       ...(current ? { currentHash: current.hash } : {}),
     })
   }

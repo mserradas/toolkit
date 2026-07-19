@@ -11,8 +11,6 @@ import { DEFAULT_ASSETS_ROOT, loadCatalog } from "./core/catalog.js"
 import { parseMarkdown } from "./core/frontmatter.js"
 import { applyPlan, installationStatus, uninstallTargets } from "./core/installer.js"
 import { createPlan } from "./core/planner.js"
-import { fingerprintReview } from "./core/review.js"
-import { ensureAtlIgnored, refreshSkillRegistry } from "./core/skill-registry.js"
 import { nextWorkflowAction, readWorkflowStatus } from "./core/workflow.js"
 import {
   finishWithoutChanges,
@@ -20,6 +18,7 @@ import {
   planNeedsConfirmation,
   promptConfirmation,
   promptInstallOptions,
+  showInstallResult,
   showInstallSummary,
   type PlanSummaryCounts,
 } from "./interactive.js"
@@ -27,8 +26,12 @@ import {
   TARGETS,
   owningTargets,
   type BuildContext,
+  type ArtifactKind,
   type InstallPlan,
   type InstallScope,
+  type PermissionProfile,
+  type ObsoleteAction,
+  type PlanAction,
   type Target,
 } from "./core/types.js"
 
@@ -38,7 +41,7 @@ const HELP = `
 ms-agent-kit - instalador portable de agentes ms-*
 
 Uso:
-  ms-agent-kit                     Asistente interactivo de instalacion
+  ms-agent-kit                     Asistente interactivo de instalación
   ms-agent-kit list
   ms-agent-kit doctor [opciones]
   ms-agent-kit plan [opciones]
@@ -47,21 +50,48 @@ Uso:
   ms-agent-kit uninstall [opciones]
   ms-agent-kit workflow status [slug|ruta] [--project <ruta>] [--json]
   ms-agent-kit workflow next [slug|ruta] [--project <ruta>] [--json]
-  ms-agent-kit review fingerprint [--scope worktree|staged] [--project <ruta>] [--json]
-  ms-agent-kit skill-registry refresh [--project <ruta>] [--home <ruta>] [--force] [--no-gitignore] [--json]
 
 Opciones:
-  --target <valor>    opencode, claude, codex o all. Puede repetirse.
-  --scope <valor>     user (default) o project.
-  --project <ruta>    Root del proyecto para scope project (default: cwd).
-  --home <ruta>       Home alternativo, util para pruebas o dotfiles.
-  --assets <ruta>     Catalogo de assets alternativo.
-  --force             Adopta conflictos durante install, guardando backup.
-  --yes               No solicita confirmacion.
-  --dry-run           En install, muestra el plan sin escribir.
-  --json              Salida JSON.
+  --target <valor>    Cliente objetivo: \`opencode\`, \`claude\`, \`codex\` o \`all\`. Puede repetirse.
+  --scope <valor>     Alcance: \`user\` (predeterminado) o \`project\`.
+  --permission-profile <valor>  Permisos OpenCode: \`balanced\` (predeterminado), \`strict\` o \`trusted\`.
+  --project <ruta>    Raíz del proyecto para el alcance \`project\` (predeterminado: directorio actual).
+  --home <ruta>       Directorio personal alternativo; útil para pruebas o dotfiles.
+  --assets <ruta>     Catálogo alternativo de recursos (\`assets\`).
+  --force             Adopta conflictos durante \`install\` y guarda una copia de seguridad.
+  --yes               No solicita confirmación.
+  --dry-run           Simula \`install\`: muestra el plan sin escribir.
+  --json              Devuelve datos JSON.
   --help              Muestra esta ayuda.
 `
+
+const targetLabels: Record<Target, string> = {
+  opencode: "OpenCode",
+  claude: "Claude Code",
+  codex: "Codex",
+}
+
+const planActionLabels: Record<PlanAction | ObsoleteAction, string> = {
+  create: "crear",
+  update: "actualizar",
+  adopt: "adoptar",
+  unchanged: "sin cambios",
+  conflict: "conflicto",
+  remove: "eliminar",
+  restore: "restaurar",
+  detach: "desvincular",
+  skip: "omitir",
+}
+
+const artifactKindLabels: Record<ArtifactKind, string> = {
+  agent: "agente",
+  command: "comando",
+  configuration: "configuración",
+  skill: "habilidad (skill)",
+  documentation: "documentación",
+  plugin: "complemento",
+  policy: "política",
+}
 
 interface CliOptions {
   targets: Target[]
@@ -78,7 +108,6 @@ interface LocalOptions {
   force: boolean
   json: boolean
   scope: string
-  noGitignore: boolean
   positionals: string[]
 }
 
@@ -91,7 +120,6 @@ function localOptions(args: string[]): LocalOptions {
       force: { type: "boolean", default: false },
       json: { type: "boolean", default: false },
       scope: { type: "string", default: "worktree" },
-      "no-gitignore": { type: "boolean", default: false },
     },
     allowPositionals: true,
     strict: true,
@@ -102,7 +130,6 @@ function localOptions(args: string[]): LocalOptions {
     force: parsed.values.force,
     json: parsed.values.json,
     scope: parsed.values.scope,
-    noGitignore: parsed.values["no-gitignore"],
     positionals: parsed.positionals,
   }
 }
@@ -117,11 +144,11 @@ function parseTargets(values: string[] | undefined): Target[] {
   const targets: Target[] = []
   for (const value of requested) {
     if (!TARGETS.includes(value as Target)) {
-      throw new Error(`Target invalido: ${value}`)
+      throw new Error(`Cliente objetivo no válido: ${value}`)
     }
     if (!targets.includes(value as Target)) targets.push(value as Target)
   }
-  if (targets.length === 0) throw new Error("Debes indicar al menos un target")
+  if (targets.length === 0) throw new Error("Debes indicar al menos un cliente objetivo")
   return targets
 }
 
@@ -131,6 +158,7 @@ function cliOptions(args: string[]): CliOptions {
     options: {
       target: { type: "string", multiple: true },
       scope: { type: "string", default: "user" },
+      "permission-profile": { type: "string", default: "balanced" },
       project: { type: "string" },
       home: { type: "string" },
       assets: { type: "string" },
@@ -151,7 +179,11 @@ function cliOptions(args: string[]): CliOptions {
 
   const scope = parsed.values.scope as InstallScope
   if (scope !== "user" && scope !== "project") {
-    throw new Error(`Scope invalido: ${String(parsed.values.scope)}`)
+    throw new Error(`Alcance no válido: ${String(parsed.values.scope)}`)
+  }
+  const permissionProfile = parsed.values["permission-profile"] as PermissionProfile
+  if (!["balanced", "strict", "trusted"].includes(permissionProfile)) {
+    throw new Error(`Perfil de permisos no válido: ${String(parsed.values["permission-profile"])}`)
   }
 
   const homeDir = path.resolve(parsed.values.home ?? homedir())
@@ -163,6 +195,7 @@ function cliOptions(args: string[]): CliOptions {
       homeDir,
       projectRoot,
       scope,
+      permissionProfile,
     },
     force: parsed.values.force,
     yes: parsed.values.yes,
@@ -234,20 +267,20 @@ function printPlan(plan: InstallPlan, asJson: boolean): void {
 
   const summary = planSummary(plan)
   process.stdout.write(
-    `Plan: ${summary.create} crear, ${summary.update} actualizar, ${summary.adopt} adoptar, ${summary.unchanged} sin cambios, ${summary.remove} eliminar, ${summary.restore} restaurar, ${summary.detach} desvincular, ${summary.skip} omitir, ${summary.conflict} conflictos\n`,
+    `Plan de instalación: ${summary.create} crear, ${summary.update} actualizar, ${summary.adopt} adoptar, ${summary.unchanged} sin cambios, ${summary.remove} eliminar, ${summary.restore} restaurar, ${summary.detach} desvincular, ${summary.skip} omitir, ${summary.conflict} conflictos\n`,
   )
   for (const item of plan.items) {
     if (item.action === "unchanged") continue
     process.stdout.write(
-      `[${item.action}] ${owningTargets(item.artifact).join("+")}/${item.artifact.kind} ${item.artifact.name}\n  ${item.artifact.destination}\n  ${item.reason}\n`,
+      `[${planActionLabels[item.action]}] ${owningTargets(item.artifact).map((target) => targetLabels[target]).join("+")}/${artifactKindLabels[item.artifact.kind]} ${item.artifact.name}\n  ${item.artifact.destination}\n  ${item.reason}\n`,
     )
   }
   for (const item of plan.obsolete) {
     process.stdout.write(
-      `[${item.action}] ${item.obsoleteTargets.join("+")}/${item.file.kind} ${item.file.name}\n  ${item.file.path}\n  ${item.reason}\n`,
+      `[${planActionLabels[item.action]}] ${item.obsoleteTargets.map((target) => targetLabels[target]).join("+")}/${artifactKindLabels[item.file.kind]} ${item.file.name}\n  ${item.file.path}\n  ${item.reason}\n`,
     )
   }
-  process.stdout.write(`Estado: ${plan.statePath}\n`)
+  process.stdout.write(`Registro de estado: ${plan.statePath}\n`)
 }
 
 async function confirm(question: string, yes: boolean): Promise<boolean | null> {
@@ -271,6 +304,7 @@ async function interactiveInstallOptions(): Promise<CliOptions | null> {
       homeDir: path.resolve(homedir()),
       projectRoot: selected.projectRoot,
       scope: selected.scope,
+      permissionProfile: "balanced",
     },
     force: false,
     yes: false,
@@ -293,9 +327,9 @@ async function runList(options: CliOptions): Promise<void> {
   }
   process.stdout.write(`Agentes (${payload.agents.length}): ${payload.agents.join(", ")}\n`)
   process.stdout.write(`Comandos (${payload.commands.length}): ${payload.commands.join(", ")}\n`)
-  process.stdout.write(`Skills (${payload.skills.length}): ${payload.skills.join(", ")}\n`)
+  process.stdout.write(`Habilidades (\`skills\`) (${payload.skills.length}): ${payload.skills.join(", ")}\n`)
   process.stdout.write(
-    `Plugins OpenCode (${payload.openCodePlugins.length}): ${payload.openCodePlugins.join(", ")}\n`,
+    `Complementos (\`plugins\`) de OpenCode (${payload.openCodePlugins.length}): ${payload.openCodePlugins.join(", ")}\n`,
   )
 }
 
@@ -326,6 +360,7 @@ async function skillNames(root: string): Promise<Array<{ name: string; path: str
 async function duplicateCodexSkills(context: BuildContext): Promise<Array<{ name: string; paths: string[] }>> {
   const roots = [
     path.join(context.homeDir, ".codex", "skills", ".system"),
+    path.join(context.homeDir, ".codex", "skills"),
     path.join(context.homeDir, ".agents", "skills"),
   ]
   if (context.scope === "project") {
@@ -348,12 +383,12 @@ async function duplicateCodexSkills(context: BuildContext): Promise<Array<{ name
 async function checkCodexSecretRules(
   rulePath: string | undefined,
 ): Promise<{ status: "passed" | "failed" | "not_installed" | "unavailable"; detail: string }> {
-  if (!rulePath) return { status: "not_installed", detail: "No se genero la politica ms-secrets" }
+  if (!rulePath) return { status: "not_installed", detail: "No se generó la política ms-secrets" }
   try {
     await readFile(rulePath)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { status: "not_installed", detail: "La politica ms-secrets aun no esta instalada" }
+      return { status: "not_installed", detail: "La política ms-secrets aún no está instalada" }
     }
     throw error
   }
@@ -409,23 +444,23 @@ async function checkCodexSecretRules(
     if (failed.length === 0) {
       return {
         status: "passed",
-        detail: `Defensa practica best-effort validada: ${results.length}/${results.length} casos`,
+        detail: `Protección práctica validada: ${results.length}/${results.length} casos`,
       }
     }
     return {
       status: "failed",
-      detail: `Matriz best-effort incompleta (${results.length - failed.length}/${results.length}): ${failed
+      detail: `Matriz de protección incompleta (${results.length - failed.length}/${results.length}): ${failed
         .map(
           (result) =>
-            `${result.args.join(" ")} esperaba ${result.forbidden ? "forbidden" : "no forbidden"} y obtuvo ${result.decision ?? "sin decision"}`,
+            `${result.args.join(" ")} esperaba ${result.forbidden ? "un bloqueo" : "que se permitiera"} y obtuvo ${result.decision ?? "sin decisión"}`,
         )
         .join("; ")}`,
     }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { status: "unavailable", detail: "No se encontro el binario codex" }
+      return { status: "unavailable", detail: "No se encontró el binario `codex`" }
     }
-    return { status: "failed", detail: `Codex no pudo validar la politica: ${(error as Error).message}` }
+    return { status: "failed", detail: `Codex no pudo validar la política: ${(error as Error).message}` }
   }
 }
 
@@ -477,7 +512,7 @@ async function runDoctor(options: CliOptions): Promise<void> {
   for (const target of options.targets) {
     const installation = installations[target]
     if (installation.managed === 0) {
-      warnings.push(`${target}: no hay una instalacion administrada en este scope`)
+      warnings.push(`${targetLabels[target]}: no hay una instalación administrada en este alcance`)
     } else if (
       installation.desired.create > 0 ||
       installation.desired.update > 0 ||
@@ -485,11 +520,11 @@ async function runDoctor(options: CliOptions): Promise<void> {
       installation.desired.cleanup > 0
     ) {
       ok = false
-      warnings.push(`${target}: hay cambios pendientes; ejecuta install`)
+      warnings.push(`${targetLabels[target]}: hay cambios pendientes; ejecuta \`install\``)
     }
     if (installation.desired.conflict > 0) {
       ok = false
-      warnings.push(`${target}: hay ${installation.desired.conflict} conflicto(s)`)
+      warnings.push(`${targetLabels[target]}: hay ${installation.desired.conflict} conflicto(s)`)
     }
     if (installation.status.modified > 0 || installation.status.missing > 0) ok = false
   }
@@ -505,7 +540,7 @@ async function runDoctor(options: CliOptions): Promise<void> {
     : null
   if (codexSecurity && installations.codex.managed > 0 && codexSecurity.status !== "passed") {
     ok = false
-    warnings.push(`codex: ${codexSecurity.detail}`)
+    warnings.push(`Codex: ${codexSecurity.detail}`)
   }
 
   const duplicateSkills = options.targets.includes("codex")
@@ -513,7 +548,7 @@ async function runDoctor(options: CliOptions): Promise<void> {
     : []
   if (duplicateSkills.length > 0) {
     ok = false
-    warnings.push(`codex: hay ${duplicateSkills.length} nombre(s) de skill duplicados`)
+    warnings.push(`Codex: hay ${duplicateSkills.length} nombre(s) de \`skill\` duplicados`)
   }
 
   const payload = {
@@ -532,7 +567,7 @@ async function runDoctor(options: CliOptions): Promise<void> {
   process.stdout.write(
     options.json
       ? `${JSON.stringify(payload, null, 2)}\n`
-      : `Doctor ${ok ? "OK" : "CON PROBLEMAS"}: ${payload.agents} agentes, ${payload.commands} comandos, ${payload.skills} skills. Instalacion: ${options.targets.map((target) => `${target} ${installations[target].status.ok}/${installations[target].managed}`).join(", ")}${warnings.length > 0 ? `. Avisos: ${warnings.join("; ")}` : ""}\n`,
+      : `Diagnóstico ${ok ? "CORRECTO" : "CON PROBLEMAS"}: ${payload.agents} agentes, ${payload.commands} comandos, ${payload.skills} habilidades (\`skills\`). Instalación: ${options.targets.map((target) => `${targetLabels[target]} ${installations[target].status.ok}/${installations[target].managed}`).join(", ")}${warnings.length > 0 ? `. Avisos: ${warnings.join("; ")}` : ""}\n`,
   )
   if (!ok) process.exitCode = 1
 }
@@ -561,16 +596,16 @@ async function runInstall(options: CliOptions, resolveConflicts = false): Promis
   }
   if (plan.items.some((item) => item.action === "conflict")) {
     if (!resolveConflicts) {
-      throw new Error("Hay conflictos. Revisa el plan o repite con --force")
+      throw new Error("Hay conflictos. Revisa el plan o repite con `--force`")
     }
     const conflictCount = plan.items.filter((item) => item.action === "conflict").length
     const replace = await confirm(
-      `Hay ${conflictCount} conflictos. ¿Crear backups y reemplazar esos archivos completos?`,
+      `Hay ${conflictCount} conflictos. ¿Crear copias de seguridad y reemplazar esos archivos completos?`,
       false,
     )
     if (replace === null) return
     if (!replace) {
-      process.stdout.write("Instalacion cancelada\n")
+      process.stdout.write("Instalación cancelada\n")
       return
     }
     activeOptions = { ...options, force: true }
@@ -593,14 +628,20 @@ async function runInstall(options: CliOptions, resolveConflicts = false): Promis
   const shouldApply = await confirm(question, activeOptions.yes)
   if (shouldApply === null) return
   if (!shouldApply) {
-    process.stdout.write("Instalacion cancelada\n")
+    process.stdout.write("Instalación cancelada\n")
     return
   }
   const result = await applyPlan(plan, activeOptions.context)
+  if (activeOptions.json) {
+    process.stdout.write(`${JSON.stringify({ plan: planSummary(plan), result }, null, 2)}\n`)
+    return
+  }
+  if (resolveConflicts) {
+    showInstallResult(result, activeOptions.context.homeDir)
+    return
+  }
   process.stdout.write(
-    activeOptions.json
-      ? `${JSON.stringify({ plan: planSummary(plan), result }, null, 2)}\n`
-      : `Instalacion completa: ${result.created} creados, ${result.updated} actualizados, ${result.adopted} adoptados, ${result.unchanged} sin cambios, ${result.removed} obsoletos eliminados, ${result.restored} restaurados, ${result.detached} desvinculados, ${result.skipped} omitidos\n`,
+    `Instalación completada: ${result.created} creados, ${result.updated} actualizados, ${result.adopted} adoptados, ${result.unchanged} sin cambios, ${result.removed} obsoletos eliminados, ${result.restored} restaurados, ${result.detached} desvinculados, ${result.skipped} omitidos\n`,
   )
 }
 
@@ -611,10 +652,13 @@ async function runStatus(options: CliOptions): Promise<void> {
     return
   }
   if (status.length === 0) {
-    process.stdout.write("No hay archivos administrados para esos targets\n")
+    process.stdout.write("No hay archivos administrados para los clientes seleccionados\n")
     return
   }
-  for (const item of status) process.stdout.write(`[${item.status}] ${item.target} ${item.path}\n`)
+  const statusLabels = { ok: "correcto", modified: "modificado", missing: "ausente" } as const
+  for (const item of status) {
+    process.stdout.write(`[${statusLabels[item.status]}] ${targetLabels[item.target]} ${item.path}\n`)
+  }
 }
 
 async function runWorkflow(args: string[]): Promise<void> {
@@ -631,67 +675,32 @@ async function runWorkflow(args: string[]): Promise<void> {
   }
   if (operation === "status") {
     process.stdout.write(
-      `Workflow ${status.slug ?? "desconocido"}: ${status.status ?? "legacy"}; fase ${status.phase ?? "desconocida"}; próxima ${status.nextAction ?? "no estructurada"}; confianza ${status.confidence}\n`,
+      `Checkpoint \`${status.slug ?? "desconocido"}\`: estado \`${status.status ?? "incompatible"}\`; próxima acción \`${status.nextAction ?? "no estructurada"}\`; confianza \`${status.confidence}\`\n`,
     )
     if (status.warnings.length > 0) process.stdout.write(`Avisos: ${status.warnings.join("; ")}\n`)
     return
   }
   const next = payload as ReturnType<typeof nextWorkflowAction>
   process.stdout.write(
-    `Workflow ${status.slug ?? "desconocido"}: ${next.ready ? "listo" : "detenido"}; acción ${next.action ?? "ninguna"}. ${next.reason}\n`,
-  )
-}
-
-async function runReview(args: string[]): Promise<void> {
-  const options = localOptions(args)
-  const [operation, ...extra] = options.positionals
-  if (operation !== "fingerprint" || extra.length > 0) {
-    throw new Error("Uso: ms-agent-kit review fingerprint [--scope worktree|staged] [--project <ruta>] [--json]")
-  }
-  if (options.scope !== "worktree" && options.scope !== "staged") {
-    throw new Error("Scope de review no soportado: usa --scope worktree o --scope staged")
-  }
-  const fingerprint = await fingerprintReview(options.projectRoot, options.scope)
-  process.stdout.write(
-    options.json
-      ? `${JSON.stringify(fingerprint, null, 2)}\n`
-      : `${fingerprint.fingerprint} (${fingerprint.fileCount} archivos, +${fingerprint.additions}/-${fingerprint.deletions})\n`,
-  )
-}
-
-async function runSkillRegistry(args: string[]): Promise<void> {
-  const options = localOptions(args)
-  const [operation, ...extra] = options.positionals
-  if (operation !== "refresh" || extra.length > 0) {
-    throw new Error(
-      "Uso: ms-agent-kit skill-registry refresh [--project <ruta>] [--home <ruta>] [--force] [--no-gitignore] [--json]",
-    )
-  }
-  if (!options.noGitignore) await ensureAtlIgnored(options.projectRoot)
-  const result = await refreshSkillRegistry({
-    projectRoot: options.projectRoot,
-    homeDir: options.homeDir,
-    force: options.force,
-  })
-  process.stdout.write(
-    options.json
-      ? `${JSON.stringify(result, null, 2)}\n`
-      : `Skill registry ${result.cacheHit ? "sin cambios" : "actualizado"}: ${result.skills} skills en ${result.registryPath}\n`,
+    `Flujo de trabajo \`${status.slug ?? "desconocido"}\`: ${next.ready ? "listo" : "detenido"}; acción \`${next.action ?? "ninguna"}\`. ${next.reason}\n`,
   )
 }
 
 async function runUninstall(options: CliOptions): Promise<void> {
-  const shouldUninstall = await confirm(`Desinstalar ${options.targets.join(", ")}?`, options.yes)
+  const shouldUninstall = await confirm(
+    `¿Desinstalar la configuración de ${options.targets.map((target) => targetLabels[target]).join(", ")}?`,
+    options.yes,
+  )
   if (shouldUninstall === null) return
   if (!shouldUninstall) {
-    process.stdout.write("Desinstalacion cancelada\n")
+    process.stdout.write("Desinstalación cancelada\n")
     return
   }
   const result = await uninstallTargets(options.targets, options.context)
   process.stdout.write(
     options.json
       ? `${JSON.stringify(result, null, 2)}\n`
-      : `Desinstalacion completa: ${result.removed.length} eliminados, ${result.restored.length} restaurados, ${result.skipped.length} omitidos\n`,
+      : `Desinstalación completada: ${result.removed.length} eliminados, ${result.restored.length} restaurados, ${result.skipped.length} omitidos\n`,
   )
   for (const item of result.skipped) {
     process.stdout.write(`[omitido] ${item.path}: ${item.reason}\n`)
@@ -718,14 +727,6 @@ async function main(): Promise<void> {
 
   if (command === "workflow") {
     await runWorkflow(args)
-    return
-  }
-  if (command === "review") {
-    await runReview(args)
-    return
-  }
-  if (command === "skill-registry") {
-    await runSkillRegistry(args)
     return
   }
 

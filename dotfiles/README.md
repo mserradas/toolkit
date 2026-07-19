@@ -1,15 +1,15 @@
 # Dotfiles — entorno de terminal para macOS
 
-Instala y configura un entorno de terminal completo basado en Ghostty, Fish, Tmux y Starship. El proceso es automático, repetible y crea backups antes de reemplazar configuraciones existentes.
+Instala y configura un entorno de terminal completo basado en Ghostty, Fish, Tmux y Starship. El proceso es automático, repetible y crea copias de seguridad antes de reemplazar configuraciones existentes.
 
 ## Resultado
 
 | Componente | Función |
 |---|---|
-| Ghostty | Emulador de terminal con tema Catppuccin Mocha, splits y fuente Nerd Font |
-| Fish | Shell interactivo con abreviaciones e integración de herramientas |
-| Tmux + TPM | Sesiones persistentes, plugins, navegación y popup auxiliar |
-| Starship | Prompt con estado Git, duración y versiones de runtimes |
+| Ghostty | Emulador de terminal con tema Catppuccin Mocha, paneles divididos (`splits`) y fuente Nerd Font |
+| Fish | Intérprete interactivo con abreviaciones e integración de herramientas |
+| Tmux + TPM | Sesiones persistentes, complementos, navegación y panel emergente |
+| Starship | Indicador de comandos (`prompt`) con estado de Git, duración y versiones de entornos de ejecución |
 | Herramientas | `eza`, `fzf`, `atuin`, `zoxide`, `fnm`, `git`, `pnpm` y `terminal-notifier` |
 
 Ghostty arranca Fish y abre o recupera automáticamente la sesión Tmux `work`.
@@ -18,8 +18,8 @@ Ghostty arranca Fish y abre o recupera automáticamente la sesión Tmux `work`.
 
 - macOS; la configuración incluida está optimizada para Apple Silicon.
 - Conexión a Internet.
-- Una cuenta con permisos para usar `sudo` y cambiar el shell con `chsh`.
-- Xcode Command Line Tools para `git`. macOS ofrece instalarlas la primera vez que se ejecuta el comando.
+- Una cuenta con permisos para usar `sudo` y cambiar el intérprete con `chsh`.
+- Herramientas de línea de comandos de Xcode para `git`. macOS ofrece instalarlas la primera vez que se ejecuta el comando.
 
 El instalador añade Homebrew si no está disponible. La configuración incluida está optimizada para Apple Silicon y usa `/opt/homebrew`; en Macs Intel hay que ajustar las rutas indicadas en [Compatibilidad](#compatibilidad).
 
@@ -50,39 +50,39 @@ Verifica toda la instalación en cualquier momento:
 |---:|---|---|
 | 1 | Instala Homebrew | Se omite si ya existe |
 | 2 | Instala aplicaciones, paquetes y fuente | Homebrew omite lo que ya está instalado |
-| 3 | Registra Fish en `/etc/shells` y lo configura como shell predeterminado | Solo cambia lo necesario |
+| 3 | Registra Fish en `/etc/shells` y lo configura como intérprete predeterminado | Solo cambia lo necesario |
 | 4 | Instala TPM en `~/.tmux/plugins/tpm` | Conserva la instalación existente |
 | 5 | Copia las configuraciones | Crea un `.backup` y reemplaza el destino |
-| 6 | Instala los plugins de Tmux | Usa el instalador de TPM, incluso sin una sesión Tmux previa |
-| 7 | Ejecuta el healthcheck | Informa de binarios, archivos o plugins ausentes |
+| 6 | Instala los complementos de Tmux | Usa el instalador de TPM, incluso sin una sesión Tmux previa |
+| 7 | Ejecuta la comprobación de estado | Informa de binarios, archivos o complementos ausentes |
 
 ### Paquetes instalados
 
 ```text
 Aplicaciones: Ghostty
 Fuente:       JetBrainsMono Nerd Font Mono
-Shell:        fish
+Intérprete:   fish
 Terminal:     tmux, starship
 Navegación:   eza, fzf, zoxide
 Historial:    atuin
-Runtimes:     fnm
+Entornos:     fnm
 Utilidades:   git, pnpm, terminal-notifier
 ```
 
 ## Archivos administrados
 
-| Fuente del repositorio | Destino | Backup previo |
+| Fuente del repositorio | Destino | Copia de seguridad previa |
 |---|---|---|
 | `ghostty/config` | `~/.config/ghostty/config` | `~/.config/ghostty/config.backup` |
 | `fish/config.fish` | `~/.config/fish/config.fish` | `~/.config/fish/config.fish.backup` |
 | `tmux/.tmux.conf` | `~/.tmux.conf` | `~/.tmux.conf.backup` |
 | `starship/starship.toml` | `~/.config/starship.toml` | `~/.config/starship.toml.backup` |
 
-Cada ejecución actualiza el backup único del destino antes de copiar la nueva configuración. Si necesitas conservar varias versiones históricas, guárdalas fuera de esas rutas antes de reinstalar.
+Cada ejecución actualiza la copia de seguridad única del destino antes de copiar la nueva configuración. Si necesitas conservar varias versiones históricas, guárdalas fuera de esas rutas antes de reinstalar.
 
 ## Mantener las configuraciones
 
-El flujo recomendado es editar la configuración activa, sincronizarla al repositorio y revisar el diff:
+El flujo recomendado es editar la configuración activa, sincronizarla al repositorio y revisar las diferencias (`diff`):
 
 ```bash
 cd dotfiles
@@ -90,7 +90,7 @@ cd dotfiles
 git diff -- .
 ```
 
-`sync.sh` copia hacia el repositorio las configuraciones actuales de Ghostty, Fish, Tmux y Starship. No crea backups dentro del repositorio; revisa siempre el diff antes de hacer commit.
+`sync.sh` copia hacia el repositorio las configuraciones actuales de Ghostty, Fish, Tmux y Starship. No crea copias de seguridad dentro del repositorio; revisa siempre las diferencias antes de crear una confirmación (`commit`).
 
 ## Atajos principales
 
@@ -98,10 +98,10 @@ git diff -- .
 
 | Atajo | Acción |
 |---|---|
-| `Alt+V` | Crear split a la derecha |
-| `Alt+D` | Crear split debajo |
-| `Alt+H/J/K/L` | Navegar entre splits |
-| `Ctrl+Shift+H/J/K/L` | Redimensionar splits |
+| `Alt+V` | Crear un panel a la derecha |
+| `Alt+D` | Crear un panel debajo |
+| `Alt+H/J/K/L` | Navegar entre paneles |
+| `Ctrl+Shift+H/J/K/L` | Redimensionar paneles |
 | `Cmd+K` | Limpiar pantalla |
 
 ### Tmux
@@ -109,10 +109,10 @@ git diff -- .
 | Atajo | Acción |
 |---|---|
 | `Ctrl+A` | Prefijo de Tmux |
-| `Ctrl+A`, `V` | Split horizontal conservando el directorio actual |
-| `Ctrl+A`, `D` | Split vertical conservando el directorio actual |
+| `Ctrl+A`, `V` | División horizontal conservando el directorio actual |
+| `Ctrl+A`, `D` | División vertical conservando el directorio actual |
 | `Alt+G` | Abrir o cerrar la sesión flotante `scratch` |
-| `Ctrl+A`, `I` | Instalar plugins manualmente con TPM |
+| `Ctrl+A`, `I` | Instalar complementos manualmente con TPM |
 | `Ctrl+A`, `K` | Cerrar las demás sesiones tras confirmación |
 
 ### Fish
@@ -132,15 +132,15 @@ cp ~/.tmux.conf.backup ~/.tmux.conf
 cp ~/.config/starship.toml.backup ~/.config/starship.toml
 ```
 
-Restaura únicamente los backups que existan y que hayas revisado. Los paquetes instalados con Homebrew se eliminan por separado mediante `brew uninstall` o `brew uninstall --cask`.
+Restaura únicamente las copias de seguridad que existan y que hayas revisado. Los paquetes instalados con Homebrew se eliminan por separado mediante `brew uninstall` o `brew uninstall --cask`.
 
-## Troubleshooting
+## Solución de problemas
 
 ### `git` abre el instalador de Xcode
 
-Acepta la instalación de las Command Line Tools, espera a que termine y vuelve a ejecutar el comando inicial.
+Acepta la instalación de las herramientas de línea de comandos, espera a que termine y vuelve a ejecutar el comando inicial.
 
-### Fish no es el shell activo
+### Fish no es el intérprete activo
 
 Abre una sesión nueva y comprueba:
 
@@ -151,9 +151,9 @@ echo "$SHELL"
 
 En Apple Silicon debe mostrar `/opt/homebrew/bin/fish`.
 
-### Faltan plugins de Tmux
+### Faltan complementos de Tmux
 
-Abre Tmux y ejecuta `Ctrl+A`, seguido de `I`. Después repite el healthcheck.
+Abre Tmux y ejecuta `Ctrl+A`, seguido de `I`. Después repite la comprobación de estado.
 
 ### No aparecen iconos
 
@@ -171,7 +171,7 @@ Autoriza a `terminal-notifier` o Ghostty en Ajustes del Sistema → Notificacion
 
 ## Límites
 
-- El proyecto instala un setup personal y reemplaza los cuatro archivos de configuración declarados.
+- El proyecto instala una configuración personal y reemplaza los cuatro archivos declarados.
 - No gestiona secretos ni credenciales.
-- No elimina automáticamente paquetes, plugins o configuraciones.
+- No elimina automáticamente paquetes, complementos o configuraciones.
 - `sync.sh` asume que todos los archivos de destino existen.

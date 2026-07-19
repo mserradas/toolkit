@@ -97,7 +97,7 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
   },
   "progress-writer": {
     writes: true,
-    writePaths: ["docs/status/*.md", "docs/status/**/*.md"],
+    writePaths: [".atl/status/*.md", ".atl/status/**/*.md", ".gitignore"],
     shell: false,
     usesSkills: false,
     asksQuestions: false,

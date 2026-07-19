@@ -1,8 +1,10 @@
-# Agentes opencode
+# Agentes ms-*
 
-> Actualizado: 2026-07-13
+> Actualizado: 2026-07-17
 
 Este equipo separa producto, arquitectura, implementación, verificación y auditoría.
+
+OpenCode asigna a cada rol un color semántico propio para distinguir agentes primarios, implementación, investigación, verificación, documentación y seguridad en la interfaz.
 
 ## Flujo base
 
@@ -12,8 +14,8 @@ Idea temprana -> ms-discovery -> experimentos / decisión de PRD
 PRD aprobado -> ms-architect -> ms-spec si aporta -> ms-designer -> TDD
 Cambio acotado -> ms-architect -> ms-fastlane -> revisión/smoke -> cierre
 Cambio con scope claro -> ms-architect -> ms-codex -> verificación si aplica -> cierre
-TDD aprobado -> ms-architect -> work units -> ms-progress -> verificación -> cierre de spec si aplica -> cierre
-Retomar trabajo -> /ms-continue <slug> -> lee docs/status/** -> ejecuta una siguiente acción clara
+TDD aprobado -> ms-architect -> work units -> verificación -> cierre de spec si aplica -> cierre
+Retomar trabajo -> /ms-continue <slug> -> lee .atl/status/** -> ejecuta una siguiente acción clara
 ```
 
 ## Comandos
@@ -21,10 +23,8 @@ Retomar trabajo -> /ms-continue <slug> -> lee docs/status/** -> ejecuta una sigu
 | Comando | Uso |
 |---|---|
 | `/ms-status [objetivo]` | Estado de solo lectura de fase, artefactos, diff, verificación, riesgos y siguiente acción recomendada |
-| `/ms-continue [slug|ruta]` | Retoma un workflow desde `docs/status/**`, valida recibos de revisión y ejecuta solo la próxima acción clara |
-| `/ms-models [filtro]` | Diagnóstico de solo lectura de modelos, variante activa, variantes disponibles y recomendaciones para agentes `ms-*` |
-| `/ms-doctor [full]` | Health check read-only de OpenCode, agentes `ms-*`, comandos, skills, plugins, cache y permisos de secretos |
-| `/ms-skills [refresh|check|list]` | Refresca o revisa `.atl/skill-registry.md`, índice común de skills instaladas en roots estándar |
+| `/ms-continue [slug|ruta]` | Retoma manualmente una tarea desde `.atl/status/**` y ejecuta una próxima acción clara |
+| `ms-doctor [full]` | Health check read-only adaptado al cliente actual: OpenCode, Claude Code o Codex |
 
 ## Mejoras inspiradas por Gentle AI
 
@@ -32,7 +32,7 @@ Se incorporan ideas útiles sin añadir una segunda familia de agentes:
 
 - **Preflight nivel 4**: antes de programas grandes, `ms-architect` fija modo de ejecución, estrategia de entrega, presupuesto de revisión, persistencia/idioma de artefactos y comandos de verificación conocidos.
 - **Guard de carga de revisión**: el TDD estima tamaño y riesgo de revisión; si un paquete supera el presupuesto (400 líneas por defecto), `ms-architect` divide, pide excepción explícita o cambia estrategia de entrega.
-- **Lentes 4R con agentes existentes**: `ms-security-auditor` cubre Risk; `ms-scout` cubre Readability, Reliability y Resilience en modo revisión dirigida.
+- **Revisión proporcional**: `ms-architect` revisa el diff; activa `ms-security-auditor` u otro especialista solo cuando existe una señal real de riesgo.
 - **Gatekeeper entre fases**: antes de avanzar, `ms-architect` valida contrato, existencia de artefactos, coherencia de rutas/comandos, drift contra la entrada y siguiente acción.
 - **Contrato de idioma**: conversación en el idioma del usuario; artefactos persistentes en el idioma del repo o inglés técnico por defecto.
 - **Test capabilities snapshot**: `ms-tester` reporta los comandos detectados/ejecutables para que el arquitecto los reutilice en verificaciones posteriores.
@@ -40,14 +40,12 @@ Se incorporan ideas útiles sin añadir una segunda familia de agentes:
 - **`work-unit-commits`**: skill para partir trabajo en unidades revisables con tests/docs acoplados al comportamiento que verifican.
 - **`ms-spec`**: spec funcional ligera para cerrar comportamiento, reglas, criterios y contratos antes del TDD cuando el cambio lo justifica.
 - **Cierre de spec**: modo de `ms-spec` inspirado en OpenSpec archive; actualiza estado, evidencia y drift para que la spec siga siendo útil.
-- **`ms-progress/v1`**: ledger estructurado en `docs/status/**` para retomar paquetes y fases en otra ventana sin usar el TDD como tracker.
-- **`/ms-continue`**: comando para retomar desde `docs/status/**`; la utilidad `workflow next` valida el esquema y devuelve una sola siguiente acción o se detiene.
-- **Recibos de revisión**: `ms-progress` registra revisiones aceptadas con alcance, huella y evidencia; `review fingerprint` calcula una huella reproducible del worktree o staged sin exponer el diff.
+- **Checkpoint temporal**: `ms-progress` guarda únicamente objetivo, próxima acción, completado, pendiente, archivos y riesgos bajo `.atl/status/**` cuando el usuario decide cambiar de sesión.
+- **Checkpoint manual**: `ms-progress` guarda un resumen temporal solo cuando el usuario quiere cambiar de sesión con trabajo incompleto.
+- **`/ms-continue`**: comando manual para retomar desde `.atl/status/**`; valida el checkpoint contra Git y ejecuta una próxima acción en un flujo nuevo.
 - **Preguntas interactivas con `question`**: `ms-architect`, `ms-plan` y `ms-discovery` usan el selector nativo de OpenCode para decisiones bloqueantes, entrevistas de producto y pausas entre fases.
-- **`ms-doctor`**: comando de diagnóstico read-only para validar configuración, permisos, agentes, comandos, skills, plugins y cache.
-- **`ms-skills` / skill registry**: un índice común, como Gentle AI, para que `ms-architect` encuentre skills globales y de proyecto instaladas en roots estándar sin duplicar artefactos por cliente.
+- **`ms-doctor`**: diagnóstico read-only específico del cliente; no mezcla configuración ni inventarios de skills entre OpenCode, Claude Code y Codex.
 - **Context7 MCP**: documentación actual de librerías/frameworks/APIs desde `https://mcp.context7.com/mcp`, usada antes de `webfetch` cuando aplica.
-- **`ms-model-variants`**: plugin local inspirado en Gentle AI que cachea modelos/variantes en `~/.config/opencode/cache/model-variants.json`; `/ms-models` lo usa para revisar asignaciones sin cambiar agentes automáticamente.
 - **Presupuesto de velocidad/contexto**: el orquestador se mantiene delgado, evita delegaciones duplicadas, agrupa estado por ola y usa modelos rápidos en agentes operativos sin bajar el modelo de juicio para diseño, implementación compleja o seguridad.
 
 ## Skills Generales Instaladas
@@ -63,9 +61,8 @@ Se incorporan ideas útiles sin añadir una segunda familia de agentes:
 | `ms-project-init` | Crear un snapshot operativo mínimo de stack, arquitectura, verificación y riesgos antes de nivel 4 o repos desconocidos |
 | `skill-creator` | Crear nuevas skills concisas y reutilizables |
 | `skill-improver` | Auditar y mejorar skills existentes |
-| `skill-registry` | Indexar skills por trigger, scope y ruta exacta en `.atl/skill-registry.md` |
  
-Solo `ms-architect`, `ms-spec`, `ms-designer` y `ms-writer` tienen `skill: allow` para estas skills generales. Los agentes ejecutores y de solo lectura mantienen `skill: deny` salvo cambio explícito.
+Con el perfil `balanced`, todos los agentes pueden cargar las `skills` instaladas. El perfil `strict` conserva la política cerrada definida por cada rol.
 
 ## Niveles de orquestación
 
@@ -86,11 +83,11 @@ Solo `ms-architect`, `ms-spec`, `ms-designer` y `ms-writer` tienen `skill: allow
 | `ms-architect` | `openai/gpt-5.6-sol`, `variant: high` | Orquesta el flujo técnico, inspecciona en solo lectura y decide fastlane/spec/TDD | No |
 | `ms-spec` | `openai/gpt-5.6-sol`, `variant: high` | Crea specs funcionales verificables y cierra specs tras implementación verificada | Solo `docs/spec/**` |
 | `ms-designer` | `openai/gpt-5.6-sol`, `variant: high` | Crea TDDs desde PRDs/specs aprobados | Solo `docs/design/**` |
-| `ms-progress` | `openai/gpt-5.6-luna`, `variant: low` | Registra progreso operativo, paquetes, evidencia, verificación y próxima acción | Solo `docs/status/**` |
+| `ms-progress` | `openai/gpt-5.6-luna`, `variant: low` | Guarda bajo demanda un checkpoint temporal entre sesiones | Solo `.atl/status/**` |
 | `ms-fastlane` | `openai/gpt-5.6-sol`, `variant: medium` | Ejecuta cambios acotados sin cadena de subagentes | Sí, scope limitado |
 | `ms-codex` | `openai/gpt-5.6-sol`, `variant: high` | Implementa código con scope cerrado | Sí |
 | `ms-tester` | `openai/gpt-5.6-luna`, `variant: low` | Corre tests, lint, type-check y format-check | No |
-| `ms-scout` | `openai/gpt-5.6-luna`, `variant: low` | Explora codigo y revisa diffs en solo lectura | No |
+| `ms-scout` | `openai/gpt-5.6-luna`, `variant: low` | Explora código y determina blast radius | No |
 | `ms-debugger` | `openai/gpt-5.6-sol`, `variant: high` | Reproduce bugs y encuentra causa raíz | No |
 | `ms-writer` | `openai/gpt-5.6-sol`, `variant: medium` | Actualiza docs de usuario, README, changelog | Solo docs de usuario |
 | `ms-security-auditor` | `openai/gpt-5.6-sol`, `variant: high` | Audita seguridad con evidencia | No |
@@ -102,11 +99,11 @@ Solo `ms-architect`, `ms-spec`, `ms-designer` y `ms-writer` tienen `skill: allow
 - Usa `ms-architect` cuando hay que modificar el repo o coordinar subagentes.
 - Usa `ms-spec` cuando hay que cerrar comportamiento, reglas, criterios de aceptación o impacto funcional antes del TDD, o cuando hay que cerrar una spec tras implementación verificada.
 - Usa `ms-designer` cuando un cambio necesita TDD.
-- Usa `ms-progress` para registrar o retomar progreso persistente de paquetes nivel 3-4.
+- Usa `ms-progress` solo cuando el usuario quiera guardar trabajo incompleto antes de cambiar de sesión.
 - Usa `ms-fastlane` para cambios acotados, claros y seguros.
 - Usa `ms-codex` para escribir código con scope cerrado.
 - Usa `ms-tester` para verificar con comandos.
-- Usa `ms-scout` para entender un modulo o revisar un diff grande.
+- Usa `ms-scout` para entender un área transversal o determinar blast radius incierto.
 - Usa `ms-debugger` para investigar bugs antes de arreglarlos.
 - Usa `ms-writer` para documentación visible al consumidor.
 - Usa `ms-security-auditor` si toca auth, permisos, secretos, datos sensibles, input externo, dependencias o infra expuesta.
@@ -120,10 +117,10 @@ Solo `ms-architect`, `ms-spec`, `ms-designer` y `ms-writer` tienen `skill: allow
 - `ms-architect` delega tests, linters, formatters, servidores, instalaciones, migraciones, commits, pushes y cualquier comando con efectos secundarios.
 - `ms-architect` elige primero un nivel de orquestación; no decide agentes por inercia.
 - `ms-architect` exige `Contrato para ms-architect` a todo subagente antes de aceptar resultados.
-- `ms-architect` no invoca más de 3 subagentes por ola salvo justificación explícita, compacta cada ola en máximo 10 bullets y aplica Aceptación Rápida sin reanalizar reportes completos.
+- `ms-architect` no invoca más de 3 subagentes por ola salvo justificación explícita, compacta cada ola en máximo 10 bullets y acepta contratos completos sin reanalizar reportes enteros.
 - `ms-architect` mantiene log de lanzamientos para no invocar dos veces la misma huella `(subagente, objetivo, artefactos clave)` en la misma fase.
-- `ms-architect` consulta `Recibos De Revisión` antes de relanzar `ms-scout` modo revisión, `ms-security-auditor` o `judgment-day`; si la huella sigue vigente, reutiliza la evidencia.
-- `ms-architect` detiene expansión tras 20 herramientas directas, 5 lecturas exploratorias o 3 olas dentro de una solicitud; compacta estado, registra progreso si aplica y continúa solo con una siguiente acción concreta.
+- `ms-architect` reutiliza evidencia vigente y evita repetir una revisión sin cambios en el diff.
+- `ms-architect` delega exploración cuando el área es transversal, el blast radius es incierto o una síntesis reduce materialmente el contexto; no usa contadores rígidos de archivos o herramientas.
 - `ms-architect` ejecuta siempre un Security Smoke Gate tras cambios de `ms-codex` o `ms-fastlane`; si el diff contiene señales reales de secretos/config sensible o lógica de seguridad, invoca `ms-security-auditor` en modo ligero. Una ruta sensible con cambios solo visuales no basta para escalar.
 - `ms-architect` aplica Gatekeeper de Fases antes de avanzar entre spec, TDD, implementación, verificación, documentación y cierre.
 - `ms-architect` aplica el guard de carga de revisión en cambios nivel 3-4: presupuesto por defecto 400 líneas cambiadas por paquete/PR; si se excede, divide o pide excepción explícita.
@@ -133,25 +130,24 @@ Solo `ms-architect`, `ms-spec`, `ms-designer` y `ms-writer` tienen `skill: allow
 - `ms-architect` delega el modo de cierre de `ms-spec` antes del cierre final si una implementación nivel 3-4 tuvo spec funcional y el resultado afecta comportamiento observable. La spec se marca `Implementado`, `Verificado`, `Archivado` o `Reemplazado` con evidencia; no se borra.
 - `ms-architect` usa `judgment-day` cuando el usuario pide doble juez/revisión adversarial o cuando un diff/TDD/spec de alto riesgo necesita confirmación independiente; no aplica a fastlane ni cambios triviales.
 - `ms-architect` usa `delegation-brief` antes de delegar paquetes nivel 3-4, TDD/spec, bugs, reviews, auditorías, verificaciones o retries; fastlane y nivel 2 trivial pueden usar brief corto.
-- `ms-architect` usa `.atl/skill-registry.md` para decidir qué skill cargar o pasar a un subagente. Si falta o cambió el set de skills, recomienda `/ms-skills refresh`.
-- `ms-architect` usa `ms-progress` después de aceptar paquetes, verificaciones, revisiones, bloqueos o cierres de fase en nivel 3-4. `/ms-status` lee `docs/status/**` como fuente primaria de progreso si existe; `/ms-continue` lo usa para ejecutar la próxima acción.
+- `ms-architect` no crea checkpoints durante el flujo normal. `/ms-status` lee `.atl/status/**` y `/ms-continue` se usa únicamente cuando el usuario guardó manualmente una tarea incompleta.
 - `ms-spec` no diseña arquitectura técnica ni implementación; produce comportamiento, reglas, casos borde y criterios verificables en `docs/spec/**`, y al cierre registra evidencia, estado final y drift.
 - `ms-designer` no asigna ejecutores; solo diseña el TDD.
-- `ms-progress` no diseña ni implementa; solo actualiza `docs/status/**` con evidencia aceptada, incluyendo recibos de revisión cuando aplica.
+- `ms-progress` no diseña ni implementa; solo guarda un resumen temporal con completado, pendiente, archivos, riesgos y próxima acción.
 - `ms-designer` incluye previsión de revisión en la sección de paquetes del TDD.
 - `ms-fastlane` se bloquea si el cambio no califica como acotado: máximo 3 archivos totales, <=120 LOC estimadas, sin contrato público, datos persistidos, seguridad, infra, CI/CD, dependencias, ambigüedad de producto ni decisión irreversible.
 - `ms-codex` no rediseña ni amplía scope.
-- `ms-codex` agrupa lectura, edición y verificación; si no converge tras 12 herramientas, 3 ciclos edit/test o 2 intentos de corrección, devuelve `partial` o `blocked` con evidencia en vez de seguir en bucle.
-- `ms-tester` no modifica archivos.
+- `ms-codex` agrupa lectura, edición y verificación; continúa mientras haya progreso observable y devuelve `partial` o `blocked` si repite el mismo fallo sin nueva evidencia.
+- `ms-tester` no modifica archivos. Puede ejecutar sin confirmación scripts convencionales de verificación (`test`, `lint`, `typecheck`, `check`, `build`, `validate`, `verify`, `ci`, `quality`); scripts desconocidos siguen bloqueados.
 - `ms-scout` solo ejecuta comandos de inspección de solo lectura: lectura, búsqueda, listados y git read-only.
-- `ms-scout` puede revisar diffs con lentes `Readability`, `Reliability` y `Resilience`; seguridad profunda sigue siendo de `ms-security-auditor`.
+- `ms-scout` no revisa diffs terminados: mapea código y blast radius. La revisión general corresponde a `ms-architect`; seguridad profunda a `ms-security-auditor`.
 - `ms-debugger` no arregla bugs; solo reporta causa raíz.
 - `ms-writer` no toca PRDs ni TDDs.
 - `ms-security-auditor` no escribe fixes.
 - `ms-architect` usa el camino mínimo para cambios de bajo riesgo: no invoca scout, spec, TDD, writer, auditoría ni tester por prudencia genérica si no se activan disparadores explícitos.
 - Todo subagente que no orquesta declara `task: deny` explícito.
-- Los agentes `ms-*` declaran `websearch`, `todowrite` y `lsp` en `deny`. `skill` queda permitido solo en `ms-architect`, `ms-spec`, `ms-designer` y `ms-writer` para skills generales; ejecutores y agentes de solo lectura lo mantienen en `deny`.
-- Los artefactos instalados incorporan una denylist de secretos por agente para lectura directa y comandos evidentes: `.env`, `.env.local`, entornos reales (`production`, `staging`, `test`, `development`), `.ssh`, `.aws/credentials`, `credentials.json`, `.npmrc`, `.netrc`, `.kube/config`, llaves `*.pem`/`*.key` y `secrets/**`. Es una red práctica de protección, no una política de bloqueo general; `.env.example` sigue permitido.
+- El perfil predeterminado `balanced` permite `todowrite`, `lsp` y skills generales, y usa allowlists silenciosas para roles acotados. Solo `ms-codex` pregunta por comandos desconocidos o dependencias; `ms-debugger`, por logs potencialmente sensibles. Push, SSH, gestores del sistema, destrucción y secretos se bloquean. `strict` restaura la política cerrada y `trusted` reduce confirmaciones sin levantar denegaciones explícitas.
+- OpenCode usa una única definición de secretos para lectura directa y comandos evidentes: `.env`, entornos reales, `.ssh`, credenciales, llaves y `secrets/**`; `.env.example` sigue permitido. El instalador la escribe globalmente y al final de cada frontmatter `ms-*`, después de los permisos del rol, para que las denegaciones prevalezcan en el orden efectivo.
 - La lectura genérica vía bash (`cat`, `head`, `tail`, `find`, `tree`, `rg`, `grep`) queda permitida en agentes operativos de lectura/código/verificación (`ms-codex`, `ms-tester`, `ms-debugger`, `ms-security-auditor`, `ms-scout`) para reducir fricción. Las denegaciones añadidas al generar el agente se evalúan después de esos permisos.
 - `ms-debugger` tiene `env` y `printenv*` en `deny` para evitar exposición accidental de secretos.
 - `ms-codex` deja en `ask` instalaciones, publicación/red (`git push`, `ssh`, `scp`, `nc`) y comandos desconocidos; comandos destructivos de git/filesystem quedan en `deny` directamente.
@@ -162,13 +158,21 @@ Solo `ms-architect`, `ms-spec`, `ms-designer` y `ms-writer` tienen `skill: allow
 
 OpenCode no carga `agents-shared.md` globalmente. El instalador embebe esas reglas una sola vez en cada agente generado y conserva [agents-shared.md](agents-shared.md) como referencia humana.
 
-OpenCode carga tres plugins locales desde `plugins/**`: [ms-model-variants.ts](../plugins/ms-model-variants.ts), que cachea durante 24 horas solo los providers conectados; [ms-skill-registry.ts](../plugins/ms-skill-registry.ts), que refresca un registry ya inicializado; y [ms-workflow-tools.ts](../plugins/ms-workflow-tools.ts), que valida ledgers y calcula huellas de revisión sin depender de ejecutables externos. Ninguno modifica archivos del proyecto durante el primer arranque.
+El ciclo de sesiones y delegaciones queda bajo control del usuario y de las instrucciones de los agentes; no hay plugins que intercepten `task`.
+
+## Diferencias De Runtime
+
+| Cliente | ID nativo | Enforcement de propiedad |
+|---|---|---|
+| OpenCode | Delegación nativa | Permisos por rol; sin identidad durable ni hooks de workflow |
+| Claude Code | Agent nativo | Permisos por rol y límite de turnos cuando el cliente lo permite |
+| Codex | Subagente nativo | Contrato de salida; sin identidad durable ni ledger de agentes |
+
+Las delegaciones normales no requieren identidad durable ni ledger. Una sesión nueva parte del checkpoint temporal únicamente cuando el usuario decidió guardarlo.
 
 OpenCode carga plugins npm y MCPs desde `opencode.json`. La configuración declara notifier y Context7; la clave de Context7 se resuelve exclusivamente desde `CONTEXT7_API_KEY`, nunca desde el catálogo. Los agentes con acceso a documentación deben preferir Context7 antes de `webfetch` cuando aplique.
 
-OpenCode instala automáticamente los plugins npm con Bun al arrancar. El `package.json` del directorio de configuración declara `@opencode-ai/plugin` para el plugin TypeScript local; no se distribuyen `node_modules`, locks ni cachés.
-
-El índice único vive en `.atl/skill-registry.md`; su cache es `.atl/.skill-registry.cache.json`. Es un índice de rutas, no una copia compactada ni un inventario de built-ins. Escanea exactamente `<root>/<skill>/SKILL.md` en las roots estándar de OpenCode, Claude Code, Codex y Agent Skills, con precedencia de proyecto. La primera ejecución explícita de `/ms-skills refresh` inicializa `.atl/` en `.gitignore`; después OpenCode puede refrescarlo al arrancar.
+OpenCode instala automáticamente los plugins npm declarados en su configuración. El kit no distribuye plugins TypeScript locales, `node_modules`, locks ni cachés.
 
 La TUI carga las preferencias portables desde `tui.json`, incluido `opencode-subagent-statusline`. El estado y cache del plugin se generan localmente y no se distribuyen.
 

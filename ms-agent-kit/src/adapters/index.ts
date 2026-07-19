@@ -39,7 +39,7 @@ export async function buildArtifacts(
       existing.mode !== artifact.mode ||
       !existing.content.equals(artifact.content)
     ) {
-      throw new Error(`Dos artefactos intentan escribir ${artifact.destination}`)
+      throw new Error(`Dos artefactos intentan escribir en ${artifact.destination}`)
     }
     existing.targets = [...new Set([...owningTargets(existing), ...owningTargets(artifact)])]
   }

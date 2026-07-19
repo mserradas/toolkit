@@ -1,13 +1,13 @@
 # Toolkit
 
-Dos instaladores complementarios para reproducir un entorno de trabajo: uno prepara la terminal de macOS y otro configura agentes, skills y workflows para clientes de IA.
+Dos instaladores complementarios para reproducir un entorno de trabajo: uno prepara la terminal de macOS y otro configura agentes, habilidades (`skills`) y flujos de trabajo para clientes de IA.
 
 ## Qué contiene
 
 | Proyecto | Resultado | Plataformas objetivo | Documentación |
 |---|---|---|---|
-| `dotfiles` | Ghostty, Fish, Tmux, Starship y herramientas de shell | macOS | [Guía de dotfiles](./dotfiles/README.md) |
-| `ms-agent-kit` | Agentes `ms-*`, workflows, skills, permisos y configuración portable | OpenCode, Claude Code y Codex | [Guía de ms-agent-kit](./ms-agent-kit/README.md) |
+| `dotfiles` | Ghostty, Fish, Tmux, Starship y herramientas del intérprete de comandos | macOS | [Guía de dotfiles](./dotfiles/README.md) |
+| `ms-agent-kit` | Agentes `ms-*`, flujos de trabajo, `skills`, permisos y configuración portable | OpenCode, Claude Code y Codex | [Guía de ms-agent-kit](./ms-agent-kit/README.md) |
 
 Los proyectos pueden usarse por separado. En una Mac nueva, el orden recomendado es `dotfiles` primero y `ms-agent-kit` después.
 
@@ -20,7 +20,7 @@ git clone https://github.com/mserradas/toolkit.git
 cd toolkit
 ```
 
-Si macOS solicita instalar las Xcode Command Line Tools al ejecutar `git`, completa esa instalación antes de continuar.
+Si macOS solicita instalar las herramientas de línea de comandos de Xcode, completa esa instalación antes de continuar.
 
 ### 2. Preparar la terminal
 
@@ -29,7 +29,7 @@ cd dotfiles
 ./install.sh
 ```
 
-El instalador añade Homebrew si falta, instala el stack de terminal, configura Fish como shell predeterminado y copia las configuraciones con backup. Al terminar, abre una nueva ventana de Ghostty.
+El instalador añade Homebrew si falta, instala el conjunto de herramientas de terminal, configura Fish como intérprete predeterminado y crea una copia de seguridad antes de reemplazar cada configuración. Al terminar, abre una nueva ventana de Ghostty.
 
 Verifica el resultado:
 
@@ -39,7 +39,7 @@ Verifica el resultado:
 
 ### 3. Preparar Node.js 24
 
-El setup de shell instala `fnm` y `pnpm`. Desde una nueva sesión de Fish:
+El instalador de terminal añade `fnm` y `pnpm`. Desde una nueva sesión de Fish:
 
 ```bash
 fnm install 24
@@ -69,14 +69,14 @@ ms-agent-kit
 
 Si pnpm indica que su directorio global no está en `PATH`, ejecuta `pnpm setup`, abre una terminal nueva y repite los dos últimos comandos.
 
-## Cómo verificar el workspace
+## Cómo verificar el espacio de trabajo
 
 | Componente | Comando | Resultado esperado |
 |---|---|---|
-| Shell | `dotfiles/install.sh --check` | Binarios, configuraciones, plugins y shell marcados como correctos |
+| Terminal | `dotfiles/install.sh --check` | Binarios, configuraciones, complementos e intérprete marcados como correctos |
 | Catálogo de IA | `ms-agent-kit doctor` | Catálogo y políticas válidos, sin errores |
 | Instalación de IA | `ms-agent-kit status --target all --scope user` | Archivos administrados presentes y sin modificaciones |
-| Desarrollo de IA | `pnpm --dir ms-agent-kit test` | Suite completa en verde |
+| Desarrollo de IA | `pnpm --dir ms-agent-kit test` | Conjunto completo de pruebas en verde |
 
 ## Seguridad y recuperación
 
@@ -85,13 +85,13 @@ Los dos instaladores preservan el estado anterior, pero utilizan mecanismos dist
 | Proyecto | Protección | Recuperación |
 |---|---|---|
 | `dotfiles` | Copia cada configuración existente como `<archivo>.backup` antes de reemplazarla | Restauración manual desde el archivo `.backup` |
-| `ms-agent-kit` | Mantiene estado de propiedad y backups con permisos `0600` en `.ms-agent-kit` | `uninstall` restaura archivos originales si no fueron modificados después |
+| `ms-agent-kit` | Mantiene el estado de propiedad y las copias de seguridad con permisos `0600` en `.ms-agent-kit` | `uninstall` restaura archivos originales si no fueron modificados después |
 
-Revisa siempre el diff o el plan antes de forzar reemplazos. Ningún proyecto está diseñado para almacenar credenciales, claves API o archivos `.env`.
+Revisa siempre las diferencias (`diff`) o el plan antes de forzar reemplazos. Ningún proyecto está diseñado para almacenar credenciales, claves API o archivos `.env`.
 
 ## Mantenimiento
 
-### Configuración de shell
+### Configuración de terminal
 
 Después de cambiar una configuración instalada:
 
@@ -103,7 +103,7 @@ git diff -- .
 
 ### Configuración de IA
 
-Después de cambiar el catálogo, adaptadores o CLI:
+Después de cambiar el catálogo, los adaptadores o la interfaz de consola (`CLI`):
 
 ```bash
 cd ms-agent-kit
@@ -123,4 +123,4 @@ toolkit/
 └── README.md       # Punto de entrada y orden recomendado
 ```
 
-Para requisitos, operaciones de recuperación y troubleshooting, consulta el README específico de cada proyecto.
+Para requisitos, operaciones de recuperación y solución de problemas, consulta el README específico de cada proyecto.

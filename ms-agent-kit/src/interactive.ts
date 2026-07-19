@@ -1,4 +1,5 @@
 import path from "node:path"
+import { styleText } from "node:util"
 import {
   cancel,
   confirm,
@@ -16,6 +17,7 @@ import {
 } from "@clack/prompts"
 import {
   TARGETS,
+  type InstallResult,
   type InstallScope,
   type ObsoleteAction,
   type PlanAction,
@@ -79,6 +81,45 @@ const changeLabels: Array<[Exclude<PlanAction | ObsoleteAction, "unchanged" | "c
   ["skip", "· Omitir"],
 ]
 
+type AppliedResult = "created" | "updated" | "adopted" | "removed" | "restored" | "detached"
+
+const appliedResultLabels: Array<[AppliedResult, string, PlanAction | ObsoleteAction]> = [
+  ["created", "+ Creados", "create"],
+  ["updated", "↻ Actualizados", "update"],
+  ["adopted", "◇ Adoptados", "adopt"],
+  ["removed", "− Obsoletos eliminados", "remove"],
+  ["restored", "↩ Restaurados", "restore"],
+  ["detached", "↪ Desvinculados", "detach"],
+]
+
+const ui = {
+  heading: (value: string): string => styleText("bold", value),
+  success: (value: string): string => styleText("green", value),
+  info: (value: string): string => styleText("cyan", value),
+  warning: (value: string): string => styleText("yellow", value),
+  danger: (value: string): string => styleText("red", value),
+  path: (value: string): string => styleText(["cyan", "dim"], value),
+}
+
+function styleChange(action: PlanAction | ObsoleteAction, value: string): string {
+  switch (action) {
+    case "create":
+    case "adopt":
+    case "restore":
+      return ui.success(value)
+    case "update":
+    case "detach":
+      return ui.info(value)
+    case "remove":
+    case "skip":
+      return ui.warning(value)
+    case "conflict":
+      return ui.danger(value)
+    case "unchanged":
+      return ui.success(value)
+  }
+}
+
 function displayPath(value: string, homeDir: string): string {
   const relative = path.relative(path.resolve(homeDir), path.resolve(value))
   if (relative === "") return "~"
@@ -99,33 +140,37 @@ export function plannedChangeCount(counts: PlanSummaryCounts): number {
 export function formatInstallSummary(summary: InteractivePlanSummary): string {
   const changes = changeLabels
     .filter(([action]) => summary.counts[action] > 0)
-    .map(([action, label]) => `  ${label} · ${summary.counts[action]}`)
+    .map(([action, label]) => `  ${styleChange(action, `${label} · ${summary.counts[action]}`)}`)
   const scope =
     summary.scope === "user"
-      ? ["  Usuario (global)"]
-      : ["  Proyecto", `  ${displayPath(summary.projectRoot, summary.homeDir)}`]
+      ? [`  ${ui.info("Usuario (global)")}`]
+      : [`  ${ui.info("Proyecto")}`, `  ${ui.path(displayPath(summary.projectRoot, summary.homeDir))}`]
   const body = [
-    "Clientes",
-    ...summary.targets.map((target) => `  ✓ ${targetLabels[target]}`),
+    ui.heading("Clientes"),
+    ...summary.targets.map((target) => `  ${ui.success(`✓ ${targetLabels[target]}`)}`),
     "",
-    "Destino",
+    ui.heading("Destino"),
     ...scope,
   ]
 
   if (!planNeedsConfirmation(summary.counts)) {
     const files = summary.counts.unchanged === 1 ? "1 archivo sin cambios" : `${summary.counts.unchanged} archivos sin cambios`
-    body.push("", "Estado", "  ✓ Todo está actualizado", `  ${files}`)
+    body.push("", ui.heading("Estado"), `  ${ui.success("✓ Todo está actualizado")}`, `  ${files}`)
   } else {
-    body.push("", "Cambios que se aplicarán")
+    body.push("", ui.heading("Cambios que se aplicarán"))
     body.push(...(changes.length > 0 ? changes : ["  · Ninguno hasta resolver los conflictos"]))
-    if (summary.counts.conflict === 0) body.push("  ✓ Sin conflictos")
+    if (summary.counts.conflict === 0) body.push(`  ${ui.success("✓ Sin conflictos")}`)
   }
 
   if (summary.counts.conflict > 0) {
-    body.push("", "Conflictos", `  ! Requieren atención · ${summary.counts.conflict}`)
+    body.push(
+      "",
+      ui.heading("Conflictos"),
+      `  ${styleChange("conflict", `! Requieren atención · ${summary.counts.conflict}`)}`,
+    )
   }
 
-  body.push("", "Registro", `  ${displayPath(summary.statePath, summary.homeDir)}`)
+  body.push("", ui.heading("Registro"), `  ${ui.path(displayPath(summary.statePath, summary.homeDir))}`)
   return body.join("\n")
 }
 
@@ -133,11 +178,38 @@ export function showInstallSummary(
   summary: InteractivePlanSummary,
   driver: InteractiveDriver = clackDriver,
 ): void {
-  driver.note(formatInstallSummary(summary), "Resumen de instalación")
+  driver.note(formatInstallSummary(summary), ui.info("Resumen de instalación"))
 }
 
 export function finishWithoutChanges(driver: InteractiveDriver = clackDriver): void {
   driver.outro("No hay cambios que aplicar")
+}
+
+export function formatInstallResult(result: InstallResult, homeDir: string): string {
+  const applied = appliedResultLabels
+    .filter(([key]) => result[key] > 0)
+    .map(([key, label, action]) => `  ${styleChange(action, `${label} · ${result[key]}`)}`)
+  const body = [ui.heading("Cambios aplicados"), ...applied]
+
+  if (result.unchanged > 0) {
+    body.push("", ui.heading("Conservados"), `  ${ui.success(`✓ Sin cambios · ${result.unchanged}`)}`)
+  }
+
+  if (result.skipped > 0) {
+    body.push("", ui.heading("Requieren revisión"), `  ${ui.warning(`! Omitidos · ${result.skipped}`)}`)
+  }
+
+  body.push("", ui.heading("Registro"), `  ${ui.path(displayPath(result.statePath, homeDir))}`)
+  return body.join("\n")
+}
+
+export function showInstallResult(
+  result: InstallResult,
+  homeDir: string,
+  driver: InteractiveDriver = clackDriver,
+): void {
+  driver.note(formatInstallResult(result, homeDir), ui.success("Instalación completada"))
+  driver.outro(ui.success("Configuración lista"))
 }
 
 function stop(message: string, driver: InteractiveDriver): null {

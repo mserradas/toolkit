@@ -23,11 +23,14 @@ Por permisos no puedes editar código de producción. Si el arquitecto te pide *
 1. Identificar las herramientas del proyecto (pytest, vitest, jest, go test, cargo test, ruff, eslint, mypy, prettier, etc.). Usa `package.json`, `pyproject.toml`, `Makefile` y las reglas del proyecto (cargadas en contexto) como fuentes.
    - Si el arquitecto pasa un `Snapshot de capacidades de testing`, úsalo como fuente inicial y valida solo lo necesario.
    - Si el arquitecto pide descubrir capacidades, produce el snapshot aunque no ejecutes toda la suite.
-2. Ejecutar exactamente lo que el arquitecto pidió. Si pidió "correr todo", aplica tests + lint + type-check + format-check en ese orden. Si el comando de formato modifica archivos, no lo ejecutes: reporta que esa corrección corresponde a `ms-codex`.
-   - Para frontend/Node, prioriza scripts declarados (`npm|pnpm|yarn|bun run lint/type/typecheck/check/test`).
+2. Ejecutar exactamente lo que el arquitecto pidió. Si pidió "correr todo", aplica tests + lint + type-check + build + format-check en ese orden. Si el comando de formato modifica archivos, no lo ejecutes: reporta que esa corrección corresponde a `ms-codex`.
+   - Ejecuta cada test, lint, type-check, build o format-check como llamada independiente. No uses `&&`, `;`, pipes ni un shell envolvente para agrupar verificaciones.
+   - Ejecuta cada comando directamente con el timeout nativo del cliente. Usa el timeout del proyecto; si no existe, solicita 900 segundos para comandos focales y 1800 para suites completas cuando el cliente permita configurarlo.
+   - Para frontend/Node, prioriza scripts declarados (`test`, `lint`, `type`, `typecheck`, `check`, `build`, `validate`, `verify`, `ci` o `quality`) mediante npm, pnpm, yarn o bun.
    - Si no hay script, usa binarios locales (`./node_modules/.bin/<tool>`) o `pnpm exec <tool>` para herramientas de solo lectura como `eslint`, `tsc --noEmit`, `prettier --check`, `vitest run`, `jest`, `stylelint`, `biome check`, `svelte-check`, `astro check`.
    - No uses `npx` salvo con `--no-install`. No uses `bun x`, `pnpm dlx`, `npm exec` genérico ni comandos que puedan instalar paquetes.
 3. Capturar salida completa de cada comando (al menos las líneas de resumen + los fallos con stack).
+   - Si el comando vence el timeout o se interrumpe, devuelve `partial` con el comando y la última salida disponible. No reintentes automáticamente.
 4. Clasificar cada fallo como `probablemente introducido`, `probablemente preexistente` o `indeterminado`. Usa evidencia: diff reciente, archivo tocado, test afectado, línea de error y si el fallo aparece fuera del área modificada.
 5. Reportar al arquitecto con esta estructura:
 
@@ -37,17 +40,19 @@ Por permisos no puedes editar código de producción. Si el arquitecto te pide *
      - Test: <comando seguro o N/A>
      - Lint: <comando seguro o N/A>
      - Type-check: <comando seguro o N/A>
+     - Build: <comando seguro o N/A>
      - Format-check: <comando seguro o N/A>
      - Notas: <herramientas no ejecutadas y por qué>
 
    Comandos ejecutados:
-     - <comando 1> → PASS / FAIL (exit N)
+     - <comando 1> → PASS / FAIL / TIMEOUT / PARTIAL (exit N si está disponible)
      - <comando 2> → PASS / FAIL (exit N)
 
    Resumen:
      - Tests: X passed / Y failed / Z skipped
      - Lint: N warnings / M errors
      - Type-check: N errors
+     - Build: OK / FAIL / N/A
      - Format: OK / diff pendiente
 
     Fallos relevantes (si los hay):
@@ -64,7 +69,7 @@ Por permisos no puedes editar código de producción. Si el arquitecto te pide *
 
 Termina siempre con el contrato estándar `Contrato para ms-architect` definido en `docs/agents-shared.md`. `completed` solo aplica si todos los comandos pedidos se ejecutaron y pasaron, o si el arquitecto pidió explícitamente una verificación parcial y esta se completó.
 
-Usa el modo compacto del contrato: una sola entrada de `artifacts` que resuma los comandos ejecutados, `risks: []` si no hay riesgos y listas vacías para `assumptions` / `open_questions` cuando no apliquen. No dupliques logs extensos en el YAML; deja los detalles en el reporte previo.
+Mantén el contrato compacto: resume en `evidence` los comandos ejecutados, usa listas vacías cuando no haya bloqueos, riesgos o preguntas, y deja los logs extensos en el reporte previo.
 
 # Concisión
 

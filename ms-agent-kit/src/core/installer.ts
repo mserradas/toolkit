@@ -44,7 +44,7 @@ async function rollback(entries: RollbackEntry[]): Promise<void> {
       errors.push(error as Error)
     }
   }
-  if (errors.length > 0) throw new AggregateError(errors, "Fallo el rollback de la instalacion")
+  if (errors.length > 0) throw new AggregateError(errors, "Falló la reversión de la instalación")
 }
 
 async function createOriginal(
@@ -66,7 +66,7 @@ export async function applyPlan(
 ): Promise<InstallResult> {
   const conflicts = plan.items.filter((item) => item.action === "conflict")
   if (conflicts.length > 0) {
-    throw new Error(`La instalacion tiene ${conflicts.length} conflicto(s); ejecuta plan o usa --force`)
+    throw new Error(`La instalación tiene ${conflicts.length} conflicto(s); ejecuta \`plan\` o usa \`--force\``)
   }
 
   const state = await readState(context)
@@ -87,7 +87,7 @@ export async function applyPlan(
     for (const item of plan.items) {
       const current = await readExistingFile(item.artifact.destination)
       if (!sameSnapshot(current, item.currentHash)) {
-        throw new Error(`El destino cambio despues del plan: ${item.artifact.destination}`)
+        throw new Error(`El destino cambió después del plan: ${item.artifact.destination}`)
       }
 
       const previous = files.get(item.artifact.destination)
@@ -178,7 +178,7 @@ export async function applyPlan(
       assertPathWithin(obsolete.file.root, obsolete.file.path)
       const current = await readExistingFile(obsolete.file.path)
       if (!sameSnapshot(current, obsolete.currentHash)) {
-        throw new Error(`El destino cambio despues del plan: ${obsolete.file.path}`)
+        throw new Error(`El destino cambió después del plan: ${obsolete.file.path}`)
       }
       rollbackEntries.push({
         root: obsolete.file.root,
@@ -187,7 +187,7 @@ export async function applyPlan(
       })
       if (obsolete.action === "restore") {
         if (!obsolete.file.original.backupPath) {
-          throw new Error(`Falta la ruta del backup original: ${obsolete.file.path}`)
+          throw new Error(`Falta la ruta de la copia de seguridad original: ${obsolete.file.path}`)
         }
         assertPathWithin(plan.stateDir, obsolete.file.original.backupPath)
         const backup = await readFile(obsolete.file.original.backupPath)
@@ -217,7 +217,7 @@ export async function applyPlan(
     try {
       await rollback(rollbackEntries)
     } catch (rollbackError) {
-      throw new AggregateError([error as Error, rollbackError as Error], "Instalacion y rollback fallaron")
+      throw new AggregateError([error as Error, rollbackError as Error], "Fallaron la instalación y la reversión")
     }
     throw error
   }
@@ -273,7 +273,7 @@ export async function uninstallTargets(
       assertPathWithin(file.root, file.path)
       const current = await readExistingFile(file.path)
       if (current && current.hash !== file.afterHash) {
-        skipped.push({ path: file.path, reason: "modificado despues de instalar" })
+        skipped.push({ path: file.path, reason: "modificado después de instalar" })
         keep.push(file)
         continue
       }
@@ -281,7 +281,7 @@ export async function uninstallTargets(
       rollbackEntries.push({ root: file.root, path: file.path, before: current })
       if (file.original.existed) {
         if (!file.original.backupPath) {
-          skipped.push({ path: file.path, reason: "falta la ruta del backup original" })
+          skipped.push({ path: file.path, reason: "falta la ruta de la copia de seguridad original" })
           keep.push(file)
           rollbackEntries.pop()
           continue
@@ -292,7 +292,7 @@ export async function uninstallTargets(
           backup = await readFile(file.original.backupPath)
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-            skipped.push({ path: file.path, reason: "backup original ausente" })
+            skipped.push({ path: file.path, reason: "copia de seguridad original ausente" })
             keep.push(file)
             rollbackEntries.pop()
             continue
@@ -317,7 +317,7 @@ export async function uninstallTargets(
     try {
       await rollback(rollbackEntries)
     } catch (rollbackError) {
-      throw new AggregateError([error as Error, rollbackError as Error], "Desinstalacion y rollback fallaron")
+      throw new AggregateError([error as Error, rollbackError as Error], "Fallaron la desinstalación y la reversión")
     }
     throw error
   }

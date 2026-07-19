@@ -15,7 +15,7 @@ export function parseMarkdown(input: string): MarkdownDocument {
 
   const parsed = YAML.parse(match[1] ?? "")
   if (parsed !== null && (typeof parsed !== "object" || Array.isArray(parsed))) {
-    throw new Error("El frontmatter debe ser un objeto YAML")
+    throw new Error("La cabecera `frontmatter` debe ser un objeto YAML")
   }
 
   return {

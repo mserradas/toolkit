@@ -1,11 +1,14 @@
 import path from "node:path"
+import { stripVTControlCharacters } from "node:util"
 import { describe, expect, it } from "vitest"
 import {
   finishWithoutChanges,
+  formatInstallResult,
   plannedChangeCount,
   planNeedsConfirmation,
   promptConfirmation,
   promptInstallOptions,
+  showInstallResult,
   showInstallSummary,
   type InteractiveDriver,
   type PlanSummaryCounts,
@@ -36,8 +39,11 @@ function fakeDriver(...answers: Answer[]): {
     driver: {
       intro: () => undefined,
       cancel: (message) => cancelled.push(message),
-      note: (message, title) => notes.push({ message, title }),
-      outro: (message) => outros.push(message),
+      note: (message, title) => notes.push({
+        message: message === undefined ? undefined : stripVTControlCharacters(message),
+        title: title === undefined ? undefined : stripVTControlCharacters(title),
+      }),
+      outro: (message) => outros.push(stripVTControlCharacters(message)),
       isCancel: (value): value is symbol => typeof value === "symbol",
       multiselect: () => next<Target[] | symbol>(),
       select: () => next<InstallScope | symbol>(),
@@ -167,6 +173,101 @@ describe("interactive installer prompts", () => {
     expect(notes[0]?.message).not.toContain("Conflictos")
     expect(notes[0]?.message).toContain("~/.ms-agent-kit/state.json")
     expect(outros).toEqual(["No hay cambios que aplicar"])
+  })
+
+  it("renders the final result vertically and hides zero counters", () => {
+    const { driver, notes, outros } = fakeDriver()
+
+    showInstallResult(
+      {
+        created: 6,
+        updated: 60,
+        adopted: 0,
+        unchanged: 36,
+        removed: 0,
+        restored: 0,
+        detached: 0,
+        skipped: 0,
+        statePath: "/Users/example/.ms-agent-kit/state.json",
+      },
+      "/Users/example",
+      driver,
+    )
+
+    expect(notes).toEqual([
+      {
+        title: "Instalación completada",
+        message: [
+          "Cambios aplicados",
+          "  + Creados · 6",
+          "  ↻ Actualizados · 60",
+          "",
+          "Conservados",
+          "  ✓ Sin cambios · 36",
+          "",
+          "Registro",
+          "  ~/.ms-agent-kit/state.json",
+        ].join("\n"),
+      },
+    ])
+    expect(notes[0]?.message).not.toContain("Adoptados")
+    expect(notes[0]?.message).not.toContain("Omitidos")
+    expect(outros).toEqual(["Configuración lista"])
+  })
+
+  it("highlights skipped files that require review", () => {
+    const { driver, notes } = fakeDriver()
+
+    showInstallResult(
+      {
+        created: 1,
+        updated: 0,
+        adopted: 0,
+        unchanged: 0,
+        removed: 0,
+        restored: 0,
+        detached: 0,
+        skipped: 2,
+        statePath: "/workspace/.ms-agent-kit/state.json",
+      },
+      "/Users/example",
+      driver,
+    )
+
+    expect(notes[0]?.message).toContain("Requieren revisión\n  ! Omitidos · 2")
+  })
+
+  it("uses semantic colors when the terminal supports them", () => {
+    const previousForceColor = process.env.FORCE_COLOR
+    const previousNoColor = process.env.NO_COLOR
+    process.env.FORCE_COLOR = "1"
+    delete process.env.NO_COLOR
+
+    try {
+      const output = formatInstallResult(
+        {
+          created: 1,
+          updated: 2,
+          adopted: 0,
+          unchanged: 0,
+          removed: 0,
+          restored: 0,
+          detached: 0,
+          skipped: 3,
+          statePath: "/workspace/.ms-agent-kit/state.json",
+        },
+        "/Users/example",
+      )
+
+      expect(output).toContain("\u001b[32m+ Creados · 1\u001b[39m")
+      expect(output).toContain("\u001b[36m↻ Actualizados · 2\u001b[39m")
+      expect(output).toContain("\u001b[33m! Omitidos · 3\u001b[39m")
+    } finally {
+      if (previousForceColor === undefined) delete process.env.FORCE_COLOR
+      else process.env.FORCE_COLOR = previousForceColor
+      if (previousNoColor === undefined) delete process.env.NO_COLOR
+      else process.env.NO_COLOR = previousNoColor
+    }
   })
 
   it("counts only changes that will actually be applied", () => {

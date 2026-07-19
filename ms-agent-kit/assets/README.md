@@ -9,7 +9,6 @@ Solo contiene estas superficies portables:
 - `skills/*/SKILL.md` y sus archivos auxiliares
 - `docs/agents-shared.md`
 - `docs/agents.md`
-- `plugins/ms-model-variants.ts`
 - `config/tui.json`
 - `config/package.json`
 - `config/opencode-notifier.json`

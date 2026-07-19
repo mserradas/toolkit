@@ -1,3 +1,5 @@
+import type { PermissionProfile } from "./types.js"
+
 export type OpenCodeRolePermission = Record<string, unknown>
 
 // Politicas funcionales por rol. Las denegaciones de secretos se aplican aparte.
@@ -26,9 +28,6 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "opencode debug agent *": "allow",
       "opencode debug skill": "allow"
     },
-    "ms_workflow_status": "allow",
-    "ms_workflow_next": "allow",
-    "ms_review_fingerprint": "allow",
     "webfetch": "allow",
     "websearch": "deny",
     "todowrite": "deny",
@@ -51,7 +50,6 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
   },
   "ms-codex": {
     "edit": "allow",
-    "ms_skill_registry_refresh": "allow",
     "bash": {
       "*": "ask",
       "ls": "allow",
@@ -193,15 +191,15 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "curl *| bash*": "deny",
       "wget *| sh*": "deny",
       "wget *| bash*": "deny",
-      "bash -c *curl*": "ask",
-      "sh -c *curl*": "ask",
-      "base64 -d *": "ask",
-      "base64 --decode *": "ask",
-      "nc *": "ask",
-      "netcat *": "ask",
-      "ssh *": "ask",
-      "scp *": "ask",
-      "git push*": "ask",
+      "bash -c *curl*": "deny",
+      "sh -c *curl*": "deny",
+      "base64 -d *": "deny",
+      "base64 --decode *": "deny",
+      "nc *": "deny",
+      "netcat *": "deny",
+      "ssh *": "deny",
+      "scp *": "deny",
+      "git push*": "deny",
       "git push --force*": "deny",
       "git push -f*": "deny",
       "git reset --hard*": "deny",
@@ -236,9 +234,9 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "cargo remove*": "ask",
       "go get*": "ask",
       "go install*": "ask",
-      "brew install*": "ask",
-      "apt install*": "ask",
-      "apt-get install*": "ask"
+      "brew install*": "deny",
+      "apt install*": "deny",
+      "apt-get install*": "deny"
     },
     "webfetch": "allow",
     "websearch": "deny",
@@ -252,7 +250,7 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
   "ms-debugger": {
     "edit": "deny",
     "bash": {
-      "*": "ask",
+      "*": "deny",
       "ls *": "allow",
       "ls": "allow",
       "pwd": "allow",
@@ -282,13 +280,13 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "node --version": "allow",
       "npm --version": "allow",
       "npm ls*": "allow",
-      "npm run *": "ask",
-      "pnpm run *": "ask",
-      "pnpm exec *": "ask",
-      "yarn run *": "ask",
-      "yarn *": "ask",
-      "bun run *": "ask",
-      "make *": "ask",
+      "npm run *": "deny",
+      "pnpm run *": "deny",
+      "pnpm exec *": "deny",
+      "yarn run *": "deny",
+      "yarn *": "deny",
+      "bun run *": "deny",
+      "make *": "deny",
       "npm test*": "allow",
       "npm run test*": "allow",
       "npm run lint*": "allow",
@@ -426,7 +424,7 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
   "ms-fastlane": {
     "edit": "allow",
     "bash": {
-      "*": "ask",
+      "*": "deny",
       "ls": "allow",
       "ls *": "allow",
       "pwd": "allow",
@@ -578,10 +576,16 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
   "ms-progress": {
     "edit": {
       "*": "deny",
-      "docs/status/*.md": "allow",
-      "docs/status/**/*.md": "allow"
+      ".atl/status/*.md": "allow",
+      ".atl/status/**/*.md": "allow",
+      ".gitignore": "allow"
     },
-    "bash": "deny",
+    "bash": {
+      "*": "deny",
+      "mkdir -p .atl/status": "allow",
+      "git check-ignore .atl": "allow",
+      "rm .atl/status/*-progress.md": "allow"
+    },
     "webfetch": "deny",
     "websearch": "deny",
     "todowrite": "deny",
@@ -716,7 +720,7 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
   "ms-tester": {
     "edit": "deny",
     "bash": {
-      "*": "ask",
+      "*": "deny",
       "ls": "allow",
       "ls *": "allow",
       "pwd": "allow",
@@ -743,6 +747,11 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "npm run type*": "allow",
       "npm run typecheck*": "allow",
       "npm run check*": "allow",
+      "npm run build*": "allow",
+      "npm run validate*": "allow",
+      "npm run verify*": "allow",
+      "npm run ci*": "allow",
+      "npm run quality*": "allow",
       "npm run eslint*": "allow",
       "npm run format:check*": "allow",
       "pnpm --version": "allow",
@@ -757,6 +766,11 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "pnpm run type*": "allow",
       "pnpm run typecheck*": "allow",
       "pnpm run check*": "allow",
+      "pnpm run build*": "allow",
+      "pnpm run validate*": "allow",
+      "pnpm run verify*": "allow",
+      "pnpm run ci*": "allow",
+      "pnpm run quality*": "allow",
       "pnpm run eslint*": "allow",
       "pnpm run format:check*": "allow",
       "pnpm exec eslint*": "allow",
@@ -778,6 +792,11 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "yarn run type*": "allow",
       "yarn run typecheck*": "allow",
       "yarn run check*": "allow",
+      "yarn run build*": "allow",
+      "yarn run validate*": "allow",
+      "yarn run verify*": "allow",
+      "yarn run ci*": "allow",
+      "yarn run quality*": "allow",
       "yarn run eslint*": "allow",
       "yarn run format:check*": "allow",
       "yarn eslint*": "allow",
@@ -794,6 +813,11 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "bun run type*": "allow",
       "bun run typecheck*": "allow",
       "bun run check*": "allow",
+      "bun run build*": "allow",
+      "bun run validate*": "allow",
+      "bun run verify*": "allow",
+      "bun run ci*": "allow",
+      "bun run quality*": "allow",
       "bun run eslint*": "allow",
       "bun run format:check*": "allow",
       "eslint*": "allow",
@@ -874,6 +898,7 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "go version": "allow",
       "go test*": "allow",
       "go vet*": "allow",
+      "go build*": "allow",
       "mvn test*": "allow",
       "mvn -q test*": "allow",
       "mvn verify*": "allow",
@@ -890,6 +915,7 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "cargo test*": "allow",
       "cargo check*": "allow",
       "cargo clippy*": "allow",
+      "cargo build*": "allow",
       "cargo fmt --check*": "allow",
       "make test*": "allow",
       "PYTEST_ADDOPTS=* make test*": "allow",
@@ -900,6 +926,11 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "make lint*": "allow",
       "make type*": "allow",
       "make check*": "allow",
+      "make build*": "allow",
+      "make validate*": "allow",
+      "make verify*": "allow",
+      "make ci*": "allow",
+      "make quality*": "allow",
       "make format-check*": "allow",
       "rm -rf*": "deny",
       "rm -fr*": "deny",
@@ -991,8 +1022,56 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
   }
 }
 
-export function openCodeRolePermission(name: string): OpenCodeRolePermission {
+const BALANCED_WEBSEARCH_AGENTS = new Set([
+  "ms-architect",
+  "ms-debugger",
+  "ms-designer",
+  "ms-discovery",
+  "ms-plan",
+  "ms-scout",
+  "ms-security-auditor",
+  "ms-spec",
+  "ms-writer",
+])
+
+function trustedBash(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([pattern, action]) => [
+      pattern,
+      action === "ask" ? "allow" : action,
+    ]),
+  )
+}
+
+function applyPermissionProfile(
+  name: string,
+  permission: OpenCodeRolePermission,
+  profile: PermissionProfile,
+): OpenCodeRolePermission {
+  if (profile === "strict") return permission
+
+  const balanced: OpenCodeRolePermission = {
+    ...permission,
+    todowrite: "allow",
+    lsp: "allow",
+    skill: "allow",
+    websearch: BALANCED_WEBSEARCH_AGENTS.has(name) ? "allow" : permission.websearch,
+  }
+  if (profile === "balanced") return balanced
+
+  return {
+    ...balanced,
+    bash: trustedBash(balanced.bash),
+    websearch: "allow",
+  }
+}
+
+export function openCodeRolePermission(
+  name: string,
+  profile: PermissionProfile = "balanced",
+): OpenCodeRolePermission {
   const permission = ROLE_PERMISSIONS[name]
-  if (!permission) throw new Error(`No hay politica OpenCode para el agente ${name}`)
-  return permission
+  if (!permission) throw new Error(`No hay una política de OpenCode para el agente ${name}`)
+  return applyPermissionProfile(name, permission, profile)
 }

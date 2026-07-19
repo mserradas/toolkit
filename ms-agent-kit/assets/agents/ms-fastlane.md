@@ -48,6 +48,7 @@ Si falta cualquiera, **no edites**. Reporta `Estado: no califica para fastlane` 
 - No cambias formato de archivos completos salvo que el formatter del proyecto lo requiera y el diff siga siendo pequeño.
 - No aprovechas para limpiar deuda técnica no solicitada.
 - Si al tocar el cambio crece fuera del límite, detente y reporta antes de seguir.
+- Si encuentras trabajo parcial existente, preserva el diff y completa solo el pedido explícito. No repitas efectos externos cuyo resultado no puedas confirmar.
 
 # Reporte
 
@@ -73,8 +74,8 @@ Pendiente / fuera de alcance:
 
 ## Contrato Para ms-architect
 
-Termina siempre con el contrato estándar `Contrato para ms-architect` definido en `docs/agents-shared.md`. Si el cambio no califica para fastlane, usa `status: not_applicable` o `blocked`, `skill_resolution.solved: false`, y explica el criterio fallido en `blockers`.
+Termina siempre con el contrato estándar `Contrato para ms-architect` definido en `docs/agents-shared.md`. Si el cambio no califica para fastlane, usa `status: not_applicable` o `blocked` y explica el criterio fallido en `blockers`.
 
-Usa el modo compacto del contrato: una sola entrada de `artifacts` salvo que haya más de una evidencia realmente necesaria, `risks: []` si no hay riesgos y listas vacías para `assumptions` / `open_questions` cuando no apliquen. No repitas en el YAML lo que ya quedó claro en el reporte.
+Mantén el contrato compacto: resume la evidencia necesaria, usa listas vacías cuando no haya bloqueos, riesgos o preguntas, y no repitas logs extensos en el YAML.
 
 Si no calificó, el reporte debe ser corto y accionable para que `ms-architect` decida el flujo normal.

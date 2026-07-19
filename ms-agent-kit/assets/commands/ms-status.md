@@ -1,5 +1,5 @@
 ---
-description: Muestra estado de solo lectura del workflow ms-* actual
+description: Muestra el estado actual sin continuar el trabajo
 agent: ms-architect
 ---
 
@@ -7,92 +7,38 @@ Eres `ms-architect` ejecutando `/ms-status`. Este comando es de solo lectura.
 
 Argumento: `$ARGUMENTS`
 
-## Objetivo
-
-Devuelve un estado operativo estructurado de la tarea, feature, cambio, PRD/spec/TDD, paquete o diff actual. No inicies trabajo nuevo.
-
-Si `$ARGUMENTS` viene informado, trátalo como slug, ruta, id de paquete o tema a inspeccionar.
-
-Si `$ARGUMENTS` está vacío, infiere el objetivo probable solo desde la conversación activa, contexto de tarea abierto, git diff y artefactos cercanos. Si hay más de un objetivo plausible, pide al usuario que elija y detente.
-
-## Reglas De Solo Lectura
-
-- No edites archivos.
-- No crees artefactos.
-- No ejecutes tests, linters, formatters, builds, dev servers, migraciones, instalaciones, commits, pushes ni comandos mutantes.
-- No invoques `ms-codex`, `ms-fastlane`, `ms-designer`, `ms-spec`, `ms-writer`, `ms-tester`, `ms-debugger`, `ms-scout` ni `ms-security-auditor`.
-- No continúes implementación, verificación, documentación, archive ni fixes.
-- Usa solo lectura/glob/grep y comandos bash de solo lectura ya permitidos a `ms-architect`.
-- Si el estado no puede resolverse con seguridad, devuelve `Estado: bloqueado` con la información faltante.
-
 ## Inspección
 
-Usa la mínima inspección de solo lectura necesaria:
-
-- Si existe `ms_workflow_status`, invócala primero con `requested: "$ARGUMENTS"` cuando haya argumento o sin `requested` cuando no lo haya.
-- Si devuelve `structured: true`, esa salida es autoritativa para fase, nivel, estado, paquete, artefactos y próxima acción. No los reinfieras desde prosa.
-- Si la herramienta no existe, valida directamente el frontmatter de `docs/status/<slug>-progress.md` contra `ms-progress/v1`. Solo considera alta la confianza si están presentes y son coherentes `schema`, `slug`, `phase`, `level`, `status`, `active_package`, `next_action`, `blocked`, `artifacts` y `updated_at`.
-- Si no encuentra un ledger, es legacy o el contrato estructurado es inválido, aplica la inspección de abajo y declara confianza baja.
-- Workspace root y estado git: `pwd`, `git rev-parse`, `git status`, `git diff --name-only`, `git diff --stat`.
-- Artefactos existentes: `docs/prd/**`, `docs/spec/**`, `docs/design/**`, `docs/status/**`.
-- Si existe `docs/status/<slug>-progress.md`, trátalo como fuente primaria de progreso operativo.
-- Si existe `## Recibos De Revisión`, resume recibos vigentes, obsoletos y fallidos.
-- Archivos modificados relevantes, si existen, mediante read/glob/grep.
-- Comandos de verificación solo si ya aparecen en TDD/spec, reportes previos, package scripts o docs del repo. No los ejecutes.
+1. Si hay un slug o ruta, busca su checkpoint en `.atl/status/**`.
+2. Si no hay argumento, usa el único checkpoint existente o el contexto actual; pregunta si hay varios candidatos.
+3. Valida el contrato simple: `schema`, `slug`, `status`, `objective`, `next_action`, `completed`, `pending`, `files`, `risks` y `updated_at`.
+4. Contrasta con `git status`, `git diff --name-only` y `git diff --stat` sin ejecutar tests ni modificar archivos.
+5. Si no hay checkpoint, informa el estado inferible desde Git y los artefactos durables con confianza baja.
 
 ## Salida
-
-Devuelve esta forma:
 
 ```text
 ## Estado MS
 
-Estado:
-  Fase actual: respuesta-directa | fastlane | spec | TDD | implementacion | verificacion | review | documentacion | cierre | desconocida
-  Nivel: 0 | 1 | 2 | 3 | 4 | desconocido
-  Objetivo: <slug/path/package/diff/conversation>
-  Confianza: alta | media | baja
+Objetivo: <slug o descripción>
+Checkpoint: <ruta | no encontrado>
+Estado: <in_progress | blocked | desconocido>
+Confianza: <alta | media | baja>
 
-Artefactos:
-  PRD: <path | N/A | no encontrado>
-  Spec: <path | N/A | no encontrado>
-  TDD: <path | N/A | no encontrado>
-  Progreso: <path | N/A | no encontrado>
-  Paquete activo: <P# | N/A | desconocido>
+Completado:
+- <items o ninguno>
 
-Trabajo:
-  Completado:
-    - <items o ninguno>
-  Pendiente:
-    - <items o ninguno>
-  Bloqueos:
-    - <items o ninguno>
+Pendiente:
+- <items o ninguno>
 
-Diff / repo:
-  Estado git: <limpio | cambios sin commit | no es git | desconocido>
-  Archivos cambiados:
-    - <paths o ninguno>
-
-Verificacion:
-  Comandos conocidos:
-    - <commands o ninguno>
-  Ejecutado en esta sesion:
-    - <commands o no detectado>
-  Pendiente:
-    - <commands/checks o ninguno>
-
-Recibos de revisión:
-  Vigentes:
-    - <R# alcance/huella o ninguno>
-  Obsoletos/fallidos:
-    - <R# razon o ninguno>
+Archivos relevantes:
+- <paths o ninguno>
 
 Riesgos:
-  - <riesgos reales o ninguno>
+- <riesgos o ninguno>
 
-Proxima accion recomendada:
-  - <ask_user | create_spec | create_tdd | implement_package | verify | review | document | archive_spec | close | stop>
-  - Razon: <una linea>
+Próxima acción:
+- <una acción concreta | desconocida>
 ```
 
-Sé conciso. No incluyas un plan largo salvo que el estado revele un bloqueo o ambigüedad real.
+No continúes el trabajo ni crees un checkpoint desde este comando.

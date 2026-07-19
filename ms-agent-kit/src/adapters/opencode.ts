@@ -7,7 +7,6 @@ import {
   OPENCODE_SECRET_READ_RULES,
 } from "../core/permissions.js"
 import { openCodeRolePermission } from "../core/opencode-role-permissions.js"
-import { restrictOpenCodeSkillPermission } from "../core/skill-visibility.js"
 import type { Artifact, BuildContext, Catalog } from "../core/types.js"
 import {
   copySkillArtifacts,
@@ -33,6 +32,17 @@ function configRootFor(context: BuildContext): string {
   return context.scope === "user" ? rootFor(context) : context.projectRoot
 }
 
+function appendPermissionRules(
+  current: unknown,
+  trailingRules: Record<string, string>,
+): Record<string, unknown> {
+  const base =
+    typeof current === "object" && current !== null && !Array.isArray(current)
+      ? (current as Record<string, unknown>)
+      : { "*": current ?? "allow" }
+  return { ...base, ...trailingRules }
+}
+
 function openCodeConfig(): string {
   const defaultAgent = agentDefinition(OPENCODE_DEFAULT_AGENT)
   const defaultModel = modelProfile(defaultAgent.modelProfile)
@@ -45,11 +55,7 @@ function openCodeConfig(): string {
       permission: {
         bash: OPENCODE_SECRET_BASH_RULES,
         read: OPENCODE_SECRET_READ_RULES,
-        skill: restrictOpenCodeSkillPermission("allow"),
-        ms_skill_registry_refresh: "deny",
-        ms_workflow_status: "deny",
-        ms_workflow_next: "deny",
-        ms_review_fingerprint: "deny",
+        skill: "allow",
       },
       mcp: {
         context7: {
@@ -67,35 +73,24 @@ function openCodeConfig(): string {
   )}\n`
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function secureRule(
-  current: unknown,
-  denials: Record<string, unknown>,
-): Record<string, unknown> | "deny" {
-  if (current === "deny") return "deny"
-  if (isRecord(current)) return { ...current, ...denials }
-  if (current === "allow" || current === "ask") return { "*": current, ...denials }
-  return { ...denials }
-}
-
 function secureFrontmatter(
   agentName: string,
   frontmatter: Record<string, unknown>,
+  context: BuildContext,
 ): Record<string, unknown> {
   if (frontmatter.permission !== undefined) {
-    throw new Error(`El asset ${agentName} no debe definir permission; usa la politica central`)
+    throw new Error(`El recurso (asset) ${agentName} no debe definir \`permission\`; usa la política central`)
   }
-  const currentPermission = openCodeRolePermission(agentName)
+  const currentPermission = openCodeRolePermission(agentName, context.permissionProfile ?? "balanced")
   return {
     ...frontmatter,
     permission: {
       ...currentPermission,
-      skill: restrictOpenCodeSkillPermission(currentPermission.skill),
-      read: secureRule(currentPermission.read, OPENCODE_SECRET_READ_RULES),
-      bash: secureRule(currentPermission.bash, OPENCODE_SECRET_BASH_RULES),
+      bash: appendPermissionRules(currentPermission.bash, OPENCODE_SECRET_BASH_RULES),
+      read: { ...OPENCODE_SECRET_READ_RULES },
+      // Evita que OpenCode prolongue automaticamente una ejecucion que ya esta atascada.
+      doom_loop: "deny",
+      skill: currentPermission.skill,
     },
   }
 }
@@ -141,6 +136,10 @@ export function buildOpenCodeArtifacts(catalog: Catalog, context: BuildContext):
       mode: definition.mode,
       model: model.openCodeModel,
       variant: model.reasoningEffort,
+      color: definition.openCodeColor,
+      ...(definition.toolCycleBudget === undefined
+        ? {}
+        : { steps: definition.toolCycleBudget }),
     }
     const body = embeddedAgentBody(catalog.sharedRules, agent.body, OPENCODE_COMPATIBILITY)
     artifacts.push(
@@ -150,12 +149,15 @@ export function buildOpenCodeArtifacts(catalog: Catalog, context: BuildContext):
         name: agent.name,
         root,
         destination: path.join(root, "agents", agent.fileName),
-        content: renderMarkdown(secureFrontmatter(agent.name, frontmatter), body),
+        content: renderMarkdown(secureFrontmatter(agent.name, frontmatter, context), body),
       }),
     )
   }
 
   for (const command of catalog.commands) {
+    const renderedCommand = catalog.commandVariants.opencode?.find(
+      (candidate) => candidate.name === command.name,
+    ) ?? command
     artifacts.push(
       textArtifact({
         target: "opencode",
@@ -163,7 +165,7 @@ export function buildOpenCodeArtifacts(catalog: Catalog, context: BuildContext):
         name: command.name,
         root,
         destination: path.join(root, "commands", command.fileName),
-        content: renderMarkdown(command.frontmatter, command.body),
+        content: renderMarkdown(renderedCommand.frontmatter, renderedCommand.body),
       }),
     )
   }

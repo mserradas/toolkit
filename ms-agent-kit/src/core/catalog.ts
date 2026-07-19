@@ -28,7 +28,7 @@ async function recursiveFiles(root: string): Promise<SourceFile[]> {
     for (const entry of entries) {
       const absolutePath = path.join(directory, entry.name)
       if (entry.isSymbolicLink()) {
-        throw new Error(`No se permiten symlinks en assets: ${absolutePath}`)
+        throw new Error(`No se permiten enlaces simbólicos (symlinks) en los recursos (assets): ${absolutePath}`)
       }
       if (entry.isDirectory()) {
         await visit(absolutePath)
@@ -40,6 +40,15 @@ async function recursiveFiles(root: string): Promise<SourceFile[]> {
 
   await visit(root)
   return output
+}
+
+async function optionalRecursiveFiles(root: string): Promise<SourceFile[]> {
+  try {
+    return await recursiveFiles(root)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return []
+    throw error
+  }
 }
 
 async function markdownFiles(directory: string): Promise<SourceMarkdown[]> {
@@ -80,7 +89,7 @@ async function skillFiles(directory: string): Promise<SourceSkill[]> {
       const parsed = parseMarkdown(raw)
       const name = frontmatterString(parsed.frontmatter, "name", entry.name)
       if (name !== entry.name) {
-        throw new Error(`La skill ${skillPath} declara name=${name}; debe coincidir con el directorio`)
+        throw new Error(`La habilidad (skill) ${skillPath} declara \`name=${name}\`; debe coincidir con el directorio`)
       }
       return {
         name,
@@ -98,6 +107,9 @@ export async function loadCatalog(assetsRoot = DEFAULT_ASSETS_ROOT): Promise<Cat
   const [
     agents,
     commands,
+    openCodeCommandVariants,
+    claudeCommandVariants,
+    codexCommandVariants,
     skills,
     sharedRules,
     documentation,
@@ -107,11 +119,14 @@ export async function loadCatalog(assetsRoot = DEFAULT_ASSETS_ROOT): Promise<Cat
     await Promise.all([
       markdownFiles(path.join(assetsRoot, "agents")),
       markdownFiles(path.join(assetsRoot, "commands")),
+      optionalMarkdownFiles(path.join(assetsRoot, "commands", "opencode")),
+      optionalMarkdownFiles(path.join(assetsRoot, "commands", "claude")),
+      optionalMarkdownFiles(path.join(assetsRoot, "commands", "codex")),
       skillFiles(path.join(assetsRoot, "skills")),
       readFile(path.join(assetsRoot, "docs", "agents-shared.md"), "utf8"),
       recursiveFiles(path.join(assetsRoot, "docs")),
       recursiveFiles(path.join(assetsRoot, "opencode", "config")),
-      recursiveFiles(path.join(assetsRoot, "opencode", "plugins")),
+      optionalRecursiveFiles(path.join(assetsRoot, "opencode", "plugins")),
     ])
 
   assertNoEmbeddedSecrets(sharedRules, path.join(assetsRoot, "docs", "agents-shared.md"))
@@ -119,10 +134,24 @@ export async function loadCatalog(assetsRoot = DEFAULT_ASSETS_ROOT): Promise<Cat
   return {
     agents,
     commands,
+    commandVariants: {
+      opencode: openCodeCommandVariants,
+      claude: claudeCommandVariants,
+      codex: codexCommandVariants,
+    },
     skills,
     sharedRules,
     documentation,
     openCodeConfigFiles,
     openCodePlugins,
+  }
+}
+
+async function optionalMarkdownFiles(directory: string): Promise<SourceMarkdown[]> {
+  try {
+    return await markdownFiles(directory)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return []
+    throw error
   }
 }

@@ -564,34 +564,38 @@ describe("Claude permission guard", () => {
     expect(blocked.stderr).toContain("fuera del alcance")
   })
 
-  it("limits the ms-skills workflow to its registry", async () => {
+  it("allows normal Claude delegations without a progress checkpoint", async () => {
     const { guardPath, projectRoot } = await setupGuard()
-    const allowedRegistry = await runGuard(guardPath, projectRoot, "workflow:ms-skills", {
-      tool_name: "Write",
-      tool_input: { file_path: path.join(projectRoot, ".atl/skill-registry.md") },
+    const delegated = await runGuard(guardPath, projectRoot, "ms-architect", {
+      cwd: projectRoot,
+      session_id: "parent-1",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "ms-codex", prompt: "Implement the scoped change" },
     })
-    const allowedCache = await runGuard(guardPath, projectRoot, "workflow:ms-skills", {
-      tool_name: "Write",
-      tool_input: { file_path: path.join(projectRoot, ".atl/.skill-registry.cache.json") },
+    const messaged = await runGuard(guardPath, projectRoot, "ms-architect", {
+      cwd: projectRoot,
+      session_id: "parent-1",
+      tool_name: "SendMessage",
+      tool_input: { to: "agent-old", message: "Complete the focal correction" },
     })
-    const allowedGitignore = await runGuard(guardPath, projectRoot, "workflow:ms-skills", {
-      tool_name: "Edit",
-      tool_input: { file_path: path.join(projectRoot, ".gitignore") },
+    expect(delegated.code).toBe(0)
+    expect(messaged.code).toBe(0)
+  })
+
+  it("blocks a Claude worker from stopping without a terminal contract", async () => {
+    const { guardPath, projectRoot } = await setupGuard()
+    const missing = await runGuard(guardPath, projectRoot, "ms-scout", {
+      hook_event_name: "SubagentStop",
+      last_assistant_message: "Inspection finished",
     })
-    const blockedSource = await runGuard(guardPath, projectRoot, "workflow:ms-skills", {
-      tool_name: "Edit",
-      tool_input: { file_path: path.join(projectRoot, "src/index.ts") },
-    })
-    const blockedShell = await runGuard(guardPath, projectRoot, "workflow:ms-skills", {
-      tool_name: "Bash",
-      tool_input: { command: "mkdir -p .atl" },
+    const partial = await runGuard(guardPath, projectRoot, "ms-scout", {
+      hook_event_name: "SubagentStop",
+      last_assistant_message: "Contrato para ms-architect\n```yaml\nstatus: partial\n```",
     })
 
-    expect(allowedRegistry.code).toBe(0)
-    expect(allowedCache.code).toBe(0)
-    expect(allowedGitignore.code).toBe(0)
-    expect(blockedSource.code).toBe(2)
-    expect(blockedShell.code).toBe(2)
+    expect(missing.code).toBe(2)
+    expect(missing.stderr).toContain("falta Contrato para ms-architect")
+    expect(partial.code).toBe(0)
   })
 
   it("materializes the Claude web and question capability matrix", async () => {
@@ -628,19 +632,10 @@ describe("Claude permission guard", () => {
     }
   })
 
-  it("runs Claude workflows with their declared agent and a dedicated ms-skills guard", async () => {
+  it("runs Claude workflows with their declared agent", async () => {
     const { artifacts } = await setupClaude()
     const commands = artifacts.filter((artifact) => artifact.kind === "command")
-    const msSkills = commands.find((artifact) => artifact.name === "ms-skills")
-    if (!msSkills) throw new Error("No se genero el workflow ms-skills")
-    const skillsFrontmatter = parseMarkdown(msSkills.content.toString("utf8")).frontmatter
-
-    expect(skillsFrontmatter.context).toBe("fork")
-    expect(skillsFrontmatter.agent).toBe("ms-codex")
-    expect(skillsFrontmatter).not.toHaveProperty("allowed-tools")
-    expect(JSON.stringify(skillsFrontmatter.hooks)).toContain("workflow:ms-skills")
-
-    for (const command of commands.filter((artifact) => artifact.name !== "ms-skills")) {
+    for (const command of commands) {
       const frontmatter = parseMarkdown(command.content.toString("utf8")).frontmatter
       expect(frontmatter.context).toBe("fork")
       expect(frontmatter.agent).toBe("ms-architect")

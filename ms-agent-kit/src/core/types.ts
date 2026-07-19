@@ -2,6 +2,7 @@ export const TARGETS = ["opencode", "claude", "codex"] as const
 
 export type Target = (typeof TARGETS)[number]
 export type InstallScope = "user" | "project"
+export type PermissionProfile = "balanced" | "strict" | "trusted"
 
 export type ArtifactKind =
   | "agent"
@@ -44,6 +45,7 @@ export interface SourceSkill extends SourceMarkdown {
 export interface Catalog {
   agents: SourceMarkdown[]
   commands: SourceMarkdown[]
+  commandVariants: Partial<Record<Target, SourceMarkdown[]>>
   skills: SourceSkill[]
   sharedRules: string
   documentation: SourceFile[]
@@ -56,6 +58,7 @@ export interface BuildContext {
   homeDir: string
   projectRoot: string
   scope: InstallScope
+  permissionProfile?: PermissionProfile
 }
 
 export type PlanAction = "create" | "update" | "adopt" | "unchanged" | "conflict"

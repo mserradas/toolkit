@@ -57,7 +57,7 @@ describe("Codex hardening", () => {
       expect.arrayContaining([expect.objectContaining({ kind: "skill", name: "ms-shared" })]),
     )
     expect(policyArtifact(artifacts).content.toString("utf8")).toContain(
-      "Defensa practica best-effort",
+      "Protección práctica (no absoluta)",
     )
   })
 

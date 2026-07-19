@@ -26,5 +26,9 @@ dist/
 Thumbs.db
 
 node_modules/
+.pnpm-store/
 coverage/
 *.tgz
+
+# Local AI runtime state
+.atl/

@@ -1,26 +1,26 @@
 # ms-agent-kit
 
-Instalador de consola para distribuir una configuración reproducible de agentes, workflows, skills y permisos en OpenCode, Claude Code y Codex.
+Instalador de consola para distribuir una configuración reproducible de agentes, flujos de trabajo, habilidades reutilizables (`skills`) y permisos en OpenCode, Claude Code y Codex.
 
-El instalador calcula un plan antes de escribir, conserva el estado de propiedad y crea backups cuando adopta archivos existentes. No instala los clientes de IA, no configura cuentas y no guarda credenciales.
+El instalador calcula un plan antes de escribir, conserva el estado de propiedad y crea copias de seguridad cuando adopta archivos existentes. No instala los clientes de IA, no configura cuentas y no guarda credenciales.
 
 ## Resultado
 
 | Cliente | Componentes instalados | Integración principal |
 |---|---|---|
-| OpenCode | 13 agentes, comandos `/ms-*`, 10 skills y plugins locales | Configuración, TUI, Context7, notificaciones y permisos por agente |
-| Claude Code | 13 subagentes, slash skills `/ms-*` y 10 skills | Límites de tools y guard compartido `PreToolUse` |
-| Codex | 12 agentes especialistas, skills `$ms-*` y 10 skills | Perfiles, reglas de seguridad y `$ms-architect` como orquestador padre |
+| OpenCode | 13 agentes, 3 comandos `/ms-*` y 9 `skills` generales | Configuración, interfaz de terminal (`TUI`), Context7, notificaciones y permisos por agente |
+| Claude Code | 13 subagentes, 3 habilidades invocables (`slash skills`) `/ms-*` y 9 `skills` generales | Límites de herramientas y protección compartida `PreToolUse` |
+| Codex | 12 agentes especialistas, 3 comandos como `skills` y 9 `skills` generales | Perfiles, reglas de seguridad y `$ms-architect` como orquestador padre |
 
-El catálogo actual incluye 13 agentes, 5 workflows y 10 skills portables. En Codex, `ms-architect` se instala como skill de la tarea principal para que pueda delegar directamente en los 12 especialistas.
+El catálogo actual incluye 13 agentes, 3 comandos y 9 `skills` generales. En Codex, `ms-architect` se instala como `skill` de la tarea principal para que pueda delegar directamente en los 12 especialistas.
 
 ## Requisitos
 
 - Node.js 24 o superior.
 - `pnpm` para instalar dependencias y trabajar desde el repositorio.
 - Al menos uno de estos clientes ya instalado: OpenCode, Claude Code o Codex.
-- Codex `0.138.0` o superior si se selecciona ese target.
-- Conexión a Internet para instalar dependencias; el CLI no la necesita para operar sobre el catálogo local.
+- Codex `0.138.0` o superior si se selecciona ese cliente.
+- Conexión a Internet para instalar dependencias; la interfaz de consola (`CLI`) no la necesita para operar sobre el catálogo local.
 
 `ms-agent-kit` configura clientes existentes. No instala sus binarios ni gestiona cuentas, proveedores o claves API.
 
@@ -39,7 +39,7 @@ El asistente guía el proceso:
 2. Elige instalación global o de proyecto.
 3. Revisa un resumen vertical de clientes, alcance, cambios, conflictos y estado.
 4. Confirma únicamente si hay cambios que aplicar.
-5. Resuelve cada conflicto conservando, reemplazando con backup u omitiendo el archivo.
+5. Resuelve cada conflicto conservando, reemplazando con copia de seguridad u omitiendo el archivo.
 
 Si todo está actualizado, el asistente termina sin pedir una confirmación innecesaria.
 
@@ -53,7 +53,7 @@ pnpm add --global .
 ms-agent-kit
 ```
 
-Cuando cambie el código del CLI, repite `pnpm build` y `pnpm add --global .` para actualizar la instalación global.
+Cuando cambie el código de la interfaz de consola, repite `pnpm build` y `pnpm add --global .` para actualizar la instalación global.
 
 ## Verificar la instalación
 
@@ -77,10 +77,10 @@ Añade `--json` a cualquiera de ellos para obtener una salida apta para automati
 |---|---|---|
 | OpenCode | `~/.config/opencode` | `opencode.json` y `tui.json` en la raíz; artefactos en `.opencode/` |
 | Claude Code | `~/.claude` | `<proyecto>/.claude` |
-| Codex | `~/.codex` y `~/.agents/skills` | `<proyecto>/.codex` y `<proyecto>/.agents/skills` |
+| Codex | `~/.codex` | `<proyecto>/.codex` y `<proyecto>/.agents/skills` |
 | Estado del kit | `~/.ms-agent-kit` | `<proyecto>/.ms-agent-kit` |
 
-El alcance de usuario deja la configuración disponible en cualquier workspace. El alcance de proyecto la mantiene dentro de un repositorio concreto:
+El alcance de usuario deja la configuración disponible en cualquier espacio de trabajo. El alcance de proyecto la mantiene dentro de un repositorio concreto:
 
 ```bash
 ms-agent-kit install \
@@ -96,27 +96,26 @@ Si se omite `--project`, el directorio actual se usa como raíz del proyecto.
 | Comando | Función |
 |---|---|
 | `ms-agent-kit` | Abre el asistente interactivo |
-| `ms-agent-kit list` | Lista agentes, workflows, skills y plugins incluidos |
+| `ms-agent-kit list` | Lista agentes, flujos de trabajo, `skills` y complementos incluidos |
 | `ms-agent-kit doctor` | Valida el catálogo y la instalación administrada |
 | `ms-agent-kit plan` | Clasifica los cambios sin aplicarlos |
 | `ms-agent-kit install` | Aplica el plan de forma transaccional |
 | `ms-agent-kit status` | Compara la instalación con el catálogo actual |
-| `ms-agent-kit uninstall` | Elimina archivos propios y restaura backups elegibles |
-| `ms-agent-kit workflow status` | Lee el estado estructurado de un workflow |
+| `ms-agent-kit uninstall` | Elimina archivos propios y restaura copias de seguridad válidas |
+| `ms-agent-kit workflow status` | Lee el estado estructurado de un flujo de trabajo |
 | `ms-agent-kit workflow next` | Devuelve una única próxima acción segura |
-| `ms-agent-kit review fingerprint` | Calcula una huella SHA-256 del worktree o del staged diff |
-| `ms-agent-kit skill-registry refresh` | Actualiza el registro común `.atl/skill-registry.md` |
 
 ### Opciones comunes
 
 | Opción | Uso |
 |---|---|
-| `--target opencode\|claude\|codex\|all` | Selecciona targets; admite comas o repeticiones |
+| `--target opencode\|claude\|codex\|all` | Selecciona clientes; admite comas o repeticiones |
 | `--scope user\|project` | Selecciona instalación global o local |
+| `--permission-profile balanced\|strict\|trusted` | Selecciona la política de permisos de OpenCode; `balanced` es la predeterminada |
 | `--project <ruta>` | Define la raíz para el alcance de proyecto |
-| `--home <ruta>` | Usa un home alternativo, útil para pruebas o dotfiles |
-| `--assets <ruta>` | Usa un catálogo de assets alternativo |
-| `--force` | Adopta conflictos durante `install` y guarda backup |
+| `--home <ruta>` | Usa un directorio personal alternativo, útil para pruebas o `dotfiles` |
+| `--assets <ruta>` | Usa un catálogo de recursos (`assets`) alternativo |
+| `--force` | Adopta conflictos durante `install` y guarda una copia de seguridad |
 | `--yes` | Evita preguntas interactivas |
 | `--dry-run` | Convierte `install` en una inspección sin escrituras |
 | `--json` | Devuelve salida estructurada |
@@ -149,7 +148,7 @@ OpenCode conserva comandos y menciones de agentes:
 @ms-scout localiza el flujo de autenticación
 ```
 
-La instalación global administra `opencode.json`, `tui.json`, notificaciones, agentes, comandos, skills y tres plugins locales: variantes de modelo, registro de skills y herramientas de workflow.
+La instalación global administra `opencode.json`, `tui.json`, notificaciones, agentes, comandos y `skills`. Los únicos complementos activos son paquetes externos declarados en la configuración; no hay plugins TypeScript locales ni interceptores del ciclo de delegación.
 
 Context7 lee la clave desde el entorno y no la persiste en el catálogo:
 
@@ -171,11 +170,19 @@ export OPENCODE_DISABLE_EXTERNAL_SKILLS=1
 set -Ux OPENCODE_DISABLE_EXTERNAL_SKILLS 1
 ```
 
-Las skills de proyecto siguen registrándose mediante el plugin local de `ms-agent-kit`.
+Esta variable evita importar adaptaciones externas incompatibles. Las `skills` administradas por `ms-agent-kit` se instalan directamente en la raíz nativa de OpenCode y no dependen de un plugin local.
+
+OpenCode admite tres perfiles de permisos. `balanced` usa allowlists silenciosas para roles acotados; solo `ms-codex` pregunta por comandos locales desconocidos o cambios de dependencias, y `ms-debugger` por logs potencialmente sensibles. Operaciones destructivas, push, SSH y gestores del sistema se bloquean directamente. `strict` conserva la política cerrada sin herramientas cognitivas adicionales. `trusted` reduce confirmaciones para comandos, pero mantiene los bloqueos explícitos de secretos, destrucción, publicación y límites de escritura. Por ejemplo:
+
+```bash
+ms-agent-kit install --target opencode --scope user --permission-profile balanced
+```
+
+Las restricciones comunes de secretos tienen una única definición en el código. El instalador las escribe en `opencode.json` para agentes externos y también al final de cada frontmatter `ms-*`, después de los permisos funcionales del rol. Así, las reglas `deny` prevalecen sobre permisos amplios como `cat *` según el orden efectivo de OpenCode.
 
 ### Claude Code
 
-Los workflows se exponen como slash skills y ejecutan el agente correspondiente en un contexto aislado:
+Los flujos de trabajo se exponen como habilidades invocables (`slash skills`) y ejecutan el agente correspondiente en un contexto aislado:
 
 ```text
 /ms-status mi-cambio
@@ -188,11 +195,11 @@ También se puede iniciar una sesión completa con el arquitecto:
 claude --agent ms-architect
 ```
 
-Los hooks se aplican a los agentes `ms-*` y sus workflows. Las sesiones normales conservan la configuración del usuario en `~/.claude/settings.json`.
+Los ganchos (`hooks`) se aplican a los agentes `ms-*` y sus flujos de trabajo. Las sesiones normales conservan la configuración del usuario en `~/.claude/settings.json`.
 
 ### Codex
 
-Codex ejecuta los workflows como skills desde la tarea principal:
+Codex ejecuta los flujos de trabajo como `skills` desde la tarea principal:
 
 ```text
 $ms-architect implementa este cambio
@@ -200,9 +207,13 @@ $ms-status mi-cambio
 $ms-continue mi-cambio
 ```
 
-Cada especialista recibe un perfil de filesystem, razonamiento y búsqueda web. Una configuración global de `sandbox_mode` o los permisos de la tarea principal pueden prevalecer sobre esos perfiles.
+Cada especialista recibe un perfil de sistema de archivos, razonamiento y búsqueda web. Una configuración global de `sandbox_mode` o los permisos de la tarea principal pueden prevalecer sobre esos perfiles.
 
-## Plan, conflictos y backups
+## Checkpoints entre sesiones
+
+El flujo normal no crea checkpoints ni registra IDs de agentes. Cuando el usuario quiere cambiar de sesión con trabajo incompleto, `ms-progress` guarda manualmente un resumen temporal en `.atl/status/<slug>-progress.md`. `/ms-continue <slug>` valida ese resumen contra Git y ejecuta una única próxima acción en un flujo nuevo. Al terminar la feature, el checkpoint se elimina.
+
+## Plan, conflictos y copias de seguridad
 
 El plan clasifica cada destino antes de escribir:
 
@@ -218,16 +229,16 @@ Durante actualizaciones también puede proponer eliminar, restaurar, desvincular
 
 ### ¿Se usa `~/.ms-agent-kit/backups`?
 
-Sí. Es almacenamiento operativo del instalador, no una copia decorativa. Cuando se reemplaza un archivo con `--force` o desde el asistente, el estado guarda la referencia al backup para que `uninstall` pueda restaurar el contenido anterior.
+Sí. Es almacenamiento operativo del instalador, no una copia decorativa. Cuando se reemplaza un archivo con `--force` o desde el asistente, el estado guarda la referencia a la copia de seguridad para que `uninstall` pueda restaurar el contenido anterior.
 
-No borres manualmente `~/.ms-agent-kit` mientras existan instalaciones administradas. Si necesitas liberar backups, desinstala primero los targets correspondientes y revisa el resultado.
+No borres manualmente `~/.ms-agent-kit` mientras existan instalaciones administradas. Si necesitas liberar copias de seguridad, desinstala primero los clientes correspondientes y revisa el resultado.
 
 El mecanismo de seguridad incluye:
 
-- Estado y backups con permisos `0600`.
+- Estado y copias de seguridad con permisos `0600`.
 - Escrituras temporales seguidas de `rename` atómico.
-- Rollback si una operación falla a mitad del plan.
-- Rechazo de destinos y backups que atraviesen symlinks no permitidos.
+- Reversión (`rollback`) si una operación falla a mitad del plan.
+- Rechazo de destinos y copias de seguridad que atraviesen enlaces simbólicos (`symlinks`) no permitidos.
 - Preservación de archivos modificados después de la instalación.
 - Restauración durante `uninstall` solo cuando el destino sigue siendo seguro.
 
@@ -235,21 +246,21 @@ Ejecuta siempre `plan` antes de usar `--force`.
 
 ## Seguridad y límites
 
-- El catálogo es cerrado y rechaza patrones comunes de tokens, claves privadas y credenciales.
-- No se empaquetan `.env`, keychains, cachés, locks generados, sesiones ni `node_modules`.
+- El catálogo es cerrado y rechaza patrones comunes de identificadores secretos (`tokens`), claves privadas y credenciales.
+- No se empaquetan `.env`, llaveros (`keychains`), cachés, archivos de bloqueo generados, sesiones ni `node_modules`.
 - OpenCode recibe permisos granulares por agente y denegaciones para secretos.
-- Claude Code recibe límites de tools y un guard `PreToolUse` para los componentes `ms-*`.
-- Codex recibe perfiles y reglas `execpolicy` de defensa práctica; no sustituyen un sandbox administrado.
+- Claude Code recibe límites de herramientas y una protección `PreToolUse` para los componentes `ms-*`.
+- Codex recibe perfiles y reglas `execpolicy` de defensa práctica; no sustituyen un entorno aislado (`sandbox`) administrado.
 - El kit no instala ni actualiza OpenCode, Claude Code o Codex.
 - Los paquetes externos declarados para OpenCode se descargan cuando el propio cliente arranca.
 
 Para una política Codex no eludible hace falta una configuración administrada por el sistema. Las reglas incluidas cubren operaciones y lectores habituales, pero los permisos de la tarea padre y las restricciones globales siguen teniendo prioridad.
 
-## Troubleshooting
+## Solución de problemas
 
 ### `ms-agent-kit`: comando no encontrado
 
-Si pnpm informa de que el directorio global no está en `PATH`, configura primero el shell:
+Si pnpm informa de que el directorio global no está en `PATH`, configura primero el intérprete de comandos:
 
 ```bash
 pnpm setup
@@ -274,7 +285,7 @@ Inspecciona el plan y el archivo señalado:
 ms-agent-kit plan --target all --scope user
 ```
 
-Usa `--force` solo si aceptas reemplazarlo. El contenido anterior quedará asociado a un backup.
+Usa `--force` solo si aceptas reemplazarlo. El contenido anterior quedará asociado a una copia de seguridad.
 
 ### El proceso no dispone de TTY
 
@@ -284,9 +295,9 @@ Usa el modo no interactivo:
 ms-agent-kit install --target all --scope user --yes
 ```
 
-### OpenCode muestra skills duplicadas o incompatibles
+### OpenCode muestra `skills` duplicadas o incompatibles
 
-Define `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` y reinicia OpenCode. Las skills compatibles del proyecto se vuelven a registrar mediante el plugin local.
+Define `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` y reinicia OpenCode. Esto desactiva importaciones externas; las `skills` administradas por `ms-agent-kit` permanecen en la raíz nativa de OpenCode.
 
 ### Context7 no autentica
 
@@ -314,11 +325,11 @@ Durante el desarrollo, `pnpm start` ejecuta directamente `src/cli.ts`. Después 
 
 ```text
 ms-agent-kit/
-├── assets/          # Fuente portable de agentes, workflows, skills y reglas
+├── assets/          # Fuente portable de agentes, flujos de trabajo, skills y reglas
 ├── src/adapters/    # Materialización específica de cada cliente
 ├── src/core/        # Catálogo, planificación, estado, permisos e instalación
 ├── src/interactive/ # Asistente y presentación del plan
-├── tests/           # Tests unitarios, de integración y snapshots
+├── tests/           # Pruebas unitarias, de integración y capturas de referencia
 └── docs/            # Decisiones y documentación técnica complementaria
 ```
 
@@ -326,8 +337,8 @@ ms-agent-kit/
 
 - [Agentes de OpenCode](https://opencode.ai/docs/agents/)
 - [Permisos de OpenCode](https://opencode.ai/docs/permissions/)
-- [Skills de OpenCode](https://opencode.ai/docs/skills)
+- [Habilidades (`skills`) de OpenCode](https://opencode.ai/docs/skills)
 - [Subagentes de Claude Code](https://code.claude.com/docs/en/sub-agents)
 - [Configuración de Claude Code](https://code.claude.com/docs/en/settings)
-- [Customización de Codex](https://learn.chatgpt.com/docs/customization/overview)
+- [Personalización de Codex](https://learn.chatgpt.com/docs/customization/overview)
 - [Subagentes de Codex](https://learn.chatgpt.com/docs/agent-configuration/subagents)

@@ -12,15 +12,16 @@ import {
 } from "./common.js"
 
 const CODEX_COMPATIBILITY = `
-- Interpreta task como delegacion a un custom agent de Codex.
-- Interpreta question como una pregunta directa al usuario desde la tarea padre.
-- Las referencias a permission.task o herramientas de OpenCode son limites de rol, no sintaxis TOML.
-- Codex no permite desactivar Bash, preguntas al usuario ni el catalogo global de skills por custom agent. Respeta esos limites del rol como instrucciones obligatorias aunque la herramienta siga visible.
-- web_search es la unica capacidad web materializada por agente y sigue la capacidad webSearch del perfil. Codex no separa WebFetch: si el rol permite webFetch pero no webSearch, usa una fuente ya aportada o Context7 y devuelve al padre cualquier consulta que requiera busqueda; no eludas el limite.
-- Los permisos y overrides activos de la tarea padre pueden prevalecer sobre el perfil del custom agent. No interpretes un permiso mas amplio heredado como autorizacion para ampliar el rol.
-- El agente padre mantiene decisiones y cierre; los subagentes devuelven solo resumen y evidencia.
-- No crees delegacion recursiva: la tarea padre coordina agentes directos con alcance cerrado.
-- No leas archivos de secretos ni vuelques variables de entorno. Si falta un dato sensible, pide al usuario una entrada sanitizada; no intentes eludir las reglas de seguridad con otro comando o interprete.
+- Interpreta \`task\` como una delegación a un agente personalizado (\`custom agent\`) de Codex.
+- Cada \`spawn_agent\` es una delegación normal. Si una sesión termina con trabajo incompleto, el usuario decide si guarda un checkpoint temporal antes de abrir otra; no se exige identidad durable del worker.
+- Interpreta \`question\` como una pregunta directa al usuario desde la tarea padre.
+- Las referencias a \`permission.task\` o a herramientas de OpenCode son límites del rol, no sintaxis TOML.
+- Codex no permite desactivar Bash, las preguntas al usuario ni el catálogo global de habilidades (\`skills\`) por agente personalizado. Respeta esos límites del rol como instrucciones obligatorias aunque la herramienta siga visible.
+- \`web_search\` es la única capacidad web materializada por agente y sigue la capacidad \`webSearch\` del perfil. Codex no separa \`WebFetch\`: si el rol permite \`webFetch\` pero no \`webSearch\`, usa una fuente ya aportada o Context7 y devuelve al agente padre cualquier consulta que requiera búsqueda; no eludas el límite.
+- Los permisos y ajustes (\`overrides\`) activos de la tarea padre pueden prevalecer sobre el perfil del agente personalizado. No interpretes un permiso heredado más amplio como autorización para ampliar el rol.
+- El agente padre conserva las decisiones y el cierre; los subagentes devuelven solo el resumen y las evidencias.
+- No crees delegaciones recursivas: la tarea padre coordina agentes directos con un alcance cerrado.
+- No leas archivos de secretos ni vuelques variables de entorno. Si falta un dato sensible, pide al usuario una entrada saneada; no intentes eludir las reglas de seguridad con otro comando o intérprete.
 `
 
 const CODEX_SECRET_ARGUMENTS = [
@@ -120,7 +121,7 @@ function rootsFor(context: BuildContext): { codex: string; skills: string } {
   if (context.scope === "user") {
     return {
       codex: path.join(context.homeDir, ".codex"),
-      skills: path.join(context.homeDir, ".agents", "skills"),
+      skills: path.join(context.homeDir, ".codex", "skills"),
     }
   }
   return {
@@ -185,8 +186,8 @@ function starlarkStrings(values: readonly string[]): string {
 }
 
 function codexSecretRules(): string {
-  return `# Política ms-* administrada. Defensa practica best-effort para lecturas directas habituales.
-# prefix_rule usa prefijos exactos: estas reglas no son un sandbox ni cubren interpretes,
+  return `# Política ms-* administrada. Protección práctica (no absoluta) para lecturas directas habituales.
+# prefix_rule usa prefijos exactos: estas reglas no son un sandbox ni cubren intérpretes,
 # opciones, cantidades, programas o patrones no enumerados. No se deniegan globalmente
 # head, sed, awk, rg ni grep porque tambien tienen usos seguros. .env.example se mantiene permitido.
 prefix_rule(
@@ -287,7 +288,7 @@ prefix_rule(
 prefix_rule(
     pattern = ["git", "show", ${starlarkStrings(CODEX_GIT_OBJECT_ARGUMENTS)}],
     decision = "forbidden",
-    justification = "No muestres versiones historicas de archivos sensibles.",
+    justification = "No muestres versiones históricas de archivos sensibles.",
     match = ["git show HEAD:.env", "git show HEAD~1:.env.secret"],
     not_match = ["git show HEAD:.env.example", "git show HEAD:README.md"],
 )
@@ -301,11 +302,11 @@ function commandSkill(command: SourceMarkdown, sharedRules: string): string {
     `Ejecuta ${command.name}`,
   )
   const body = [
-    "# Adaptacion Codex",
-    "Ejecuta este workflow en la tarea padre. Cuando necesites especializacion, delega a los custom agents ms-* instalados. Usa $ARGUMENTS como entrada literal.",
+    "# Adaptación para Codex",
+    "Ejecuta este flujo de trabajo en la tarea padre. Cuando necesites especialización, delega en los agentes personalizados (`custom agents`) ms-* instalados. Usa $ARGUMENTS como entrada literal.",
     "# Reglas Compartidas MS",
     sharedRules.trim(),
-    "# Workflow",
+    "# Flujo de trabajo",
     command.body,
   ].join("\n\n")
   return codexSkill(command.name, description, body)
@@ -345,7 +346,7 @@ export function buildCodexArtifacts(catalog: Catalog, context: BuildContext): Ar
   )
 
   const architect = catalog.agents.find((agent) => agent.name === "ms-architect")
-  if (!architect) throw new Error("Falta el agente ms-architect en el catalogo")
+  if (!architect) throw new Error("Falta el agente ms-architect en el catálogo")
   artifacts.push(
     textArtifact({
       target: "codex",
@@ -362,6 +363,9 @@ export function buildCodexArtifacts(catalog: Catalog, context: BuildContext): Ar
   )
 
   for (const command of catalog.commands) {
+    const renderedCommand = catalog.commandVariants.codex?.find(
+      (candidate) => candidate.name === command.name,
+    ) ?? command
     artifacts.push(
       textArtifact({
         target: "codex",
@@ -369,7 +373,7 @@ export function buildCodexArtifacts(catalog: Catalog, context: BuildContext): Ar
         name: command.name,
         root: roots.skills,
         destination: path.join(roots.skills, command.name, "SKILL.md"),
-        content: commandSkill(command, catalog.sharedRules),
+        content: commandSkill(renderedCommand, catalog.sharedRules),
       }),
     )
   }

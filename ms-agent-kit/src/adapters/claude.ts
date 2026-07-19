@@ -6,12 +6,12 @@ import { openCodeRolePermission } from "../core/opencode-role-permissions.js"
 import type { Artifact, BuildContext, Catalog, SourceMarkdown } from "../core/types.js"
 import {
   copySkillArtifacts,
-  embeddedAgentBody,
   textArtifact,
 } from "./common.js"
 
 const CLAUDE_COMPATIBILITY = `
 - Interpreta task como la herramienta Agent de Claude Code.
+- Cada llamada a Agent es una delegación normal. Si una sesión termina con trabajo incompleto, el usuario decide si guarda un checkpoint temporal antes de abrir otra.
 - Interpreta question como AskUserQuestion cuando este disponible; si eres un subagente, devuelve la pregunta bloqueante al padre.
 - Las reglas compartidas y el contrato de salida llegan precargados mediante la skill ms-shared.
 - Los nombres de permisos de OpenCode dentro del cuerpo describen limites de rol. El frontmatter de Claude Code es la autoridad de herramientas.
@@ -34,6 +34,7 @@ function deniedTools(name: string): string[] {
   }
   if (!profile.shell) denied.add("Bash")
   if (!profile.orchestrates) denied.add("Agent")
+  if (!profile.orchestrates) denied.add("SendMessage")
   if (!profile.usesSkills) denied.add("Skill")
   if (!profile.asksQuestions) denied.add("AskUserQuestion")
   if (!profile.webFetch) denied.add("WebFetch")
@@ -41,11 +42,15 @@ function deniedTools(name: string): string[] {
   return [...denied]
 }
 
-function claudeGuardHooks(guardPath: string, agentName: string): Record<string, unknown> {
-  return {
+function claudeGuardHooks(
+  guardPath: string,
+  agentName: string,
+  enforceTerminalContract = false,
+): Record<string, unknown> {
+  const hooks: Record<string, unknown> = {
     PreToolUse: [
       {
-        matcher: "Read|Bash|Grep|Glob|Write|Edit|NotebookEdit",
+        matcher: "Read|Bash|Grep|Glob|Write|Edit|NotebookEdit|Agent|SendMessage",
         hooks: [
           {
             type: "command",
@@ -55,6 +60,19 @@ function claudeGuardHooks(guardPath: string, agentName: string): Record<string, 
       },
     ],
   }
+  if (enforceTerminalContract) {
+    hooks.Stop = [
+      {
+        hooks: [
+          {
+            type: "command",
+            command: `node ${JSON.stringify(guardPath)} ${JSON.stringify(agentName)}`,
+          },
+        ],
+      },
+    ]
+  }
+  return hooks
 }
 
 function claudeAgent(agent: SourceMarkdown, guardPath: string): string {
@@ -69,7 +87,15 @@ function claudeAgent(agent: SourceMarkdown, guardPath: string): string {
     model: "inherit",
     permissionMode: "default",
     skills: ["ms-shared"],
-    hooks: claudeGuardHooks(guardPath, agent.name),
+    hooks: claudeGuardHooks(
+      guardPath,
+      agent.name,
+      agentDefinition(agent.name).mode === "subagent",
+    ),
+  }
+  const definition = agentDefinition(agent.name)
+  if (definition.toolCycleBudget !== undefined) {
+    frontmatter.maxTurns = definition.toolCycleBudget
   }
   const denied = deniedTools(agent.name)
   if (denied.length > 0) frontmatter.disallowedTools = denied
@@ -123,15 +149,8 @@ function claudeGuardSource(catalog: Catalog): string {
       capabilityProfile(agentDefinition(agent.name).capabilityProfile).writePaths,
     ]),
   )
-  writeRules["workflow:ms-skills"] = [
-    ".atl/skill-registry.md",
-    ".atl/.skill-registry.cache.json",
-    ".gitignore",
-  ]
   const bashRules = readOnlyBashRules(catalog)
   const bashDeny = bashDenyRules(catalog)
-  bashRules["workflow:ms-skills"] = []
-  bashDeny["workflow:ms-skills"] = bashDeny["ms-codex"] ?? []
   return String.raw`#!/usr/bin/env node
 import { realpathSync } from "node:fs"
 import path from "node:path"
@@ -1009,6 +1028,15 @@ function allowedWrite(agent, value) {
   return (WRITE_RULES[agent] || []).some((pattern) => pattern === "**" || globRegex(pattern).test(relative))
 }
 
+ function assertTerminalContract(message) {
+  const text = String(message || "")
+  if (!text.includes("Contrato para ms-architect")) {
+    throw new Error("Cierre bloqueado: falta Contrato para ms-architect")
+  }
+  const status = /^status:\s*(completed|partial|blocked|needs_user_input|failed|not_applicable)\s*$/m.exec(text)?.[1]
+  if (!status) throw new Error("Cierre bloqueado: el contrato no declara un estado terminal válido")
+}
+
 let input = ""
 for await (const chunk of process.stdin) input += chunk
 
@@ -1048,8 +1076,12 @@ try {
       process.exit(2)
     }
   }
+
+  if (["Stop", "SubagentStop"].includes(String(payload.hook_event_name || ""))) {
+    assertTerminalContract(payload.last_assistant_message)
+  }
 } catch (error) {
-  console.error("Bloqueado por la política ms-*: entrada de hook invalida")
+  console.error(error instanceof Error ? error.message : "Bloqueado por la política ms-*: entrada de la automatización no válida")
   process.exit(2)
 }
 `
@@ -1058,7 +1090,6 @@ try {
 function claudeCommand(
   command: SourceMarkdown,
   agents: SourceMarkdown[],
-  sharedRules: string,
   guardPath: string,
 ): string {
   const description = frontmatterString(
@@ -1068,23 +1099,21 @@ function claudeCommand(
   )
   const requestedAgent = frontmatterString(command.frontmatter, "agent", "ms-architect")
   const agent = agents.find((candidate) => candidate.name === requestedAgent)
-  if (!agent) throw new Error(`El workflow ${command.name} referencia el agente inexistente ${requestedAgent}`)
-  const guardScope = command.name === "ms-skills" ? "workflow:ms-skills" : agent.name
+  if (!agent) throw new Error(`El flujo de trabajo ${command.name} referencia el agente inexistente ${requestedAgent}`)
   const frontmatter: Record<string, unknown> = {
     name: command.name,
     description,
     "disable-model-invocation": true,
     context: "fork",
     agent: agent.name,
-    hooks: claudeGuardHooks(guardPath, guardScope),
+    hooks: claudeGuardHooks(guardPath, agent.name),
   }
   return renderMarkdown(
     frontmatter,
     [
-      "# Adaptacion Claude Code",
-      `Ejecuta este workflow con el rol de ${agent.name}. Usa $ARGUMENTS como entrada literal.`,
-      embeddedAgentBody(sharedRules, agent.body, CLAUDE_COMPATIBILITY),
-      "# Workflow",
+      "# Adaptación para Claude Code",
+      `Ejecuta este flujo de trabajo con el rol de ${agent.name}. Sus reglas compartidas y contrato llegan mediante la skill \`ms-shared\`. Usa $ARGUMENTS como entrada literal.`,
+      "# Flujo de trabajo",
       command.body,
     ].join("\n\n"),
   )
@@ -1107,7 +1136,7 @@ export function buildClaudeArtifacts(catalog: Catalog, context: BuildContext): A
   const guardPath = path.join(root, "hooks", "ms-agent-guard.mjs")
   const artifacts: Artifact[] = []
   const architect = catalog.agents.find((agent) => agent.name === "ms-architect")
-  if (!architect) throw new Error("Falta el agente ms-architect en el catalogo")
+  if (!architect) throw new Error("Falta el agente ms-architect en el catálogo")
 
   artifacts.push(
     textArtifact({
@@ -1149,6 +1178,9 @@ export function buildClaudeArtifacts(catalog: Catalog, context: BuildContext): A
   )
 
   for (const command of catalog.commands) {
+    const renderedCommand = catalog.commandVariants.claude?.find(
+      (candidate) => candidate.name === command.name,
+    ) ?? command
     artifacts.push(
       textArtifact({
         target: "claude",
@@ -1156,7 +1188,7 @@ export function buildClaudeArtifacts(catalog: Catalog, context: BuildContext): A
         name: command.name,
         root,
         destination: path.join(skillsRoot, command.name, "SKILL.md"),
-        content: claudeCommand(command, catalog.agents, catalog.sharedRules, guardPath),
+        content: claudeCommand(renderedCommand, catalog.agents, guardPath),
       }),
     )
   }

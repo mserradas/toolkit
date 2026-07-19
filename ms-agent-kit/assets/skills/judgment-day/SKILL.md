@@ -43,17 +43,11 @@ Usa el mismo perfil para ambos jueces en una ejecución:
 
 | Objetivo / riesgo | Perfil de juez |
 |---|---|
-| Código general, refactor, TDD/spec, mantenibilidad, comportamiento | dos tareas `ms-scout` en modo revisión |
+| Código general o refactor | revisión directa de `ms-architect`; esta skill es N/A salvo que el usuario indique dos especialistas disponibles |
 | Seguridad, auth, permisos, secretos, datos sensibles, dependencias, infra expuesta | dos tareas `ms-security-auditor` |
 | Riesgo mixto de seguridad + general | ejecuta primero el par de seguridad; luego un par general solo si sigue haciendo falta |
 
-Para `ms-scout`, pasa la lente 4R concreta:
-
-- `Readability`: naming, estructura, mantenibilidad.
-- `Reliability`: comportamiento, estado, tests, regresiones.
-- `Resilience`: fallos parciales, recuperación, rollback, dependencias degradadas.
-
-En objetivos grandes o críticos, incluye solo las lentes que correspondan al riesgo real. No infles cada revisión a 4R completo por defecto.
+Incluye únicamente criterios que correspondan al riesgo real. No conviertas tamaño en riesgo ni uses `ms-scout` como juez: su rol es exploración y blast radius.
 
 ## Severidad
 
@@ -112,7 +106,7 @@ Devuelve:
 ## Judgment Day - <objetivo>
 
 Ronda: <n>
-Perfil de juez: <ms-scout | ms-security-auditor>
+Perfil de juez: <especialista explícito | ms-security-auditor>
 Criterios: <lentes/categorías>
 
 | Hallazgo | Juez A | Juez B | Severidad | Estado |

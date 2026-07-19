@@ -22,7 +22,7 @@ Crear un snapshot operativo mínimo antes de diseñar o ejecutar. No instala dep
 3. Si comprender arquitectura requiere 4 o más archivos, delega a `ms-scout` modo mapa.
 4. Si test, lint, typecheck o format no son evidentes, delega a `ms-tester` un `Snapshot de capacidades de testing` sin ejecutar suites amplias.
 5. Sintetiza el snapshot y lista incógnitas; no las conviertas en hechos.
-6. Si existe un workflow nivel 3-4, entrega el snapshot a `ms-progress` para guardarlo en su ledger.
+6. Devuelve el snapshot al invocador. Solo usa `ms-progress` si el usuario pide guardar un checkpoint antes de cambiar de sesión.
 
 ## Salida
 
@@ -41,7 +41,7 @@ Project context snapshot:
     prd_dir: "docs/prd"
     spec_dir: "docs/spec"
     design_dir: "docs/design"
-    status_dir: "docs/status"
+    status_dir: ".atl/status"
   risks_or_unknowns: []
   invalidation_inputs:
     manifests: []

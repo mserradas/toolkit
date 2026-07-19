@@ -33,12 +33,12 @@ describe("transactional installer", () => {
 
     expect(firstPlan.items.every((item) => item.action === "create")).toBe(true)
     const result = await applyPlan(firstPlan, context)
-    expect(result.created).toBe(95)
+    expect(result.created).toBe(82)
 
     const secondPlan = await createPlan(artifacts, context)
     expect(secondPlan.items.every((item) => item.action === "unchanged")).toBe(true)
     const status = await installationStatus(["opencode", "claude", "codex"], context)
-    expect(status).toHaveLength(95)
+    expect(status).toHaveLength(82)
     expect(status.every((item) => item.status === "ok")).toBe(true)
   })
 
@@ -267,7 +267,7 @@ describe("transactional installer", () => {
     const result = await uninstallTargets(["claude"], context)
     expect(result.skipped).toContainEqual({
       path: tester.destination,
-      reason: "modificado despues de instalar",
+      reason: "modificado después de instalar",
     })
     expect(await readFile(tester.destination, "utf8")).toBe("cambio local\n")
   })
@@ -307,7 +307,7 @@ describe("transactional installer", () => {
     ).toEqual(
       expect.objectContaining({
         action: "conflict",
-        reason: expect.stringMatching(/symlink roto/),
+        reason: expect.stringMatching(/symlink.*roto/),
       }),
     )
     await expect(applyPlan(plan, context)).rejects.toThrow(/conflicto/)

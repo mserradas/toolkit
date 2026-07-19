@@ -21,7 +21,7 @@ export function assertPathWithin(root: string, destination: string): void {
   if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))) {
     return
   }
-  throw new Error(`Ruta fuera del root permitido: ${destination}`)
+  throw new Error(`Ruta fuera de la raíz permitida: ${destination}`)
 }
 
 async function nearestExistingParent(input: string): Promise<string> {
@@ -44,7 +44,7 @@ async function resolveExistingPath(input: string): Promise<string> {
     return await realpath(input)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error(`Se rechaza una ruta con symlink roto: ${input}`)
+      throw new Error(`Se rechaza una ruta con un enlace simbólico (symlink) roto: ${input}`)
     }
     throw error
   }
@@ -56,7 +56,7 @@ export async function assertNoSymlinkEscape(root: string, destination: string): 
   try {
     const info = await lstat(destination)
     if (info.isSymbolicLink()) {
-      throw new Error(`Se rechaza escribir sobre un symlink: ${destination}`)
+      throw new Error(`Se rechaza escribir sobre un enlace simbólico (symlink): ${destination}`)
     }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
@@ -73,5 +73,5 @@ export async function assertNoSymlinkEscape(root: string, destination: string): 
   if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))) {
     return
   }
-  throw new Error(`La ruta escapa del root mediante symlink: ${destination}`)
+  throw new Error(`La ruta escapa de la raíz mediante un enlace simbólico (symlink): ${destination}`)
 }
