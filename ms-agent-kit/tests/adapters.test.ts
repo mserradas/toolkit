@@ -53,8 +53,8 @@ describe("platform adapters", () => {
       ]),
     )
 
-    expect(counts).toEqual({ opencode: 29, claude: 27, codex: 26 })
-    expect(artifacts).toHaveLength(82)
+    expect(counts).toEqual({ opencode: 27, claude: 25, codex: 23 })
+    expect(artifacts).toHaveLength(75)
     expect(new Set(artifacts.map((artifact) => artifact.destination)).size).toBe(artifacts.length)
     expect(
       artifacts.every((artifact) =>
@@ -90,6 +90,8 @@ describe("platform adapters", () => {
       .toContain("MS Doctor · Codex")
     expect(doctors.find((artifact) => artifact.target === "codex")?.content.toString("utf8"))
       .toContain("No inspecciones OpenCode ni Claude Code")
+    expect(doctors.find((artifact) => artifact.target === "codex")?.content.toString("utf8"))
+      .not.toContain("# Reglas Compartidas MS")
   })
 
   it("keeps OpenCode models and embeds the shared contract", async () => {
@@ -102,8 +104,8 @@ describe("platform adapters", () => {
     )
 
     expect(agents).toHaveLength(13)
-    expect(skills).toHaveLength(9)
-    expect(new Set(skills.map((artifact) => artifact.name))).toHaveLength(9)
+    expect(skills).toHaveLength(7)
+    expect(new Set(skills.map((artifact) => artifact.name))).toHaveLength(7)
     for (const agent of agents) {
       const document = parseMarkdown(agent.content.toString("utf8"))
       const expectedFrontmatter = [
@@ -252,7 +254,7 @@ describe("platform adapters", () => {
     const tui = configurations.find((artifact) => artifact.name === "tui.json")
     const notifier = configurations.find((artifact) => artifact.name === "opencode-notifier.json")
 
-    expect(artifacts).toHaveLength(30)
+    expect(artifacts).toHaveLength(28)
     expect(configurations).toHaveLength(3)
     expect(opencode?.destination).toBe(path.join(buildContext.homeDir, ".config", "opencode", "opencode.json"))
     const openCodeConfig = JSON.parse(opencode!.content.toString("utf8"))
@@ -374,9 +376,6 @@ describe("platform adapters", () => {
     const architectSkill = artifacts.find(
       (artifact) => artifact.name === "ms-architect" && artifact.kind === "skill",
     )
-    const skillCreator = artifacts.find(
-      (artifact) => artifact.name === "ms-skill-creator" && artifact.kind === "skill",
-    )
     const secretRules = artifacts.find(
       (artifact) => artifact.name === "ms-secrets" && artifact.kind === "policy",
     )
@@ -402,16 +401,21 @@ describe("platform adapters", () => {
     expect(parseMarkdown(architectSkill!.content.toString("utf8")).body).toContain(
       "Cada `spawn_agent` es una delegación normal",
     )
-    expect(parseMarkdown(skillCreator!.content.toString("utf8")).frontmatter.name).toBe(
-      "ms-skill-creator",
-    )
-    expect(skillCreator!.destination).toContain(
-      path.join(".agents", "skills", "ms-skill-creator", "SKILL.md"),
-    )
+    expect(
+      artifacts.find(
+        (artifact) => artifact.name === "ms-skill-creator" && artifact.kind === "skill",
+      ),
+    ).toBeUndefined()
     expect(secretRules!.destination).toContain(path.join(".codex", "rules", "ms-secrets.rules"))
     expect(secretRules!.content.toString("utf8")).toContain('decision = "forbidden"')
     expect(secretRules!.content.toString("utf8")).toContain('match = ["cat .env"')
     expect(secretRules!.content.toString("utf8")).toContain('not_match = ["cat .env.example"')
+
+    const status = artifacts.find(
+      (artifact) => artifact.name === "ms-status" && artifact.kind === "command",
+    )
+    expect(status!.content.toString("utf8")).toContain("$ms-status")
+    expect(status!.content.toString("utf8")).not.toContain("# Reglas Compartidas MS")
   })
 
   it("installs user-scoped Codex skills under CODEX_HOME", async () => {

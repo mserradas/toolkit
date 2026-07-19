@@ -1,15 +1,15 @@
 ---
 name: judgment-day
-description: "Ejecuta revisión adversarial con doble juez ciego. Úsala cuando el usuario pida Judgment Day, doble juez, doble revisión, revisión adversarial, que lo juzguen, o cuando un diff/TDD/spec de alto riesgo necesite confirmación independiente antes de cerrar."
+description: "Ejecuta revisión adversarial con doble juez ciego. Úsala solo cuando el usuario pida Judgment Day, doble juez, doble revisión, revisión adversarial o que lo juzguen."
 ---
 
 # Judgment Day
 
-Usa esta skill para revisar un objetivo concreto con dos jueces independientes antes de aceptar o corregir trabajo de alto riesgo.
+Usa esta skill para revisar un objetivo concreto con dos jueces independientes cuando el usuario lo pida explícitamente.
 
 ## Contrato De Activación
 
-Úsala solo actuando como `ms-architect` u otro orquestador con delegación a subagentes. Si se carga dentro de un ejecutor o worker de solo lectura, detente y devuelve el control a `ms-architect`.
+Úsala solo tras una petición explícita y actuando como `ms-architect` u otro orquestador con delegación a subagentes. Si se carga dentro de un ejecutor o worker de solo lectura, detente y devuelve el control a `ms-architect`.
 
 La skill coordina jueces; no autoriza al orquestador a revisar el objetivo inline ni a ejecutar correcciones.
 

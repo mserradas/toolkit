@@ -24,6 +24,8 @@ const CODEX_COMPATIBILITY = `
 - No leas archivos de secretos ni vuelques variables de entorno. Si falta un dato sensible, pide al usuario una entrada saneada; no intentes eludir las reglas de seguridad con otro comando o intérprete.
 `
 
+const CODEX_SKILL_EXCLUSIONS = new Set(["skill-creator"])
+
 const CODEX_SECRET_ARGUMENTS = [
   ".env",
   "./.env",
@@ -301,13 +303,17 @@ function commandSkill(command: SourceMarkdown, sharedRules: string): string {
     "description",
     `Ejecuta ${command.name}`,
   )
+  const usesOrchestration = command.name === "ms-continue"
+  const introduction = usesOrchestration
+    ? "Ejecuta este flujo de trabajo en la tarea padre. Cuando necesites especialización, delega en los agentes personalizados (`custom agents`) ms-* instalados. Usa $ARGUMENTS como entrada literal."
+    : "Ejecuta este flujo de trabajo de solo lectura en la tarea padre. Usa $ARGUMENTS como entrada literal."
+  const codexBody = command.body.replaceAll(`/${command.name}`, `$${command.name}`)
   const body = [
     "# Adaptación para Codex",
-    "Ejecuta este flujo de trabajo en la tarea padre. Cuando necesites especialización, delega en los agentes personalizados (`custom agents`) ms-* instalados. Usa $ARGUMENTS como entrada literal.",
-    "# Reglas Compartidas MS",
-    sharedRules.trim(),
+    introduction,
+    ...(usesOrchestration ? ["# Reglas Compartidas MS", sharedRules.trim()] : []),
     "# Flujo de trabajo",
-    command.body,
+    codexBody,
   ].join("\n\n")
   return codexSkill(command.name, description, body)
 }
@@ -331,6 +337,7 @@ export function buildCodexArtifacts(catalog: Catalog, context: BuildContext): Ar
   }
 
   for (const skill of catalog.skills) {
+    if (CODEX_SKILL_EXCLUSIONS.has(skill.name)) continue
     artifacts.push(...copySharedSkillArtifacts("codex", skill, roots.skills))
   }
 

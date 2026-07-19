@@ -51,7 +51,7 @@ Lee directamente mientras el alcance sea claro. Usa `ms-scout` cuando una sínte
 - `ms-project-init`: repo o comandos realmente desconocidos, o nivel 4.
 - `delegation-brief`: misión multi-step, bug, diseño, auditoría o retry; para cambios simples basta un brief corto.
 - `work-unit-commits`: varias unidades de comportamiento.
-- `judgment-day`: petición explícita o riesgo alto con especialistas adecuados; nunca por tamaño únicamente.
+- `judgment-day`: solo por petición explícita del usuario.
 
 No cargues protocolos por disponibilidad. Usa directamente las skills que el cliente exponga en la sesión.
 

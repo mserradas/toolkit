@@ -31,7 +31,7 @@ Retomar trabajo -> /ms-continue <slug> -> lee .atl/status/** -> ejecuta una sigu
 Se incorporan ideas útiles sin añadir una segunda familia de agentes:
 
 - **Preflight nivel 4**: antes de programas grandes, `ms-architect` fija modo de ejecución, estrategia de entrega, presupuesto de revisión, persistencia/idioma de artefactos y comandos de verificación conocidos.
-- **Guard de carga de revisión**: el TDD estima tamaño y riesgo de revisión; si un paquete supera el presupuesto (400 líneas por defecto), `ms-architect` divide, pide excepción explícita o cambia estrategia de entrega.
+- **Carga de revisión**: 400 líneas cambiadas es una señal orientativa; `ms-architect` divide solo cuando mejora la revisión o la independencia de entrega.
 - **Revisión proporcional**: `ms-architect` revisa el diff; activa `ms-security-auditor` u otro especialista solo cuando existe una señal real de riesgo.
 - **Gatekeeper entre fases**: antes de avanzar, `ms-architect` valida contrato, existencia de artefactos, coherencia de rutas/comandos, drift contra la entrada y siguiente acción.
 - **Contrato de idioma**: conversación en el idioma del usuario; artefactos persistentes en el idioma del repo o inglés técnico por defecto.
@@ -53,13 +53,11 @@ Se incorporan ideas útiles sin añadir una segunda familia de agentes:
 | Skill | Uso |
 |---|---|
 | `cognitive-doc-design` | Docs, guías, READMEs, RFCs y notas de revisión con baja carga cognitiva |
-| `comment-writer` | Comentarios de PR/issues, feedback y respuestas de mantenimiento |
 | `work-unit-commits` | Partir cambios en unidades revisables con tests/docs acoplados |
-| `chained-pr` | Diseñar PRs encadenados/stacked cuando se supera el presupuesto de revisión |
-| `judgment-day` | Doble juez ciego para revisar diffs, specs, TDDs o slices de alto riesgo |
+| `judgment-day` | Doble juez ciego bajo petición explícita del usuario |
 | `delegation-brief` | Preparar tareas autosuficientes para subagentes con contexto, límites, DoD y evidencia esperada |
 | `ms-project-init` | Crear un snapshot operativo mínimo de stack, arquitectura, verificación y riesgos antes de nivel 4 o repos desconocidos |
-| `skill-creator` | Crear nuevas skills concisas y reutilizables |
+| `skill-creator` | Crear nuevas skills concisas y reutilizables; Codex usa su skill nativa equivalente |
 | `skill-improver` | Auditar y mejorar skills existentes |
  
 Con el perfil `balanced`, todos los agentes pueden cargar las `skills` instaladas. El perfil `strict` conserva la política cerrada definida por cada rol.
@@ -123,12 +121,12 @@ Con el perfil `balanced`, todos los agentes pueden cargar las `skills` instalada
 - `ms-architect` delega exploración cuando el área es transversal, el blast radius es incierto o una síntesis reduce materialmente el contexto; no usa contadores rígidos de archivos o herramientas.
 - `ms-architect` ejecuta siempre un Security Smoke Gate tras cambios de `ms-codex` o `ms-fastlane`; si el diff contiene señales reales de secretos/config sensible o lógica de seguridad, invoca `ms-security-auditor` en modo ligero. Una ruta sensible con cambios solo visuales no basta para escalar.
 - `ms-architect` aplica Gatekeeper de Fases antes de avanzar entre spec, TDD, implementación, verificación, documentación y cierre.
-- `ms-architect` aplica el guard de carga de revisión en cambios nivel 3-4: presupuesto por defecto 400 líneas cambiadas por paquete/PR; si se excede, divide o pide excepción explícita.
+- `ms-architect` considera tamaño, riesgo e independencia en cambios nivel 3-4; superar 400 líneas sugiere revisar la partición, no la impone.
 - `ms-architect` carga la skill `ms-project-init` cuando no hay snapshot confiable de stack/comandos o antes de un nivel 4.
 - `ms-architect` carga `work-unit-commits` para partir nivel 3-4 por comportamiento entregable, no por tipo de archivo.
 - `ms-architect` usa `ms-spec` solo para cambios nivel 3-4, features ambiguas, contratos públicos, datos, seguridad, migraciones o decisiones irreversibles; no lo usa en fastlane ni nivel 2 claro.
 - `ms-architect` delega el modo de cierre de `ms-spec` antes del cierre final si una implementación nivel 3-4 tuvo spec funcional y el resultado afecta comportamiento observable. La spec se marca `Implementado`, `Verificado`, `Archivado` o `Reemplazado` con evidencia; no se borra.
-- `ms-architect` usa `judgment-day` cuando el usuario pide doble juez/revisión adversarial o cuando un diff/TDD/spec de alto riesgo necesita confirmación independiente; no aplica a fastlane ni cambios triviales.
+- `ms-architect` usa `judgment-day` únicamente cuando el usuario pide doble juez o revisión adversarial.
 - `ms-architect` usa `delegation-brief` antes de delegar paquetes nivel 3-4, TDD/spec, bugs, reviews, auditorías, verificaciones o retries; fastlane y nivel 2 trivial pueden usar brief corto.
 - `ms-architect` no crea checkpoints durante el flujo normal. `/ms-status` lee `.atl/status/**` y `/ms-continue` se usa únicamente cuando el usuario guardó manualmente una tarea incompleta.
 - `ms-spec` no diseña arquitectura técnica ni implementación; produce comportamiento, reglas, casos borde y criterios verificables en `docs/spec/**`, y al cierre registra evidencia, estado final y drift.
