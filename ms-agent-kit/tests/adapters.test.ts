@@ -58,10 +58,9 @@ describe("platform adapters", () => {
     expect(new Set(artifacts.map((artifact) => artifact.destination)).size).toBe(artifacts.length)
     expect(
       artifacts.every((artifact) =>
-        !artifact.content
-          .toString("utf8")
-          .replaceAll(buildContext.projectRoot, "<project>")
-          .includes("ms-agent-kit"),
+        !/(?:^|[\\/])ms-agent-kit(?:[\\/]|$)/m.test(
+          artifact.content.toString("utf8").replaceAll(buildContext.projectRoot, "<project>"),
+        ),
       ),
     ).toBe(true)
     const openCodeSkill = artifacts.find(
@@ -92,6 +91,12 @@ describe("platform adapters", () => {
       .toContain("No inspecciones OpenCode ni Claude Code")
     expect(doctors.find((artifact) => artifact.target === "codex")?.content.toString("utf8"))
       .not.toContain("# Reglas Compartidas MS")
+    const codexDoctor = doctors.find((artifact) => artifact.target === "codex")?.content.toString("utf8") ?? ""
+    expect(codexDoctor).toContain("Aplica primero el perfil padre")
+    expect(codexDoctor).toContain('`extends = ":read-only"` es compatible')
+    expect(codexDoctor).toContain("`~/.ms-agent-kit/state.json`")
+    expect(codexDoctor).toContain("Limitaciones del entorno")
+    expect(codexDoctor).toContain("skill principal `ms-architect`")
   })
 
   it("keeps OpenCode models and embeds the shared contract", async () => {
