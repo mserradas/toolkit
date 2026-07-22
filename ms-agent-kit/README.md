@@ -10,7 +10,7 @@ El instalador calcula un plan antes de escribir, conserva el estado de propiedad
 |---|---|---|
 | OpenCode | 13 agentes, 3 comandos `/ms-*` y 9 `skills` generales | Configuración, interfaz de terminal (`TUI`), Context7, notificaciones y permisos por agente |
 | Claude Code | 13 subagentes, 3 habilidades invocables (`slash skills`) `/ms-*` y 9 `skills` generales | Límites de herramientas y protección compartida `PreToolUse` |
-| Codex | 12 agentes especialistas, 3 comandos como `skills` y 9 `skills` generales | Perfiles, reglas de seguridad y `$ms-architect` como orquestador padre |
+| Codex | 12 agentes especialistas, 3 comandos como `skills` y 9 `skills` generales | Perfiles, reglas de seguridad, Context7 y `$ms-architect` como orquestador padre |
 
 El catálogo actual incluye 13 agentes, 3 comandos y 9 `skills` generales. En Codex, `ms-architect` se instala como `skill` de la tarea principal para que pueda delegar directamente en los 12 especialistas.
 
@@ -115,7 +115,7 @@ Si se omite `--project`, el directorio actual se usa como raíz del proyecto.
 | `--project <ruta>` | Define la raíz para el alcance de proyecto |
 | `--home <ruta>` | Usa un directorio personal alternativo, útil para pruebas o `dotfiles` |
 | `--assets <ruta>` | Usa un catálogo de recursos (`assets`) alternativo |
-| `--force` | Adopta conflictos durante `install` y guarda una copia de seguridad |
+| `--force` | Reemplaza conflictos elegibles; restaura solo bloques administrados inequívocos |
 | `--yes` | Evita preguntas interactivas |
 | `--dry-run` | Convierte `install` en una inspección sin escrituras |
 | `--json` | Devuelve salida estructurada |
@@ -209,6 +209,22 @@ $ms-continue mi-cambio
 
 Cada especialista recibe un perfil de sistema de archivos, razonamiento y búsqueda web. Una configuración global de `sandbox_mode` o los permisos de la tarea principal pueden prevalecer sobre esos perfiles.
 
+`ms-agent-kit` registra Context7 como servidor MCP remoto mediante un bloque delimitado en `~/.codex/config.toml` o en `.codex/config.toml`, según el alcance. Codex solo carga la capa `.codex/config.toml` de proyecto cuando el repositorio está marcado como confiable; por eso `codex mcp get context7` o `codex mcp list` pueden no mostrarla dentro de un fixture o repositorio no confiable. El bloque referencia `CONTEXT7_API_KEY` por nombre en `env_http_headers`; nunca lee ni persiste su valor:
+
+```toml
+[mcp_servers.context7]
+url = "https://mcp.context7.com/mcp"
+env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }
+```
+
+Si ya existe una tabla Context7 externa equivalente, el instalador la respeta sin modificarla ni asumir propiedad. Una tabla distinta o ambigua se protege como conflicto, incluso con `--force`. Al desinstalar, el kit retira únicamente su bloque y conserva byte a byte el resto de `config.toml`.
+
+Para obtener la cuota autenticada, define `CONTEXT7_API_KEY` en el entorno de la aplicación que inicia Codex. Después de instalar o cambiar la variable, reinicia Codex o abre una tarea nueva y comprueba el registro con:
+
+```bash
+codex mcp get context7
+```
+
 ## Checkpoints entre sesiones
 
 El flujo normal no crea checkpoints ni registra IDs de agentes. Cuando el usuario quiere cambiar de sesión con trabajo incompleto, `ms-progress` guarda manualmente un resumen temporal en `.atl/status/<slug>-progress.md`. `/ms-continue <slug>` valida ese resumen contra Git y ejecuta una única próxima acción en un flujo nuevo. Al terminar la feature, el checkpoint se elimina.
@@ -231,6 +247,8 @@ Durante actualizaciones también puede proponer eliminar, restaurar, desvincular
 
 Sí. Es almacenamiento operativo del instalador, no una copia decorativa. Cuando se reemplaza un archivo con `--force` o desde el asistente, el estado guarda la referencia a la copia de seguridad para que `uninstall` pueda restaurar el contenido anterior.
 
+Los bloques administrados dentro de archivos compartidos, como Context7 en `config.toml`, son la excepción: el kit posee solo el rango delimitado y no guarda una copia completa del archivo. `uninstall` retira ese rango únicamente si sigue intacto.
+
 No borres manualmente `~/.ms-agent-kit` mientras existan instalaciones administradas. Si necesitas liberar copias de seguridad, desinstala primero los clientes correspondientes y revisa el resultado.
 
 El mecanismo de seguridad incluye:
@@ -243,6 +261,8 @@ El mecanismo de seguridad incluye:
 - Restauración durante `uninstall` solo cuando el destino sigue siendo seguro.
 
 Ejecuta siempre `plan` antes de usar `--force`.
+
+Si necesitas volver a una versión anterior de `ms-agent-kit` después de instalar el bloque Context7, ejecuta primero `ms-agent-kit uninstall --target codex` con la versión actual. Las versiones antiguas no reconocen el ownership limitado a bloques.
 
 ## Seguridad y límites
 
@@ -301,7 +321,9 @@ Define `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` y reinicia OpenCode. Esto desactiva 
 
 ### Context7 no autentica
 
-Comprueba que `CONTEXT7_API_KEY` existe en la misma sesión desde la que se inicia OpenCode. No añadas la clave a `opencode.json` ni al repositorio.
+Comprueba que `CONTEXT7_API_KEY` existe en el entorno de la aplicación desde la que se inicia OpenCode o Codex. Una terminal puede tener la variable mientras una aplicación gráfica no la hereda. No añadas la clave a `opencode.json`, `config.toml` ni al repositorio.
+
+Después de corregir el entorno, reinicia el cliente o abre una tarea nueva. En Codex puedes comprobar que el servidor quedó registrado con `codex mcp get context7`; el valor de la clave no debe aparecer en su configuración.
 
 ### Codex no aplica el perfil esperado
 

@@ -3,6 +3,7 @@ export const TARGETS = ["opencode", "claude", "codex"] as const
 export type Target = (typeof TARGETS)[number]
 export type InstallScope = "user" | "project"
 export type PermissionProfile = "balanced" | "strict" | "trusted"
+export type ManagementStrategy = "managed-block"
 
 export type ArtifactKind =
   | "agent"
@@ -22,6 +23,9 @@ export interface Artifact {
   root: string
   content: Buffer
   mode: number
+  strategy?: ManagementStrategy
+  blockId?: string
+  satisfaction?: "codex-context7"
 }
 
 export interface SourceFile {
@@ -69,6 +73,12 @@ export interface PlanItem {
   reason: string
   currentHash?: string
   desiredHash: string
+  strategy?: ManagementStrategy
+  blockId?: string
+  currentBlockHash?: string
+  desiredBlockHash?: string
+  leadingSeparator?: "" | "\n" | "\r\n"
+  satisfiedExternally?: boolean
 }
 
 export interface InstallPlan {
@@ -94,6 +104,11 @@ export interface OwnedFile {
   afterHash: string
   original: OriginalFile
   installedAt: string
+  strategy?: ManagementStrategy
+  blockId?: string
+  blockHash?: string
+  leadingSeparator?: "" | "\n" | "\r\n"
+  createdFile?: boolean
 }
 
 export interface InstallState {

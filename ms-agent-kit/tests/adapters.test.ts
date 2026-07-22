@@ -53,8 +53,8 @@ describe("platform adapters", () => {
       ]),
     )
 
-    expect(counts).toEqual({ opencode: 27, claude: 25, codex: 23 })
-    expect(artifacts).toHaveLength(75)
+    expect(counts).toEqual({ opencode: 27, claude: 25, codex: 24 })
+    expect(artifacts).toHaveLength(76)
     expect(new Set(artifacts.map((artifact) => artifact.destination)).size).toBe(artifacts.length)
     expect(
       artifacts.every((artifact) =>
@@ -373,13 +373,20 @@ describe("platform adapters", () => {
   })
 
   it("renders Codex TOML agents and parent orchestration skills", async () => {
-    const artifacts = await buildArtifacts(["codex"], await context())
+    const buildContext = await context()
+    const artifacts = await buildArtifacts(["codex"], buildContext)
     const agents = artifacts.filter((artifact) => artifact.kind === "agent")
     const architectAgent = agents.find((artifact) => artifact.name === "ms-architect")
     const scout = artifacts.find((artifact) => artifact.name === "ms-scout" && artifact.kind === "agent")
     const coder = artifacts.find((artifact) => artifact.name === "ms-codex" && artifact.kind === "agent")
     const architectSkill = artifacts.find(
-      (artifact) => artifact.name === "ms-architect" && artifact.kind === "skill",
+      (artifact) =>
+        artifact.name === "ms-architect" &&
+        artifact.kind === "skill" &&
+        artifact.destination.endsWith("SKILL.md"),
+    )
+    const context7 = artifacts.find(
+      (artifact) => artifact.name === "context7" && artifact.kind === "configuration",
     )
     const secretRules = artifacts.find(
       (artifact) => artifact.name === "ms-secrets" && artifact.kind === "policy",
@@ -406,6 +413,21 @@ describe("platform adapters", () => {
     expect(parseMarkdown(architectSkill!.content.toString("utf8")).body).toContain(
       "Cada `spawn_agent` es una delegación normal",
     )
+    expect(context7).toMatchObject({
+      destination: path.join(buildContext.projectRoot, ".codex", "config.toml"),
+      root: path.join(buildContext.projectRoot, ".codex"),
+      strategy: "managed-block",
+      blockId: "codex-context7",
+      satisfaction: "codex-context7",
+      mode: 0o644,
+    })
+    expect(context7?.content.toString("utf8")).toBe(
+      '[mcp_servers.context7]\nurl = "https://mcp.context7.com/mcp"\n' +
+        'env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }\n',
+    )
+    expect(context7?.content.toString("utf8").match(/CONTEXT7_API_KEY/g)).toHaveLength(2)
+    expect(context7?.content.toString("utf8")).not.toMatch(/authorization|bearer|sk-[A-Za-z0-9]/i)
+    expect(artifacts.some((artifact) => artifact.destination.endsWith("openai.yaml"))).toBe(false)
     expect(
       artifacts.find(
         (artifact) => artifact.name === "ms-skill-creator" && artifact.kind === "skill",
@@ -435,5 +457,16 @@ describe("platform adapters", () => {
       expect(skill.destination).toContain(path.join(buildContext.homeDir, ".codex", "skills"))
       expect(skill.destination).not.toContain(path.join(buildContext.homeDir, ".agents", "skills"))
     }
+    const context7 = artifacts.find(
+      (artifact) => artifact.name === "context7" && artifact.kind === "configuration",
+    )
+    expect(context7).toMatchObject({
+      destination: path.join(buildContext.homeDir, ".codex", "config.toml"),
+      root: path.join(buildContext.homeDir, ".codex"),
+      strategy: "managed-block",
+      blockId: "codex-context7",
+      satisfaction: "codex-context7",
+    })
+    expect(artifacts.some((artifact) => artifact.destination.endsWith("openai.yaml"))).toBe(false)
   })
 })

@@ -26,6 +26,11 @@ const CODEX_COMPATIBILITY = `
 
 const CODEX_SKILL_EXCLUSIONS = new Set(["skill-creator"])
 
+const CODEX_CONTEXT7_CONFIG = `[mcp_servers.context7]
+url = "https://mcp.context7.com/mcp"
+env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }
+`
+
 const CODEX_SECRET_ARGUMENTS = [
   ".env",
   "./.env",
@@ -342,6 +347,19 @@ export function buildCodexArtifacts(catalog: Catalog, context: BuildContext): Ar
   }
 
   artifacts.push(
+    {
+      ...textArtifact({
+        target: "codex",
+        kind: "configuration",
+        name: "context7",
+        root: roots.codex,
+        destination: path.join(roots.codex, "config.toml"),
+        content: CODEX_CONTEXT7_CONFIG,
+      }),
+      strategy: "managed-block",
+      blockId: "codex-context7",
+      satisfaction: "codex-context7",
+    },
     textArtifact({
       target: "codex",
       kind: "policy",
