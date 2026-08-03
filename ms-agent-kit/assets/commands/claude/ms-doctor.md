@@ -21,7 +21,7 @@ Revisa solo el contexto Claude Code:
 - `~/.claude/settings.json`, `agents/ms-*.md`, `skills/*/SKILL.md` y `hooks/ms-agent-guard.mjs`.
 - En scope de proyecto, las rutas equivalentes bajo `.claude/` y los `CLAUDE.md` aplicables.
 
-Comprueba que los agentes y las skills tienen frontmatter válido; `ms-architect` conserva capacidad de coordinación; los workers no pueden subdelegar; los permisos y hooks concuerdan con cada rol; el guard bloquea secretos y escrituras fuera de ownership; `ms-shared` existe una sola vez; y `ms-status`, `ms-continue` y `ms-doctor` apuntan a `ms-architect`. Con argumento `full`, incluye todos los agentes; en otro caso usa los siete mínimos.
+Comprueba que los agentes y las skills tienen frontmatter válido; `ms-architect` conserva capacidad de coordinación; los workers no pueden subdelegar; los permisos y hooks concuerdan con cada rol; el guard bloquea secretos y escrituras fuera de ownership; `ms-shared` existe una sola vez; y `ms-status` y `ms-doctor` apuntan a `ms-architect`. Con argumento `full`, incluye todos los agentes; en otro caso usa los siete mínimos.
 
 No cuentes skills de OpenCode, Codex, cachés ni marketplaces.
 

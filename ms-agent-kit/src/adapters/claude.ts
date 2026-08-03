@@ -1,6 +1,7 @@
 import path from "node:path"
 import { agentDefinition } from "../core/agent-catalog.js"
 import { frontmatterString, renderMarkdown } from "../core/frontmatter.js"
+import { modelProfile } from "../core/model-profiles.js"
 import { capabilityProfile } from "../core/profiles.js"
 import { openCodeRolePermission } from "../core/opencode-role-permissions.js"
 import type { Artifact, BuildContext, Catalog, SourceMarkdown } from "../core/types.js"
@@ -11,7 +12,7 @@ import {
 
 const CLAUDE_COMPATIBILITY = `
 - Interpreta task como la herramienta Agent de Claude Code.
-- Cada llamada a Agent es una delegación normal. Si una sesión termina con trabajo incompleto, el usuario decide si guarda un checkpoint temporal antes de abrir otra.
+- Cada llamada a Agent es una delegación normal acotada al brief actual.
 - Interpreta question como AskUserQuestion cuando este disponible; si eres un subagente, devuelve la pregunta bloqueante al padre.
 - Las reglas compartidas y el contrato de salida llegan precargados mediante la skill ms-shared.
 - Los nombres de permisos de OpenCode dentro del cuerpo describen limites de rol. El frontmatter de Claude Code es la autoridad de herramientas.
@@ -25,7 +26,8 @@ function rootFor(context: BuildContext): string {
 }
 
 function deniedTools(name: string): string[] {
-  const profile = capabilityProfile(agentDefinition(name).capabilityProfile)
+  const definition = agentDefinition(name)
+  const profile = capabilityProfile(definition.capabilityProfile)
   const denied = new Set<string>()
   if (!profile.writes) {
     denied.add("Write")
@@ -36,9 +38,16 @@ function deniedTools(name: string): string[] {
   if (!profile.orchestrates) denied.add("Agent")
   if (!profile.orchestrates) denied.add("SendMessage")
   if (!profile.usesSkills) denied.add("Skill")
-  if (!profile.asksQuestions) denied.add("AskUserQuestion")
+  if (definition.mode !== "primary" || !profile.asksQuestions) denied.add("AskUserQuestion")
   if (!profile.webFetch) denied.add("WebFetch")
   if (!profile.webSearch) denied.add("WebSearch")
+  if (!profile.orchestrates) {
+    denied.add("TaskCreate")
+    denied.add("TaskGet")
+    denied.add("TaskList")
+    denied.add("TaskUpdate")
+    denied.add("TodoWrite")
+  }
   return [...denied]
 }
 
@@ -81,19 +90,23 @@ function claudeAgent(agent: SourceMarkdown, guardPath: string): string {
     "description",
     `Agente especializado ${agent.name}`,
   )
+  const definition = agentDefinition(agent.name)
+  const profile = modelProfile(definition.modelProfile)
   const frontmatter: Record<string, unknown> = {
     name: agent.name,
     description,
-    model: "inherit",
+    model: profile.claudeModel ?? "inherit",
     permissionMode: "default",
     skills: ["ms-shared"],
     hooks: claudeGuardHooks(
       guardPath,
       agent.name,
-      agentDefinition(agent.name).mode === "subagent",
+      definition.mode === "subagent",
     ),
   }
-  const definition = agentDefinition(agent.name)
+  if (profile.claudeEffort !== undefined) {
+    frontmatter.effort = profile.claudeEffort
+  }
   if (definition.toolCycleBudget !== undefined) {
     frontmatter.maxTurns = definition.toolCycleBudget
   }

@@ -1,0 +1,112 @@
+name: ms-agent-kit CI
+
+on:
+  pull_request:
+    paths:
+      - "ms-agent-kit/**"
+      - ".github/workflows/ms-agent-kit-ci.yml"
+  push:
+    paths:
+      - "ms-agent-kit/**"
+      - ".github/workflows/ms-agent-kit-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ms-agent-kit-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-compatibility:
+    name: Node ${{ matrix.node }} · Linux
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22", "24", "26"]
+    defaults:
+      run:
+        working-directory: ms-agent-kit
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+          run_install: false
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+          cache-dependency-path: ms-agent-kit/pnpm-lock.yaml
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Comprobar tipos
+        run: pnpm check
+
+      - name: Ejecutar tests
+        run: pnpm test
+
+      - name: Construir el paquete
+        run: pnpm build
+
+      - name: Validar el paquete
+        run: pnpm package:check
+
+  platform-smoke:
+    name: Node 24 · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: ms-agent-kit
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+          run_install: false
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: ms-agent-kit/pnpm-lock.yaml
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Comprobar tipos
+        run: pnpm check
+
+      - name: Construir el paquete
+        run: pnpm build
+
+      - name: Validar el paquete
+        run: pnpm package:check
+
+      - name: Comprobar la CLI
+        run: |
+          node dist/cli.js --help
+          node dist/cli.js list --json

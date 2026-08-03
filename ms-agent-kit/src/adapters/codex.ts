@@ -13,7 +13,7 @@ import {
 
 const CODEX_COMPATIBILITY = `
 - Interpreta \`task\` como una delegación a un agente personalizado (\`custom agent\`) de Codex.
-- Cada \`spawn_agent\` es una delegación normal. Si una sesión termina con trabajo incompleto, el usuario decide si guarda un checkpoint temporal antes de abrir otra; no se exige identidad durable del worker.
+- Cada \`spawn_agent\` es una delegación normal acotada al brief actual.
 - Interpreta \`question\` como una pregunta directa al usuario desde la tarea padre.
 - Las referencias a \`permission.task\` o a herramientas de OpenCode son límites del rol, no sintaxis TOML.
 - Codex no permite desactivar Bash, las preguntas al usuario ni el catálogo global de habilidades (\`skills\`) por agente personalizado. Respeta esos límites del rol como instrucciones obligatorias aunque la herramienta siga visible.
@@ -153,6 +153,37 @@ function codexWritePaths(writePaths: readonly string[]): string[] {
   ]
 }
 
+function codexOperationalInstructions(
+  definition: ReturnType<typeof agentDefinition>,
+  profile: ReturnType<typeof capabilityProfile>,
+): string {
+  const instructions: string[] = []
+  if (definition.mode !== "primary" || !profile.asksQuestions) {
+    instructions.push(
+      "No preguntes directamente al usuario aunque la herramienta siga visible; devuelve al agente padre cualquier pregunta cuya respuesta cambie el resultado.",
+    )
+  }
+  if (!profile.orchestrates) {
+    instructions.push(
+      "No crees ni actualices planes o TODOs del cliente; el plan pertenece al agente orquestador.",
+      "No delegues ni coordines otros agentes aunque las herramientas sigan visibles; devuelve el control al agente padre cuando haga falta coordinación.",
+    )
+  }
+  if (!profile.shell) {
+    instructions.push("No uses Bash ni shell aunque la herramienta siga visible.")
+  }
+  if (!profile.usesSkills) {
+    instructions.push("No cargues ni invoques skills aunque el catálogo siga visible.")
+  }
+  if (definition.toolCycleBudget !== undefined) {
+    instructions.push(
+      `Presupuesto operativo objetivo: ${definition.toolCycleBudget} ciclos de herramienta. Al agotar el ciclo ${definition.toolCycleBudget} sin completar, detente y devuelve \`status: partial\` con el trabajo preservable y la siguiente acción; no abras otra tanda de ciclos.`,
+    )
+  }
+  if (instructions.length === 0) return ""
+  return ["# Límites Operativos De Codex", ...instructions.map((item) => `- ${item}`)].join("\n")
+}
+
 function codexAgent(agent: SourceMarkdown, sharedRules: string): string {
   const definition = agentDefinition(agent.name)
   const profile = capabilityProfile(definition.capabilityProfile)
@@ -162,7 +193,10 @@ function codexAgent(agent: SourceMarkdown, sharedRules: string): string {
     "description",
     `Agente especializado ${agent.name}`,
   )
-  const instructions = embeddedAgentBody(sharedRules, agent.body, CODEX_COMPATIBILITY)
+  const roleInstructions = [codexOperationalInstructions(definition, profile), agent.body]
+    .filter(Boolean)
+    .join("\n\n")
+  const instructions = embeddedAgentBody(sharedRules, roleInstructions, CODEX_COMPATIBILITY)
   const lines = [
     `name = ${tomlString(agent.name)}`,
     `description = ${tomlString(description)}`,
@@ -302,21 +336,18 @@ prefix_rule(
 `
 }
 
-function commandSkill(command: SourceMarkdown, sharedRules: string): string {
+function commandSkill(command: SourceMarkdown): string {
   const description = frontmatterString(
     command.frontmatter,
     "description",
     `Ejecuta ${command.name}`,
   )
-  const usesOrchestration = command.name === "ms-continue"
-  const introduction = usesOrchestration
-    ? "Ejecuta este flujo de trabajo en la tarea padre. Cuando necesites especialización, delega en los agentes personalizados (`custom agents`) ms-* instalados. Usa $ARGUMENTS como entrada literal."
-    : "Ejecuta este flujo de trabajo de solo lectura en la tarea padre. Usa $ARGUMENTS como entrada literal."
+  const introduction =
+    "Ejecuta este flujo de trabajo de solo lectura en la tarea padre. Usa $ARGUMENTS como entrada literal."
   const codexBody = command.body.replaceAll(`/${command.name}`, `$${command.name}`)
   const body = [
     "# Adaptación para Codex",
     introduction,
-    ...(usesOrchestration ? ["# Reglas Compartidas MS", sharedRules.trim()] : []),
     "# Flujo de trabajo",
     codexBody,
   ].join("\n\n")
@@ -398,7 +429,7 @@ export function buildCodexArtifacts(catalog: Catalog, context: BuildContext): Ar
         name: command.name,
         root: roots.skills,
         destination: path.join(roots.skills, command.name, "SKILL.md"),
-        content: commandSkill(renderedCommand, catalog.sharedRules),
+        content: commandSkill(renderedCommand),
       }),
     )
   }

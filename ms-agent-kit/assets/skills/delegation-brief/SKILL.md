@@ -17,7 +17,9 @@ Prepara instrucciones autosuficientes para un worker; no ejecuta la misión. Ús
 - Incluye solo contexto necesario y decisiones ya aprobadas.
 - Delimita archivos, comportamiento permitido y aquello que no debe tocarse.
 - Define aceptación observable, evidencia de entrega y verificaciones conocidas; no inventes comandos.
-- Declara dependencias. En un reintento añade qué preservar, qué falta y qué efectos no repetir.
+- Designa un único `verification_owner`: `implementer | ms-tester | none`. Usa `implementer` para `ms-codex` o `ms-fastlane`, `ms-tester` cuando quede un gate independiente pendiente y `none` para tareas sin ejecución verificable.
+- Declara dependencias, evidencia existente y estado del workspace desde esa evidencia.
+- En un reintento envía solo el delta: qué preservar, qué falta y qué efectos o verificaciones no repetir. Nunca reenvíes el brief original sin cambios.
 
 ## Plantilla
 
@@ -29,6 +31,8 @@ Objetivo: <resultado único esperado>
 
 Contexto necesario:
   - <decisiones, archivos, símbolos o dependencias imprescindibles>
+  - Evidencia existente: <comando/resultado reutilizable o “ninguna”>
+  - Estado del workspace: <writes/cambios desde la evidencia>
 
 Alcance permitido:
   - <archivos, módulos, comportamiento o comandos>
@@ -43,6 +47,7 @@ Criterios de aceptación:
   - <resultado observable>
 
 Verificación:
+  - verification_owner: implementer | ms-tester | none
   - <comando conocido y alcance, o “no aplica”>
 
 Entrega esperada:
@@ -50,8 +55,8 @@ Entrega esperada:
 
 Reintento (solo si aplica):
   - Preservar: <trabajo aceptado>
-  - Pendiente: <delta restante>
-  - No repetir: <efectos ya realizados>
+  - Delta pendiente: <único trabajo restante>
+  - No repetir: <efectos y verificaciones ya realizados>
 
 Contrato:
   - Termina con `Contrato para ms-architect`.

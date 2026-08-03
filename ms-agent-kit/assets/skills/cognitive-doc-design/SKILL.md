@@ -15,7 +15,8 @@ Usa esta skill al crear o revisar documentación que otra persona debe entender,
 - Prefiere tablas, checklists, ejemplos y plantillas antes que prosa larga.
 - Haz explícita la intención de revisión: qué cambió, por qué importa y cómo verificarlo.
 - Elimina encuadres repetidos, tono motivacional y contexto genérico.
-- Sigue el idioma del contexto destino. En español, usa español neutro/profesional salvo convención distinta del repo.
+- Escribe toda la prosa humana en español neutro y profesional, con independencia de la lengua predominante del código base. Conserva sin traducir literales técnicos, identificadores, rutas, comandos, APIs, valores de estado, logs, errores, citas textuales, terminología técnica canónica del proyecto y tokens estructurales exigidos por formatos o tooling.
+- Si modificas un documento existente en inglés, normaliza al español toda su prosa humana; no traduzcas citas ni contratos públicos literales.
 
 ## Forma Recomendada
 

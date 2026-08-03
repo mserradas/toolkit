@@ -51,7 +51,7 @@ describe("Codex hardening", () => {
     const artifacts = await buildArtifacts(["codex"], await testContext())
     const agents = artifacts.filter((artifact) => artifact.kind === "agent")
 
-    expect(agents).toHaveLength(12)
+    expect(agents).toHaveLength(11)
     expect(agents.every((artifact) => artifact.content.includes('web_search = "'))).toBe(true)
     expect(artifacts).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ kind: "skill", name: "ms-shared" })]),

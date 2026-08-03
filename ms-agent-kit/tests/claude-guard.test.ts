@@ -4,8 +4,10 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import { buildArtifacts } from "../src/adapters/index.js"
+import { agentDefinition } from "../src/core/agent-catalog.js"
 import { DEFAULT_ASSETS_ROOT } from "../src/core/catalog.js"
 import { parseMarkdown } from "../src/core/frontmatter.js"
+import { capabilityProfile } from "../src/core/profiles.js"
 import type { Artifact, BuildContext } from "../src/core/types.js"
 
 const temporaryDirectories: string[] = []
@@ -564,7 +566,7 @@ describe("Claude permission guard", () => {
     expect(blocked.stderr).toContain("fuera del alcance")
   })
 
-  it("allows normal Claude delegations without a progress checkpoint", async () => {
+  it("allows normal Claude delegations", async () => {
     const { guardPath, projectRoot } = await setupGuard()
     const delegated = await runGuard(guardPath, projectRoot, "ms-architect", {
       cwd: projectRoot,
@@ -613,22 +615,26 @@ describe("Claude permission guard", () => {
       "ms-tester",
       "ms-writer",
     ])
-    const questionsEnabled = new Set([
-      "ms-architect",
-      "ms-designer",
-      "ms-discovery",
-      "ms-plan",
-      "ms-spec",
-    ])
     const agentArtifacts = artifacts.filter((artifact) => artifact.kind === "agent")
+    const deniedByAgent = new Map<string, string[]>()
 
-    expect(agentArtifacts).toHaveLength(13)
+    expect(agentArtifacts).toHaveLength(12)
     for (const artifact of agentArtifacts) {
+      const definition = agentDefinition(artifact.name)
+      const capability = capabilityProfile(definition.capabilityProfile)
+      const canAskQuestions = definition.mode === "primary" && capability.asksQuestions
       const frontmatter = parseMarkdown(artifact.content.toString("utf8")).frontmatter
       const denied = frontmatter.disallowedTools as string[]
+      deniedByAgent.set(artifact.name, denied)
       expect(denied).toContain("WebSearch")
       expect(denied.includes("WebFetch")).toBe(!webFetchEnabled.has(artifact.name))
-      expect(denied.includes("AskUserQuestion")).toBe(!questionsEnabled.has(artifact.name))
+      expect(denied.includes("AskUserQuestion")).toBe(!canAskQuestions)
+    }
+    for (const name of ["ms-designer", "ms-spec"]) {
+      expect(deniedByAgent.get(name)).toContain("AskUserQuestion")
+    }
+    for (const name of ["ms-architect", "ms-discovery", "ms-plan"]) {
+      expect(deniedByAgent.get(name)).not.toContain("AskUserQuestion")
     }
   })
 

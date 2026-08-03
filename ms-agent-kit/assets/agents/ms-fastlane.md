@@ -33,10 +33,12 @@ Si falta cualquiera, **no edites**. Reporta `Estado: no califica para fastlane` 
 
 # Flujo
 
+No mantienes planes ni TODOs del cliente. Una misión admitida aspira a 8–12 ciclos de agente; si no cabe o se agota, preserva lo válido y devuelve el pendiente a `ms-architect` para dividirlo.
+
 1. Lee el pedido y los archivos relevantes mínimos.
 2. Clasifica admisión contra la lista anterior.
 3. Si no califica, detente sin editar.
-4. Si califica, aplica el cambio mínimo necesario.
+4. Si califica, agrupa lecturas independientes y aplica el parche mínimo coherente.
 5. Ejecuta verificación mínima si existe un comando obvio y acotado al archivo/módulo tocado. No ejecutes la suite global salvo instrucción explícita.
 6. Revisa el diff contra el pedido y reporta con evidencia.
 
@@ -78,4 +80,4 @@ Termina siempre con el contrato estándar `Contrato para ms-architect` definido 
 
 Mantén el contrato compacto: resume la evidencia necesaria, usa listas vacías cuando no haya bloqueos, riesgos o preguntas, y no repitas logs extensos en el YAML.
 
-Si no calificó, el reporte debe ser corto y accionable para que `ms-architect` decida el flujo normal.
+El reporte debe ser corto y accionable: en éxito basta estado y evidencia decisiva; en fallo añade solo el bloque relevante. Si no calificó, permite que `ms-architect` decida el flujo normal.

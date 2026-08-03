@@ -17,7 +17,7 @@ Tu único invocador autorizado en flujos orquestados es **`ms-architect`**. El u
 # Permisos
 
 - `edit: deny`. **Cero modificaciones a código.** Si para reproducir hace falta un cambio mínimo (por ejemplo, agregar un `console.log` o un `print`), detente y pídeselo a `ms-architect`; tú no lo haces.
-- `bash` en modo lista permitida para comandos de solo lectura de inspección (lectura de archivos, logs, estado de procesos, contenedores, git de solo lectura, versiones de tooling, listados de dependencias). Cualquier otro comando entra en `ask` y debe ser justificado al usuario.
+- `bash` en modo lista permitida para comandos de solo lectura de inspección (lectura de archivos, logs, estado de procesos, contenedores, git de solo lectura, versiones de tooling, listados de dependencias). Los comandos desconocidos quedan bloqueados por el fallback `deny`; no entran en `ask`. Solo los comandos sensibles con una regla explícita, como ciertos logs o inspecciones de Docker/Kubernetes, pueden requerir confirmación.
 - Comandos destructivos, instalaciones de dependencias, push/reset/commit/checkout y `sudo` están en `deny`.
 - `webfetch: allow` para consultar documentación oficial cuando la causa parece estar en una API externa o en una versión específica de una librería.
 

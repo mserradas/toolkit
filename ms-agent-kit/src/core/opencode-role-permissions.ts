@@ -1,4 +1,6 @@
 import type { PermissionProfile } from "./types.js"
+import { agentDefinition } from "./agent-catalog.js"
+import { capabilityProfile } from "./profiles.js"
 
 export type OpenCodeRolePermission = Record<string, unknown>
 
@@ -22,7 +24,11 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "git diff*": "allow",
       "git show*": "allow",
       "git log*": "allow",
-      "git branch*": "allow",
+      "git branch": "allow",
+      "git branch --show-current": "allow",
+      "git branch --list": "allow",
+      "git branch -a": "allow",
+      "git branch -r": "allow",
       "git rev-parse*": "allow",
       "opencode debug config": "allow",
       "opencode debug agent *": "allow",
@@ -30,7 +36,7 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
     },
     "webfetch": "allow",
     "websearch": "deny",
-    "todowrite": "deny",
+    "todowrite": "allow",
     "lsp": "deny",
     "skill": "allow",
     "question": "allow",
@@ -43,7 +49,6 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "ms-tester": "allow",
       "ms-scout": "allow",
       "ms-debugger": "allow",
-      "ms-progress": "allow",
       "ms-writer": "allow",
       "ms-security-auditor": "allow"
     }
@@ -61,7 +66,6 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "wc *": "allow",
       "file *": "allow",
       "stat *": "allow",
-      "find *": "allow",
       "tree *": "allow",
       "mkdir -p .atl": "allow",
       "mkdir -p .atl/": "allow",
@@ -73,7 +77,11 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "git log*": "allow",
       "git show*": "allow",
       "git blame*": "allow",
-      "git branch*": "allow",
+      "git branch": "allow",
+      "git branch --show-current": "allow",
+      "git branch --list": "allow",
+      "git branch -a": "allow",
+      "git branch -r": "allow",
       "git rev-parse*": "allow",
       "node --version": "allow",
       "npm --version": "allow",
@@ -90,18 +98,26 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "pnpm type*": "allow",
       "pnpm typecheck*": "allow",
       "pnpm check*": "allow",
+      "pnpm build": "allow",
+      "pnpm build:staging": "allow",
       "pnpm format:check*": "allow",
       "pnpm run test*": "allow",
       "pnpm run lint*": "allow",
       "pnpm run type*": "allow",
       "pnpm run typecheck*": "allow",
       "pnpm run check*": "allow",
+      "pnpm run build": "allow",
+      "pnpm run build:staging": "allow",
       "pnpm run format*": "allow",
       "pnpm exec eslint*": "allow",
       "pnpm exec tsc *--noEmit*": "allow",
       "pnpm exec vue-tsc*": "allow",
+      "pnpm exec ng test*": "allow",
+      "pnpm exec ng build --configuration development": "allow",
+      "pnpm exec prettier *--check*": "allow",
       "pnpm exec prettier --check*": "allow",
       "pnpm exec prettier -c*": "allow",
+      "pnpm exec prettier *-*w*": "ask",
       "pnpm exec vitest run*": "allow",
       "pnpm exec jest*": "allow",
       "pnpm exec stylelint*": "allow",
@@ -151,6 +167,8 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "uv run pyright*": "allow",
       "uv run --frozen pyright*": "allow",
       "uv run --locked pyright*": "allow",
+      "uv run alembic heads*": "allow",
+      "uv run alembic history*": "allow",
       "ruff check*": "allow",
       "ruff format*": "allow",
       "black *": "allow",
@@ -175,6 +193,11 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "make type*": "allow",
       "make check*": "allow",
       "make format*": "allow",
+      "*--write*": "ask",
+      "uv run alembic upgrade*": "ask",
+      "uv run alembic downgrade*": "ask",
+      "uv run alembic revision*": "ask",
+      "uv run alembic stamp*": "ask",
       "rm -rf*": "deny",
       "rm -fr*": "deny",
       "rm -r *": "deny",
@@ -236,7 +259,20 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "go install*": "ask",
       "brew install*": "deny",
       "apt install*": "deny",
-      "apt-get install*": "deny"
+      "apt-get install*": "deny",
+      "bash -c *": "deny",
+      "sh -c *": "deny",
+      "*&&*": "deny",
+      "*&*": "deny",
+      "*;*": "deny",
+      "*|*": "deny",
+      "*$(*": "deny",
+      "*`*": "deny",
+      "*<(*": "deny",
+      "*>(*": "deny",
+      "*>*": "deny",
+      "*<*": "deny",
+      "*\n*": "deny"
     },
     "webfetch": "allow",
     "websearch": "deny",
@@ -260,12 +296,14 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "wc *": "allow",
       "file *": "allow",
       "stat *": "allow",
-      "find *": "allow",
       "tree *": "allow",
       "rg *": "allow",
       "grep *": "allow",
       "ps *": "allow",
       "ps": "allow",
+      "lsof": "allow",
+      "lsof *": "allow",
+      "pgrep *": "allow",
       "which *": "allow",
       "type *": "allow",
       "git status": "allow",
@@ -274,7 +312,11 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "git diff*": "allow",
       "git show*": "allow",
       "git blame*": "allow",
-      "git branch*": "allow",
+      "git branch": "allow",
+      "git branch --show-current": "allow",
+      "git branch --list": "allow",
+      "git branch -a": "allow",
+      "git branch -r": "allow",
       "git rev-parse*": "allow",
       "git config --get *": "allow",
       "node --version": "allow",
@@ -343,7 +385,7 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "docker ps*": "allow",
       "docker logs*": "ask",
       "docker inspect*": "ask",
-      "kubectl get*": "allow",
+      "kubectl get*": "ask",
       "kubectl describe*": "ask",
       "kubectl logs*": "ask",
       "curl -*I*": "allow",
@@ -394,7 +436,11 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "docs/design/*.md": "allow",
       "docs/design/**/*.md": "allow"
     },
-    "bash": "deny",
+    "bash": {
+      "*": "deny",
+      "git status": "allow",
+      "git diff": "allow"
+    },
     "webfetch": "allow",
     "websearch": "deny",
     "todowrite": "deny",
@@ -573,28 +619,6 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "*": "deny"
     }
   },
-  "ms-progress": {
-    "edit": {
-      "*": "deny",
-      ".atl/status/*.md": "allow",
-      ".atl/status/**/*.md": "allow",
-      ".gitignore": "allow"
-    },
-    "bash": {
-      "*": "deny",
-      "mkdir -p .atl/status": "allow",
-      "git check-ignore .atl": "allow",
-      "rm .atl/status/*-progress.md": "allow"
-    },
-    "webfetch": "deny",
-    "websearch": "deny",
-    "todowrite": "deny",
-    "lsp": "deny",
-    "skill": "deny",
-    "task": {
-      "*": "deny"
-    }
-  },
   "ms-scout": {
     "edit": "deny",
     "bash": {
@@ -608,7 +632,6 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "wc *": "allow",
       "file *": "allow",
       "stat *": "allow",
-      "find *": "allow",
       "tree *": "allow",
       "rg *": "allow",
       "grep *": "allow",
@@ -617,7 +640,11 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "git diff*": "allow",
       "git show*": "allow",
       "git log*": "allow",
-      "git branch*": "allow",
+      "git branch": "allow",
+      "git branch --show-current": "allow",
+      "git branch --list": "allow",
+      "git branch -a": "allow",
+      "git branch -r": "allow",
       "git rev-parse*": "allow"
     },
     "webfetch": "allow",
@@ -642,7 +669,6 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "wc *": "allow",
       "file *": "allow",
       "stat *": "allow",
-      "find *": "allow",
       "tree *": "allow",
       "grep *": "allow",
       "rg *": "allow",
@@ -652,7 +678,11 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "git diff*": "allow",
       "git show*": "allow",
       "git blame*": "allow",
-      "git branch*": "allow",
+      "git branch": "allow",
+      "git branch --show-current": "allow",
+      "git branch --list": "allow",
+      "git branch -a": "allow",
+      "git branch -r": "allow",
       "git rev-parse*": "allow",
       "node --version": "allow",
       "npm --version": "allow",
@@ -707,7 +737,11 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "docs/spec/*.md": "allow",
       "docs/spec/**/*.md": "allow"
     },
-    "bash": "deny",
+    "bash": {
+      "*": "deny",
+      "git status": "allow",
+      "git diff": "allow"
+    },
     "webfetch": "allow",
     "websearch": "deny",
     "todowrite": "deny",
@@ -730,7 +764,6 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "wc *": "allow",
       "file *": "allow",
       "stat *": "allow",
-      "find *": "allow",
       "tree *": "allow",
       "rg *": "allow",
       "grep *": "allow",
@@ -760,6 +793,7 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "pnpm type*": "allow",
       "pnpm typecheck*": "allow",
       "pnpm check*": "allow",
+      "pnpm build*": "allow",
       "pnpm format:check*": "allow",
       "pnpm run test*": "allow",
       "pnpm run lint*": "allow",
@@ -776,6 +810,8 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "pnpm exec eslint*": "allow",
       "pnpm exec tsc *--noEmit*": "allow",
       "pnpm exec vue-tsc*": "allow",
+      "pnpm exec ng test*": "allow",
+      "pnpm exec prettier *--check*": "allow",
       "pnpm exec prettier --check*": "allow",
       "pnpm exec prettier -c*": "allow",
       "pnpm exec vitest run*": "allow",
@@ -891,6 +927,8 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "uv run pyright*": "allow",
       "uv run --frozen pyright*": "allow",
       "uv run --locked pyright*": "allow",
+      "uv run alembic heads*": "allow",
+      "uv run alembic history*": "allow",
       "ruff check*": "allow",
       "black --check*": "allow",
       "mypy*": "allow",
@@ -959,6 +997,10 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "uv pip install*": "deny",
       "uv add*": "deny",
       "uv remove*": "deny",
+      "uv run alembic upgrade*": "deny",
+      "uv run alembic downgrade*": "deny",
+      "uv run alembic revision*": "deny",
+      "uv run alembic stamp*": "deny",
       "poetry add*": "deny",
       "poetry remove*": "deny",
       "cargo add*": "deny",
@@ -1049,14 +1091,17 @@ function applyPermissionProfile(
   permission: OpenCodeRolePermission,
   profile: PermissionProfile,
 ): OpenCodeRolePermission {
-  if (profile === "strict") return permission
+  const definition = agentDefinition(name)
+  const capabilities = capabilityProfile(definition.capabilityProfile)
+  const rolePermission: OpenCodeRolePermission = {
+    ...permission,
+    question: definition.mode === "primary" && capabilities.asksQuestions ? "allow" : "deny",
+  }
+  if (profile === "strict") return rolePermission
 
   const balanced: OpenCodeRolePermission = {
-    ...permission,
-    todowrite: "allow",
-    lsp: "allow",
-    skill: "allow",
-    websearch: BALANCED_WEBSEARCH_AGENTS.has(name) ? "allow" : permission.websearch,
+    ...rolePermission,
+    websearch: BALANCED_WEBSEARCH_AGENTS.has(name) ? "allow" : rolePermission.websearch,
   }
   if (profile === "balanced") return balanced
 

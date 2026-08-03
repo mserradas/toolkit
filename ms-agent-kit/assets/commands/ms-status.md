@@ -9,11 +9,11 @@ Argumento: `$ARGUMENTS`
 
 ## Inspección
 
-1. Si hay un slug o ruta, busca su checkpoint en `.atl/status/**`.
-2. Si no hay argumento, usa el único checkpoint existente o el contexto actual; pregunta si hay varios candidatos.
-3. Valida el contrato simple: `schema`, `slug`, `status`, `objective`, `next_action`, `completed`, `pending`, `files`, `risks` y `updated_at`.
-4. Contrasta con `git status`, `git diff --name-only` y `git diff --stat` sin ejecutar tests ni modificar archivos.
-5. Si no hay checkpoint, informa el estado inferible desde Git y los artefactos durables con confianza baja.
+1. Usa el argumento para acotar el objetivo, archivo o artefacto durable que debe inspeccionarse. Si no hay argumento, resume el objetivo visible en el contexto actual.
+2. Consulta únicamente la conversación disponible, `git status`, `git diff --name-only`, `git diff --stat` y artefactos durables relevantes como PRDs, specs, TDDs o documentación.
+3. Separa hechos observables de inferencias. No declares trabajo completado, tests aprobados o decisiones aceptadas sin evidencia disponible.
+4. Identifica archivos cambiados, evidencia de verificación vigente, riesgos y el siguiente paso razonable sin ejecutar tests ni modificar archivos.
+5. Si el contexto no basta para reconstruir el objetivo o lo pendiente, indícalo como desconocido en vez de inventarlo.
 
 ## Salida
 
@@ -21,9 +21,9 @@ Argumento: `$ARGUMENTS`
 ## Estado MS
 
 Objetivo: <slug o descripción>
-Checkpoint: <ruta | no encontrado>
 Estado: <in_progress | blocked | desconocido>
 Confianza: <alta | media | baja>
+Fuentes: <contexto actual, Git y artefactos durables consultados>
 
 Completado:
 - <items o ninguno>
@@ -41,4 +41,4 @@ Próxima acción:
 - <una acción concreta | desconocida>
 ```
 
-No continúes el trabajo ni crees un checkpoint desde este comando.
+No continúes el trabajo, no escribas estado y no conviertas inferencias en hechos desde este comando.

@@ -7,6 +7,7 @@ import {
   removeManagedFile,
   type ExistingFile,
 } from "./files.js"
+import { AppError, throwIfAborted } from "./errors.js"
 import {
   insertManagedBlock,
   inspectManagedBlock,
@@ -263,14 +264,22 @@ async function removeOwnedManagedBlock(
 export async function applyPlan(
   plan: InstallPlan,
   context: BuildContext,
+  signal?: AbortSignal,
 ): Promise<InstallResult> {
+  throwIfAborted(signal)
   for (const item of plan.items) validateManagedPlanItem(item)
   for (const obsolete of plan.obsolete) validateManagedOwnedFile(obsolete.file)
   const conflicts = plan.items.filter((item) => item.action === "conflict")
   if (conflicts.length > 0) {
-    throw new Error(`La instalación tiene ${conflicts.length} conflicto(s); ejecuta \`plan\` o usa \`--force\``)
+    throw new AppError(
+      "INSTALL_CONFLICT",
+      `La instalación tiene ${conflicts.length} conflicto(s); ejecuta \`plan\` o usa \`--force\``,
+      3,
+      { conflicts: conflicts.length },
+    )
   }
 
+  throwIfAborted(signal)
   const state = await readState(context)
   for (const file of state.files) validateManagedOwnedFile(file)
   const files = new Map(state.files.map((file) => [file.path, file]))
@@ -288,6 +297,7 @@ export async function applyPlan(
 
   try {
     for (const item of plan.items) {
+      throwIfAborted(signal)
       await assertNoSymlinkEscape(item.artifact.root, item.artifact.destination)
       const current = await readExistingFile(item.artifact.destination)
       if (!sameSnapshot(current, item.currentHash)) {
@@ -327,6 +337,7 @@ export async function applyPlan(
         }
         const nextContent = composeManagedContent(item, current)
         const nextMode = current?.mode ?? item.artifact.mode
+        throwIfAborted(signal)
         await atomicWriteFile(
           item.artifact.root,
           item.artifact.destination,
@@ -375,11 +386,13 @@ export async function applyPlan(
               item.artifact.destination,
               current,
             )
+      throwIfAborted(signal)
 
       if (item.action === "adopt") {
         adopted += 1
       } else {
         const nextMode = current?.mode ?? item.artifact.mode
+        throwIfAborted(signal)
         await atomicWriteFile(
           item.artifact.root,
           item.artifact.destination,
@@ -418,6 +431,7 @@ export async function applyPlan(
     }
 
     for (const obsolete of plan.obsolete) {
+      throwIfAborted(signal)
       const currentOwned = files.get(obsolete.file.path) ?? obsolete.file
       if (obsolete.action === "detach") {
         const targets = owningTargets(currentOwned).filter(
@@ -443,6 +457,7 @@ export async function applyPlan(
         throw new Error(`El destino cambió después del plan: ${obsolete.file.path}`)
       }
       if (obsolete.file.strategy === "managed-block") {
+        throwIfAborted(signal)
         await removeOwnedManagedBlock(obsolete.file, current, rollbackEntries)
         removed += 1
         files.delete(obsolete.file.path)
@@ -455,6 +470,7 @@ export async function applyPlan(
         assertPathWithin(plan.stateDir, obsolete.file.original.backupPath)
         const backup = await readFile(obsolete.file.original.backupPath)
         const restoredMode = obsolete.file.original.mode ?? 0o644
+        throwIfAborted(signal)
         await atomicWriteFile(
           obsolete.file.root,
           obsolete.file.path,
@@ -471,6 +487,7 @@ export async function applyPlan(
         backupsToDelete.push(obsolete.file.original.backupPath)
         restored += 1
       } else {
+        throwIfAborted(signal)
         await removeManagedFile(obsolete.file.root, obsolete.file.path)
         rollbackEntries.push({
           root: obsolete.file.root,
@@ -484,10 +501,11 @@ export async function applyPlan(
       files.delete(obsolete.file.path)
     }
 
+    throwIfAborted(signal)
     await writeState(context, {
       schemaVersion: 1,
       scope: context.scope,
-      root: context.scope === "user" ? context.homeDir : context.projectRoot,
+      root: path.resolve(context.scope === "user" ? context.homeDir : context.projectRoot),
       files: [...files.values()].sort((left, right) => left.path.localeCompare(right.path)),
       updatedAt: now,
     })
@@ -520,7 +538,9 @@ export async function applyPlan(
 export async function uninstallTargets(
   targets: Target[],
   context: BuildContext,
+  signal?: AbortSignal,
 ): Promise<UninstallResult> {
+  throwIfAborted(signal)
   const state = await readState(context)
   for (const file of state.files) validateManagedOwnedFile(file)
   const selected = new Set(targets)
@@ -533,6 +553,7 @@ export async function uninstallTargets(
 
   try {
     for (const file of state.files) {
+      throwIfAborted(signal)
       const owners = owningTargets(file)
       if (!owners.some((target) => selected.has(target))) {
         keep.push(file)
@@ -573,6 +594,7 @@ export async function uninstallTargets(
           keep.push(file)
           continue
         }
+        throwIfAborted(signal)
         await removeOwnedManagedBlock(file, current, rollbackEntries)
         removed.push(file.path)
         continue
@@ -602,6 +624,7 @@ export async function uninstallTargets(
           throw error
         }
         const restoredMode = file.original.mode ?? 0o644
+        throwIfAborted(signal)
         await atomicWriteFile(file.root, file.path, backup, restoredMode)
         rollbackEntries.push({
           root: file.root,
@@ -613,6 +636,7 @@ export async function uninstallTargets(
         backupsToDelete.push(file.original.backupPath)
         restored.push(file.path)
       } else {
+        throwIfAborted(signal)
         await removeManagedFile(file.root, file.path)
         rollbackEntries.push({
           root: file.root,
@@ -625,6 +649,7 @@ export async function uninstallTargets(
       }
     }
 
+    throwIfAborted(signal)
     await writeState(context, {
       ...state,
       files: keep,

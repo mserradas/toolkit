@@ -6,7 +6,6 @@ export type CapabilityProfileName =
   | "discovery-writer"
   | "fastlane-writer"
   | "prd-writer"
-  | "progress-writer"
   | "code-scout"
   | "security-auditor"
   | "spec-writer"
@@ -60,7 +59,7 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     writePaths: ["docs/design/*.md", "docs/design/**/*.md"],
     shell: false,
     usesSkills: true,
-    asksQuestions: true,
+    asksQuestions: false,
     orchestrates: false,
     webFetch: true,
     webSearch: false,
@@ -95,16 +94,6 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     webFetch: true,
     webSearch: false,
   },
-  "progress-writer": {
-    writes: true,
-    writePaths: [".atl/status/*.md", ".atl/status/**/*.md", ".gitignore"],
-    shell: false,
-    usesSkills: false,
-    asksQuestions: false,
-    orchestrates: false,
-    webFetch: false,
-    webSearch: false,
-  },
   "code-scout": {
     writes: false,
     writePaths: [],
@@ -130,7 +119,7 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     writePaths: ["docs/spec/*.md", "docs/spec/**/*.md"],
     shell: false,
     usesSkills: true,
-    asksQuestions: true,
+    asksQuestions: false,
     orchestrates: false,
     webFetch: true,
     webSearch: false,

@@ -49,10 +49,10 @@ export const AGENT_DEFINITIONS = {
   },
   "ms-fastlane": {
     mode: "subagent",
-    modelProfile: "balanced",
+    modelProfile: "fast",
     capabilityProfile: "fastlane-writer",
     openCodeColor: "#22C55E",
-    toolCycleBudget: 20,
+    toolCycleBudget: 12,
   },
   "ms-plan": {
     mode: "primary",
@@ -60,19 +60,12 @@ export const AGENT_DEFINITIONS = {
     capabilityProfile: "prd-writer",
     openCodeColor: "#6366F1",
   },
-  "ms-progress": {
-    mode: "subagent",
-    modelProfile: "light",
-    capabilityProfile: "progress-writer",
-    openCodeColor: "#64748B",
-    toolCycleBudget: 20,
-  },
   "ms-scout": {
     mode: "subagent",
     modelProfile: "light",
     capabilityProfile: "code-scout",
     openCodeColor: "#06B6D4",
-    toolCycleBudget: 20,
+    toolCycleBudget: 12,
   },
   "ms-security-auditor": {
     mode: "subagent",
@@ -93,7 +86,7 @@ export const AGENT_DEFINITIONS = {
     modelProfile: "light",
     capabilityProfile: "test-runner",
     openCodeColor: "#EAB308",
-    toolCycleBudget: 20,
+    toolCycleBudget: 16,
   },
   "ms-writer": {
     mode: "subagent",

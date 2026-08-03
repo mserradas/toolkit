@@ -8,15 +8,27 @@ El instalador calcula un plan antes de escribir, conserva el estado de propiedad
 
 | Cliente | Componentes instalados | Integración principal |
 |---|---|---|
-| OpenCode | 13 agentes, 3 comandos `/ms-*` y 9 `skills` generales | Configuración, interfaz de terminal (`TUI`), Context7, notificaciones y permisos por agente |
-| Claude Code | 13 subagentes, 3 habilidades invocables (`slash skills`) `/ms-*` y 9 `skills` generales | Límites de herramientas y protección compartida `PreToolUse` |
-| Codex | 12 agentes especialistas, 3 comandos como `skills` y 9 `skills` generales | Perfiles, reglas de seguridad, Context7 y `$ms-architect` como orquestador padre |
+| OpenCode | 12 agentes, 2 comandos `/ms-*` y 7 `skills` generales | Configuración, interfaz de terminal (`TUI`), Context7, notificaciones y permisos por agente |
+| Claude Code | 12 subagentes, 2 habilidades invocables (`slash skills`) `/ms-*` y 7 `skills` generales | Límites de herramientas y protección compartida `PreToolUse` |
+| Codex | 11 agentes especialistas, 2 comandos como `skills` y 7 `skills` generales | Perfiles, reglas de seguridad, Context7 y `$ms-architect` como orquestador padre |
 
-El catálogo actual incluye 13 agentes, 3 comandos y 9 `skills` generales. En Codex, `ms-architect` se instala como `skill` de la tarea principal para que pueda delegar directamente en los 12 especialistas.
+El catálogo actual incluye 12 agentes, 2 comandos y 7 `skills` generales. En Codex, `ms-architect` se instala como `skill` de la tarea principal para que pueda delegar directamente en los 11 especialistas.
+
+## Ciclo de trabajo
+
+`ms-architect` conserva el único plan y delega misiones focales. Cada worker lee lo necesario, aplica un parche coherente si su rol escribe, realiza la comprobación focal que corresponda y devuelve evidencia compacta; no mantiene un `TODO` paralelo. El arquitecto nombra un solo `verification_owner`: `implementer | ms-tester | none`. Usa `implementer` para gates cubiertos por `ms-codex` o `ms-fastlane`, `ms-tester` si queda un gate independiente pendiente y `none` para tareas sin ejecución verificable. Un `PASS` vigente puede ser ejecutado o reutilizado mientras ninguna escritura posterior lo invalide.
+
+Las misiones se preparan para unas 8–12 iteraciones. Si el primer presupuesto se agota, se divide o reduce el trabajo pendiente en lugar de repetir la misma delegación. Los presupuestos especiales son: `ms-fastlane` 12, `ms-scout` 12 y `ms-tester` 16; los demás subagentes usan 20.
+
+## Idioma de la documentación
+
+Los agentes ms-* escriben en español neutro y profesional toda la prosa humana de documentos nuevos o actualizados, aunque el repositorio use otro idioma. Esto incluye títulos, metadatos, explicaciones, requisitos, decisiones, criterios de aceptación, tablas, changelog y notas de publicación.
+
+Los literales técnicos permanecen intactos: identificadores, rutas, comandos, APIs, métodos y status HTTP, schemas/campos, variables de entorno, librerías, valores de enum o estado, logs, errores, citas textuales, terminología técnica canónica del proyecto y tokens estructurales exigidos por formatos o tooling. Por ejemplo, `## Functional summary` se convierte en `## Resumen funcional` y se escribe «Estado: Aprobada», mientras `selected_status`, `POST /submissions`, `completed`, `feature`, `runtime`, `schema`, `endpoint`, `benchmark` y encabezados canónicos como `[Unreleased]` o `Added` permanecen literales. Al tocar un documento existente en inglés, el agente normaliza al español toda su prosa humana para evitar secciones mezcladas.
 
 ## Requisitos
 
-- Node.js 24 o superior.
+- Node.js 22 o superior.
 - `pnpm` para instalar dependencias y trabajar desde el repositorio.
 - Al menos uno de estos clientes ya instalado: OpenCode, Claude Code o Codex.
 - Codex `0.138.0` o superior si se selecciona ese cliente.
@@ -102,8 +114,6 @@ Si se omite `--project`, el directorio actual se usa como raíz del proyecto.
 | `ms-agent-kit install` | Aplica el plan de forma transaccional |
 | `ms-agent-kit status` | Compara la instalación con el catálogo actual |
 | `ms-agent-kit uninstall` | Elimina archivos propios y restaura copias de seguridad válidas |
-| `ms-agent-kit workflow status` | Lee el estado estructurado de un flujo de trabajo |
-| `ms-agent-kit workflow next` | Devuelve una única próxima acción segura |
 
 ### Opciones comunes
 
@@ -136,7 +146,44 @@ ms-agent-kit install --target all --scope user --yes --dry-run --json
 ms-agent-kit uninstall --target all --scope project --project /ruta/al/repositorio
 ```
 
+### Contrato para automatización
+
+Con `--json`, los resultados correctos se escriben en `stdout`. Los errores se escriben en `stderr` con una forma estable:
+
+```json
+{
+  "ok": false,
+  "code": "OPERATION_LOCKED",
+  "message": "Ya hay una operación install en curso (PID 1234)",
+  "details": {}
+}
+```
+
+`details` solo aparece cuando existe contexto estructurado adicional. Los códigos de salida son:
+
+| Código | Significado |
+|---:|---|
+| `0` | Operación completada |
+| `1` | Fallo operativo no clasificado o diagnóstico con problemas |
+| `2` | Argumentos inválidos o interacción requerida |
+| `3` | Conflicto de instalación u otra operación posee el bloqueo |
+| `4` | Estado persistido incompatible o inseguro |
+| `130` | Operación interrumpida por `SIGINT` |
+| `143` | Operación terminada por `SIGTERM` |
+
+`install` y `uninstall` adquieren un bloqueo exclusivo dentro de `.ms-agent-kit` para cada alcance. Un segundo proceso falla sin escribir; un bloqueo bien formado de un proceso que ya no existe se recupera automáticamente. Si el bloqueo está corrupto, el kit lo conserva y solicita revisión manual en lugar de asumir su propiedad. `plan`, `status`, `doctor` y `install --dry-run` siguen siendo operaciones de lectura y no adquieren el bloqueo.
+
+Al recibir `SIGINT` o `SIGTERM`, una mutación se detiene en el siguiente límite seguro, revierte los destinos ya modificados y libera el bloqueo antes de devolver el código de salida correspondiente. La reversión no se cancela a mitad de camino.
+
 ## Uso por cliente
+
+Los tres clientes comparten el contrato de roles y evidencia, pero materializan modelos, presupuestos y permisos de forma distinta:
+
+| Cliente | `ms-fastlane` | Presupuesto de misión | Permisos |
+|---|---|---|---|
+| OpenCode | `openai/gpt-5.6-luna`, `variant: low` | Materializado por el cliente | Perfiles `balanced`, `strict` y `trusted` con permisos granulares por rol |
+| Claude Code | Haiku, esfuerzo bajo | `toolCycleBudget` materializado | Límites de herramientas y protección compartida `PreToolUse` |
+| Codex | Modelo heredado, razonamiento bajo | Política de prompt; actualmente no hay hard turn budget | Perfiles y reglas que pueden quedar subordinados a la tarea padre o a la configuración global |
 
 ### OpenCode
 
@@ -144,7 +191,6 @@ OpenCode conserva comandos y menciones de agentes:
 
 ```text
 /ms-status mi-cambio
-/ms-continue mi-cambio
 @ms-scout localiza el flujo de autenticación
 ```
 
@@ -172,7 +218,7 @@ set -Ux OPENCODE_DISABLE_EXTERNAL_SKILLS 1
 
 Esta variable evita importar adaptaciones externas incompatibles. Las `skills` administradas por `ms-agent-kit` se instalan directamente en la raíz nativa de OpenCode y no dependen de un plugin local.
 
-OpenCode admite tres perfiles de permisos. `balanced` usa allowlists silenciosas para roles acotados; solo `ms-codex` pregunta por comandos locales desconocidos o cambios de dependencias, y `ms-debugger` por logs potencialmente sensibles. Operaciones destructivas, push, SSH y gestores del sistema se bloquean directamente. `strict` conserva la política cerrada sin herramientas cognitivas adicionales. `trusted` reduce confirmaciones para comandos, pero mantiene los bloqueos explícitos de secretos, destrucción, publicación y límites de escritura. Por ejemplo:
+OpenCode admite tres perfiles de permisos. `balanced` reserva el plan y `todowrite` para `ms-architect`; los workers no mantienen listas `TODO`. Usa allowlists silenciosas para roles acotados; solo `ms-codex` pregunta por comandos locales desconocidos o cambios de dependencias, y `ms-debugger` por logs potencialmente sensibles. Operaciones destructivas, push, SSH y gestores del sistema se bloquean directamente. `strict` conserva la política cerrada sin herramientas cognitivas adicionales. `trusted` reduce confirmaciones para comandos, pero mantiene los bloqueos explícitos de secretos, destrucción, publicación y límites de escritura. Por ejemplo:
 
 ```bash
 ms-agent-kit install --target opencode --scope user --permission-profile balanced
@@ -186,7 +232,6 @@ Los flujos de trabajo se exponen como habilidades invocables (`slash skills`) y 
 
 ```text
 /ms-status mi-cambio
-/ms-continue mi-cambio
 ```
 
 También se puede iniciar una sesión completa con el arquitecto:
@@ -204,7 +249,6 @@ Codex ejecuta los flujos de trabajo como `skills` desde la tarea principal:
 ```text
 $ms-architect implementa este cambio
 $ms-status mi-cambio
-$ms-continue mi-cambio
 ```
 
 Cada especialista recibe un perfil de sistema de archivos, razonamiento y búsqueda web. Una configuración global de `sandbox_mode` o los permisos de la tarea principal pueden prevalecer sobre esos perfiles.
@@ -224,10 +268,6 @@ Para obtener la cuota autenticada, define `CONTEXT7_API_KEY` en el entorno de la
 ```bash
 codex mcp get context7
 ```
-
-## Checkpoints entre sesiones
-
-El flujo normal no crea checkpoints ni registra IDs de agentes. Cuando el usuario quiere cambiar de sesión con trabajo incompleto, `ms-progress` guarda manualmente un resumen temporal en `.atl/status/<slug>-progress.md`. `/ms-continue <slug>` valida ese resumen contra Git y ejecuta una única próxima acción en un flujo nuevo. Al terminar la feature, el checkpoint se elimina.
 
 ## Plan, conflictos y copias de seguridad
 
@@ -254,8 +294,10 @@ No borres manualmente `~/.ms-agent-kit` mientras existan instalaciones administr
 El mecanismo de seguridad incluye:
 
 - Estado y copias de seguridad con permisos `0600`.
+- Validación completa del estado al cargarlo: schema, tipos, hashes, rutas, ownership y campos admitidos.
 - Escrituras temporales seguidas de `rename` atómico.
 - Reversión (`rollback`) si una operación falla a mitad del plan.
+- Bloqueo exclusivo de operaciones mutables con recuperación conservadora de locks obsoletos.
 - Rechazo de destinos y copias de seguridad que atraviesen enlaces simbólicos (`symlinks`) no permitidos.
 - Preservación de archivos modificados después de la instalación.
 - Restauración durante `uninstall` solo cuando el destino sigue siendo seguro.

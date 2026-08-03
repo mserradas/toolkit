@@ -24,7 +24,7 @@ Revisa solo el contexto OpenCode:
 
 Valida con `opencode debug agent` los siete agentes mínimos: `ms-architect`, `ms-codex`, `ms-fastlane`, `ms-tester`, `ms-debugger`, `ms-plan` y `ms-discovery`. Con argumento `full`, valida todos los `ms-*`. Usa `opencode debug skill` para contar las skills efectivamente visibles; no sumes instalaciones de Claude o Codex.
 
-Comprueba JSON válido, carga y color de agentes, permisos por rol, denegaciones finales de secretos, reglas compartidas incorporadas una sola vez, comandos `ms-status`, `ms-continue` y `ms-doctor`, plugins declarados y MCP `context7` sin clave literal.
+Comprueba JSON válido, carga y color de agentes, permisos por rol, denegaciones finales de secretos, reglas compartidas incorporadas una sola vez, comandos `ms-status` y `ms-doctor`, plugins declarados y MCP `context7` sin clave literal.
 
 ## Salida
 

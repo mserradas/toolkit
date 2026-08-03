@@ -22,7 +22,7 @@ Crear un snapshot operativo mínimo antes de diseñar o ejecutar. No instala dep
 3. Si existe incertidumbre transversal o un mapa reduciría materialmente el contexto, delega a `ms-scout` modo mapa.
 4. Si test, lint, typecheck o format no son evidentes, delega a `ms-tester` un `Snapshot de capacidades de testing` sin ejecutar suites amplias.
 5. Sintetiza el snapshot y lista incógnitas; no las conviertas en hechos.
-6. Devuelve el snapshot al invocador. Solo usa `ms-progress` si el usuario pide guardar un checkpoint antes de cambiar de sesión.
+6. Devuelve el snapshot al invocador.
 
 ## Salida
 
@@ -41,7 +41,6 @@ Project context snapshot:
     prd_dir: "docs/prd"
     spec_dir: "docs/spec"
     design_dir: "docs/design"
-    status_dir: ".atl/status"
   risks_or_unknowns: []
   invalidation_inputs:
     manifests: []

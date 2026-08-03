@@ -8,10 +8,12 @@ import process from "node:process"
 import { parseArgs, promisify } from "node:util"
 import { buildArtifacts } from "./adapters/index.js"
 import { DEFAULT_ASSETS_ROOT, loadCatalog } from "./core/catalog.js"
+import { AppError, normalizeAppError, throwIfAborted } from "./core/errors.js"
 import { parseMarkdown } from "./core/frontmatter.js"
 import { applyPlan, installationStatus, uninstallTargets } from "./core/installer.js"
+import { withOperationLock, type MutableOperation } from "./core/operation-lock.js"
 import { createPlan } from "./core/planner.js"
-import { nextWorkflowAction, readWorkflowStatus } from "./core/workflow.js"
+import { createTerminationController, type TerminationSignal } from "./core/termination.js"
 import {
   finishWithoutChanges,
   plannedChangeCount,
@@ -48,8 +50,6 @@ Uso:
   ms-agent-kit install [opciones]
   ms-agent-kit status [opciones]
   ms-agent-kit uninstall [opciones]
-  ms-agent-kit workflow status [slug|ruta] [--project <ruta>] [--json]
-  ms-agent-kit workflow next [slug|ruta] [--project <ruta>] [--json]
 
 Opciones:
   --target <valor>    Cliente objetivo: \`opencode\`, \`claude\`, \`codex\` o \`all\`. Puede repetirse.
@@ -102,38 +102,6 @@ interface CliOptions {
   json: boolean
 }
 
-interface LocalOptions {
-  projectRoot: string
-  homeDir: string
-  force: boolean
-  json: boolean
-  scope: string
-  positionals: string[]
-}
-
-function localOptions(args: string[]): LocalOptions {
-  const parsed = parseArgs({
-    args,
-    options: {
-      project: { type: "string" },
-      home: { type: "string" },
-      force: { type: "boolean", default: false },
-      json: { type: "boolean", default: false },
-      scope: { type: "string", default: "worktree" },
-    },
-    allowPositionals: true,
-    strict: true,
-  })
-  return {
-    projectRoot: path.resolve(parsed.values.project ?? process.cwd()),
-    homeDir: path.resolve(parsed.values.home ?? homedir()),
-    force: parsed.values.force,
-    json: parsed.values.json,
-    scope: parsed.values.scope,
-    positionals: parsed.positionals,
-  }
-}
-
 function parseTargets(values: string[] | undefined): Target[] {
   const requested = (values ?? ["all"])
     .flatMap((value) => value.split(","))
@@ -144,11 +112,13 @@ function parseTargets(values: string[] | undefined): Target[] {
   const targets: Target[] = []
   for (const value of requested) {
     if (!TARGETS.includes(value as Target)) {
-      throw new Error(`Cliente objetivo no válido: ${value}`)
+      throw new AppError("INVALID_ARGUMENT", `Cliente objetivo no válido: ${value}`, 2)
     }
     if (!targets.includes(value as Target)) targets.push(value as Target)
   }
-  if (targets.length === 0) throw new Error("Debes indicar al menos un cliente objetivo")
+  if (targets.length === 0) {
+    throw new AppError("INVALID_ARGUMENT", "Debes indicar al menos un cliente objetivo", 2)
+  }
   return targets
 }
 
@@ -179,11 +149,19 @@ function cliOptions(args: string[]): CliOptions {
 
   const scope = parsed.values.scope as InstallScope
   if (scope !== "user" && scope !== "project") {
-    throw new Error(`Alcance no válido: ${String(parsed.values.scope)}`)
+    throw new AppError(
+      "INVALID_ARGUMENT",
+      `Alcance no válido: ${String(parsed.values.scope)}`,
+      2,
+    )
   }
   const permissionProfile = parsed.values["permission-profile"] as PermissionProfile
   if (!["balanced", "strict", "trusted"].includes(permissionProfile)) {
-    throw new Error(`Perfil de permisos no válido: ${String(parsed.values["permission-profile"])}`)
+    throw new AppError(
+      "INVALID_ARGUMENT",
+      `Perfil de permisos no válido: ${String(parsed.values["permission-profile"])}`,
+      2,
+    )
   }
 
   const homeDir = path.resolve(parsed.values.home ?? homedir())
@@ -283,17 +261,32 @@ function printPlan(plan: InstallPlan, asJson: boolean): void {
   process.stdout.write(`Registro de estado: ${plan.statePath}\n`)
 }
 
-async function confirm(question: string, yes: boolean): Promise<boolean | null> {
+async function confirm(
+  question: string,
+  yes: boolean,
+  signal?: AbortSignal,
+): Promise<boolean | null> {
+  throwIfAborted(signal)
   if (yes) return true
   if (!process.stdin.isTTY) {
-    throw new Error("Se requiere --yes cuando no hay una terminal interactiva")
+    throw new AppError(
+      "INTERACTION_REQUIRED",
+      "Se requiere --yes cuando no hay una terminal interactiva",
+      2,
+    )
   }
-  return promptConfirmation(question)
+  const result = await promptConfirmation(question)
+  throwIfAborted(signal)
+  return result
 }
 
 async function interactiveInstallOptions(): Promise<CliOptions | null> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error("El asistente requiere una terminal interactiva")
+    throw new AppError(
+      "INTERACTION_REQUIRED",
+      "El asistente requiere una terminal interactiva",
+      2,
+    )
   }
   const selected = await promptInstallOptions(process.cwd())
   if (!selected) return null
@@ -583,7 +576,20 @@ async function runPlan(options: CliOptions): Promise<InstallPlan> {
   return plan
 }
 
-async function runInstall(options: CliOptions, resolveConflicts = false): Promise<void> {
+function printCancellation(asJson: boolean, operation: MutableOperation): void {
+  process.stdout.write(
+    asJson
+      ? `${JSON.stringify({ cancelled: true, operation }, null, 2)}\n`
+      : `${operation === "install" ? "Instalación" : "Desinstalación"} cancelada\n`,
+  )
+}
+
+async function runInstall(
+  options: CliOptions,
+  resolveConflicts = false,
+  signal?: AbortSignal,
+): Promise<void> {
+  throwIfAborted(signal)
   let activeOptions = options
   let plan = await buildCliPlan(activeOptions)
   if (options.dryRun) {
@@ -596,16 +602,26 @@ async function runInstall(options: CliOptions, resolveConflicts = false): Promis
   }
   if (plan.items.some((item) => item.action === "conflict")) {
     if (!resolveConflicts) {
-      throw new Error("Hay conflictos. Revisa el plan o repite con `--force`")
+      throw new AppError(
+        "INSTALL_CONFLICT",
+        "Hay conflictos. Revisa el plan o repite con `--force`",
+        3,
+        { conflicts: plan.items.filter((item) => item.action === "conflict").length },
+      )
     }
     const conflictCount = plan.items.filter((item) => item.action === "conflict").length
     const replace = await confirm(
       `Hay ${conflictCount} conflictos. ¿Crear copias de seguridad y reemplazar esos archivos completos?`,
       false,
+      signal,
     )
-    if (replace === null) return
+    if (replace === null) {
+      throwIfAborted(signal)
+      printCancellation(activeOptions.json, "install")
+      return
+    }
     if (!replace) {
-      process.stdout.write("Instalación cancelada\n")
+      printCancellation(activeOptions.json, "install")
       return
     }
     activeOptions = { ...options, force: true }
@@ -614,7 +630,7 @@ async function runInstall(options: CliOptions, resolveConflicts = false): Promis
   }
   const counts = planSummary(plan)
   if (resolveConflicts && !planNeedsConfirmation(counts)) {
-    await applyPlan(plan, activeOptions.context)
+    await applyPlan(plan, activeOptions.context, signal)
     finishWithoutChanges()
     return
   }
@@ -625,13 +641,17 @@ async function runInstall(options: CliOptions, resolveConflicts = false): Promis
       : changes > 1
         ? `¿Aplicar ${changes} cambios?`
         : "¿Continuar con este plan?"
-  const shouldApply = await confirm(question, activeOptions.yes)
-  if (shouldApply === null) return
-  if (!shouldApply) {
-    process.stdout.write("Instalación cancelada\n")
+  const shouldApply = await confirm(question, activeOptions.yes, signal)
+  if (shouldApply === null) {
+    throwIfAborted(signal)
+    printCancellation(activeOptions.json, "install")
     return
   }
-  const result = await applyPlan(plan, activeOptions.context)
+  if (!shouldApply) {
+    printCancellation(activeOptions.json, "install")
+    return
+  }
+  const result = await applyPlan(plan, activeOptions.context, signal)
   if (activeOptions.json) {
     process.stdout.write(`${JSON.stringify({ plan: planSummary(plan), result }, null, 2)}\n`)
     return
@@ -661,72 +681,75 @@ async function runStatus(options: CliOptions): Promise<void> {
   }
 }
 
-async function runWorkflow(args: string[]): Promise<void> {
-  const options = localOptions(args)
-  const [operation, requested, ...extra] = options.positionals
-  if (!operation || !["status", "next"].includes(operation) || extra.length > 0) {
-    throw new Error("Uso: ms-agent-kit workflow <status|next> [slug|ruta] [--project <ruta>] [--json]")
-  }
-  const status = await readWorkflowStatus(options.projectRoot, requested)
-  const payload = operation === "next" ? nextWorkflowAction(status) : status
-  if (options.json) {
-    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
-    return
-  }
-  if (operation === "status") {
-    process.stdout.write(
-      `Checkpoint \`${status.slug ?? "desconocido"}\`: estado \`${status.status ?? "incompatible"}\`; próxima acción \`${status.nextAction ?? "no estructurada"}\`; confianza \`${status.confidence}\`\n`,
-    )
-    if (status.warnings.length > 0) process.stdout.write(`Avisos: ${status.warnings.join("; ")}\n`)
-    return
-  }
-  const next = payload as ReturnType<typeof nextWorkflowAction>
-  process.stdout.write(
-    `Flujo de trabajo \`${status.slug ?? "desconocido"}\`: ${next.ready ? "listo" : "detenido"}; acción \`${next.action ?? "ninguna"}\`. ${next.reason}\n`,
-  )
-}
-
-async function runUninstall(options: CliOptions): Promise<void> {
+async function runUninstall(options: CliOptions, signal?: AbortSignal): Promise<void> {
   const shouldUninstall = await confirm(
     `¿Desinstalar la configuración de ${options.targets.map((target) => targetLabels[target]).join(", ")}?`,
     options.yes,
+    signal,
   )
-  if (shouldUninstall === null) return
-  if (!shouldUninstall) {
-    process.stdout.write("Desinstalación cancelada\n")
+  if (shouldUninstall === null) {
+    throwIfAborted(signal)
+    printCancellation(options.json, "uninstall")
     return
   }
-  const result = await uninstallTargets(options.targets, options.context)
+  if (!shouldUninstall) {
+    printCancellation(options.json, "uninstall")
+    return
+  }
+  const result = await uninstallTargets(options.targets, options.context, signal)
   process.stdout.write(
     options.json
       ? `${JSON.stringify(result, null, 2)}\n`
       : `Desinstalación completada: ${result.removed.length} eliminados, ${result.restored.length} restaurados, ${result.skipped.length} omitidos\n`,
   )
-  for (const item of result.skipped) {
-    process.stdout.write(`[omitido] ${item.path}: ${item.reason}\n`)
+  if (!options.json) {
+    for (const item of result.skipped) {
+      process.stdout.write(`[omitido] ${item.path}: ${item.reason}\n`)
+    }
   }
 }
 
-async function main(): Promise<void> {
-  const input = process.argv.slice(2)
+async function runMutableOperation(
+  context: BuildContext,
+  operation: MutableOperation,
+  action: (signal: AbortSignal) => Promise<void>,
+): Promise<void> {
+  const termination = createTerminationController()
+  const onSignal = (signal: NodeJS.Signals): void => {
+    if (signal === "SIGINT" || signal === "SIGTERM") {
+      termination.abort(signal as TerminationSignal)
+    }
+  }
+  process.on("SIGINT", onSignal)
+  process.on("SIGTERM", onSignal)
+  try {
+    await withOperationLock(context, operation, termination.signal, () =>
+      action(termination.signal),
+    )
+  } finally {
+    process.off("SIGINT", onSignal)
+    process.off("SIGTERM", onSignal)
+  }
+}
+
+async function main(input: string[]): Promise<void> {
   if (input.length === 0) {
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       process.stdout.write(HELP)
       return
     }
     const options = await interactiveInstallOptions()
-    if (options) await runInstall(options, true)
+    if (options) {
+      await runMutableOperation(options.context, "install", (signal) =>
+        runInstall(options, true, signal),
+      )
+    }
     return
   }
 
   const [command, ...args] = input
   if (command === "help" || command === "--help" || command === "-h") {
     process.stdout.write(HELP)
-    return
-  }
-
-  if (command === "workflow") {
-    await runWorkflow(args)
     return
   }
 
@@ -742,20 +765,44 @@ async function main(): Promise<void> {
       await runPlan(options)
       break
     case "install":
-      await runInstall(options)
+      if (options.dryRun) await runInstall(options)
+      else {
+        await runMutableOperation(options.context, "install", (signal) =>
+          runInstall(options, false, signal),
+        )
+      }
       break
     case "status":
       await runStatus(options)
       break
     case "uninstall":
-      await runUninstall(options)
+      await runMutableOperation(options.context, "uninstall", (signal) =>
+        runUninstall(options, signal),
+      )
       break
     default:
-      throw new Error(`Comando desconocido: ${command}\n${HELP}`)
+      throw new AppError("INVALID_ARGUMENT", `Comando desconocido: ${command}\n${HELP}`, 2)
   }
 }
 
-main().catch((error) => {
-  process.stderr.write(`Error: ${(error as Error).message}\n`)
-  process.exitCode = 1
+const cliInput = process.argv.slice(2)
+main(cliInput).catch((error) => {
+  const appError = normalizeAppError(error)
+  if (cliInput.includes("--json")) {
+    process.stderr.write(
+      `${JSON.stringify(
+        {
+          ok: false,
+          code: appError.code,
+          message: appError.message,
+          ...(appError.details === undefined ? {} : { details: appError.details }),
+        },
+        null,
+        2,
+      )}\n`,
+    )
+  } else {
+    process.stderr.write(`Error [${appError.code}]: ${appError.message}\n`)
+  }
+  process.exitCode = appError.exitCode
 })

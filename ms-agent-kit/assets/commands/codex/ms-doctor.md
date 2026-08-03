@@ -27,7 +27,7 @@ Sin argumento `full`, valida estos siete roles mínimos:
 - skill principal `ms-architect`;
 - agentes TOML `ms-codex`, `ms-fastlane`, `ms-tester`, `ms-debugger`, `ms-plan` y `ms-discovery`.
 
-Con argumento `full`, valida la skill principal y los 12 agentes TOML `ms-*`.
+Con argumento `full`, valida la skill principal y los 11 agentes TOML `ms-*`.
 
 ## Permisos Efectivos
 
@@ -43,7 +43,6 @@ No clasifiques un agente usando solo `extends`. Resuelve el perfil indicado por 
 |---|---|
 | `ms-plan` | `docs/prd/**` |
 | `ms-designer` | `docs/design/**` |
-| `ms-progress` | `.atl/status/**`, `.gitignore` |
 | `ms-spec` | `docs/spec/**` |
 | `ms-writer` | `README.md`, `CHANGELOG.md`, `docs/changelog/**`, `docs/guides/**`, `docs/api/**`, `docs/release-notes/**` |
 
@@ -55,7 +54,7 @@ Para `ms-tester`, `:read-only` es intencional: puede ejecutar verificaciones que
 
 - Cuenta como administrados únicamente los registros de `~/.ms-agent-kit/state.json` cuyo owner incluya `codex`, cuyo tipo sea `skill` o `command` y cuya ruta esté bajo `~/.codex/skills/`. Verifica que cada archivo exista y tenga frontmatter válido.
 - Si el estado no existe o no es legible, etiqueta el conteo como `visibles`, no `administradas`, y cuenta solo `~/.codex/skills/*/SKILL.md`; excluye `.system`, plugins, caches y otros clientes.
-- Comprueba TOML válido, roles coherentes, prohibición instructiva de subdelegación, política de secretos instalada, skills `ms-architect`, `ms-status`, `ms-continue` y `ms-doctor` legibles, e instrucciones `AGENTS.md` realmente aplicables al workspace.
+- Comprueba TOML válido, roles coherentes, prohibición instructiva de subdelegación, política de secretos instalada, skills `ms-architect`, `ms-status` y `ms-doctor` legibles, e instrucciones `AGENTS.md` realmente aplicables al workspace.
 - Puedes ejecutar `codex --strict-config doctor --json --all`. Trata fallos de red, WebSocket, `TERM=dumb`, aliases de PATH o bases inaccesibles desde el sandbox como límites del entorno hasta reproducirlos fuera de él.
 
 No inspecciones OpenCode ni Claude Code, no ejecutes `opencode debug` y no cuentes skills internas, plugins o cachés ajenos al kit.
