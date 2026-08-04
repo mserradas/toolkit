@@ -601,7 +601,14 @@ describe("platform adapters", () => {
 
     const architectDocument = parseMarkdown(architect!.content.toString("utf8"))
     const scoutDocument = parseMarkdown(scout!.content.toString("utf8"))
-    const taskTools = ["TaskCreate", "TaskGet", "TaskList", "TaskUpdate", "TodoWrite"]
+    const taskTools = [
+      "TaskCreate",
+      "TaskGet",
+      "TaskList",
+      "TaskStop",
+      "TaskUpdate",
+      "TodoWrite",
+    ]
     for (const agent of agents) {
       const definition = agentDefinition(agent.name)
       const profile = modelProfile(definition.modelProfile)
@@ -610,7 +617,31 @@ describe("platform adapters", () => {
       expect(frontmatter.model).toBe(profile.claudeModel ?? "inherit")
       expect(frontmatter.maxTurns).toBe(definition.toolCycleBudget)
       expect(frontmatter.effort).toBe(profile.claudeEffort)
+      const expectedTools = ["Read", "Grep", "Glob"]
+      if (capability.shell) expectedTools.push("Bash")
+      if (capability.writes) expectedTools.push("Write", "Edit", "NotebookEdit")
+      if (capability.usesSkills) expectedTools.push("Skill")
+      if (definition.mode === "primary" && capability.asksQuestions) {
+        expectedTools.push("AskUserQuestion")
+      }
+      if (capability.orchestrates) {
+        expectedTools.push("Agent", "SendMessage", ...taskTools)
+      }
+      if (capability.webFetch) expectedTools.push("WebFetch")
+      if (capability.webSearch) expectedTools.push("WebSearch")
+      expect(frontmatter.tools).toEqual(expectedTools)
+      expect(frontmatter.tools).not.toEqual(
+        expect.arrayContaining([
+          "ToolSearch",
+          "Artifact",
+          "TaskOutput",
+          "Workflow",
+          "Worktree",
+          "mcp__context7__resolve-library-id",
+        ]),
+      )
       const disallowedTools = (frontmatter.disallowedTools ?? []) as string[]
+      for (const tool of expectedTools) expect(disallowedTools).not.toContain(tool)
       if (definition.mode === "subagent") expect(disallowedTools).toContain("AskUserQuestion")
       else expect(disallowedTools).not.toContain("AskUserQuestion")
       for (const tool of taskTools) {

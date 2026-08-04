@@ -5,6 +5,16 @@ import { DEFAULT_ASSETS_ROOT } from "../src/core/catalog.js"
 import { parseMarkdown } from "../src/core/frontmatter.js"
 
 describe("ms-architect policy", () => {
+  it("counts Codex-managed doctor artifacts using state targets", async () => {
+    const doctor = await readFile(
+      path.join(DEFAULT_ASSETS_ROOT, "commands", "codex", "ms-doctor.md"),
+      "utf8",
+    )
+
+    expect(doctor).toContain("cuyo `target` sea `codex` o cuyo array `targets` contenga `codex`")
+    expect(doctor).not.toContain("cuyo owner incluya `codex`")
+  })
+
   it("stays compact while preserving orchestration and safety gates", async () => {
     const source = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-architect.md"), "utf8")
     const body = parseMarkdown(source).body

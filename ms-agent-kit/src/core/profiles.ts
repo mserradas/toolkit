@@ -51,7 +51,7 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: false,
     asksQuestions: false,
     orchestrates: false,
-    webFetch: true,
+    webFetch: false,
     webSearch: false,
   },
   "design-writer": {
@@ -101,7 +101,7 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: false,
     asksQuestions: false,
     orchestrates: false,
-    webFetch: true,
+    webFetch: false,
     webSearch: false,
   },
   "security-auditor": {
@@ -111,7 +111,7 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: false,
     asksQuestions: false,
     orchestrates: false,
-    webFetch: true,
+    webFetch: false,
     webSearch: false,
   },
   "spec-writer": {
@@ -131,7 +131,7 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     usesSkills: false,
     asksQuestions: false,
     orchestrates: false,
-    webFetch: true,
+    webFetch: false,
     webSearch: false,
   },
   "documentation-writer": {

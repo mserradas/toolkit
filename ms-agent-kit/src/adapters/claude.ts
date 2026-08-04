@@ -4,6 +4,10 @@ import { frontmatterString, renderMarkdown } from "../core/frontmatter.js"
 import { modelProfile } from "../core/model-profiles.js"
 import { capabilityProfile } from "../core/profiles.js"
 import { openCodeRolePermission } from "../core/opencode-role-permissions.js"
+import {
+  SAFE_ENVIRONMENT_TEMPLATES,
+  SECRET_BASENAME_PATTERNS,
+} from "../core/permissions.js"
 import type { Artifact, BuildContext, Catalog, SourceMarkdown } from "../core/types.js"
 import {
   copySkillArtifacts,
@@ -45,10 +49,38 @@ function deniedTools(name: string): string[] {
     denied.add("TaskCreate")
     denied.add("TaskGet")
     denied.add("TaskList")
+    denied.add("TaskStop")
     denied.add("TaskUpdate")
     denied.add("TodoWrite")
   }
   return [...denied]
+}
+
+function allowedTools(name: string): string[] {
+  const definition = agentDefinition(name)
+  const profile = capabilityProfile(definition.capabilityProfile)
+  const allowed = ["Read", "Grep", "Glob"]
+  if (profile.shell) allowed.push("Bash")
+  if (profile.writes) allowed.push("Write", "Edit", "NotebookEdit")
+  if (profile.usesSkills) allowed.push("Skill")
+  if (definition.mode === "primary" && profile.asksQuestions) {
+    allowed.push("AskUserQuestion")
+  }
+  if (profile.orchestrates) {
+    allowed.push(
+      "Agent",
+      "SendMessage",
+      "TaskCreate",
+      "TaskGet",
+      "TaskList",
+      "TaskStop",
+      "TaskUpdate",
+      "TodoWrite",
+    )
+  }
+  if (profile.webFetch) allowed.push("WebFetch")
+  if (profile.webSearch) allowed.push("WebSearch")
+  return allowed
 }
 
 function claudeGuardHooks(
@@ -98,6 +130,7 @@ function claudeAgent(agent: SourceMarkdown, guardPath: string): string {
     model: profile.claudeModel ?? "inherit",
     permissionMode: "default",
     skills: ["ms-shared"],
+    tools: allowedTools(agent.name),
     hooks: claudeGuardHooks(
       guardPath,
       agent.name,
@@ -119,13 +152,14 @@ function claudeAgent(agent: SourceMarkdown, guardPath: string): string {
   )
 }
 
-function readOnlyBashRules(catalog: Catalog): Record<string, string[]> {
+function bashAllowRules(catalog: Catalog): Record<string, string[]> {
   return Object.fromEntries(
     catalog.agents.flatMap((agent) => {
       const profile = capabilityProfile(agentDefinition(agent.name).capabilityProfile)
-      if (profile.writes || !profile.shell) return []
+      if (!profile.shell) return []
       const bash = openCodeRolePermission(agent.name).bash
       if (typeof bash !== "object" || bash === null || Array.isArray(bash)) return []
+      if ((bash as Record<string, unknown>)["*"] !== "deny") return []
       const rules = Object.entries(bash)
         .filter(
           ([pattern, action]) =>
@@ -138,6 +172,7 @@ function readOnlyBashRules(catalog: Catalog): Record<string, string[]> {
 }
 
 function bashDenyRules(catalog: Catalog): Record<string, string[]> {
+  const structurallyInspectedPatterns = new Set(["sh -c *", "*$(*", "*;*"])
   return Object.fromEntries(
     catalog.agents.map((agent) => {
       const bash = openCodeRolePermission(agent.name).bash
@@ -147,8 +182,15 @@ function bashDenyRules(catalog: Catalog): Record<string, string[]> {
       }
       // En los mapas OpenCode, `*` es el fallback y los allow mas especificos lo
       // sustituyen. Para los roles cerrados ese fallback ya lo materializa la allowlist.
+      // Claude inspecciona estructuralmente estos casos y evita sus falsos positivos
+      // sobre texto citado sin retirar la proteccion del parser.
       const rules = Object.entries(bash)
-        .filter(([pattern, action]) => pattern !== "*" && action === "deny")
+        .filter(
+          ([pattern, action]) =>
+            pattern !== "*" &&
+            action === "deny" &&
+            !structurallyInspectedPatterns.has(pattern),
+        )
         .map(([pattern]) => pattern)
       return [agent.name, rules]
     }),
@@ -162,21 +204,37 @@ function claudeGuardSource(catalog: Catalog): string {
       capabilityProfile(agentDefinition(agent.name).capabilityProfile).writePaths,
     ]),
   )
-  const bashRules = readOnlyBashRules(catalog)
+  const bashRules = bashAllowRules(catalog)
   const bashDeny = bashDenyRules(catalog)
+  const materializedAgents = catalog.agents.map((agent) => agent.name)
   return String.raw`#!/usr/bin/env node
 import { realpathSync } from "node:fs"
 import path from "node:path"
 
 const WRITE_RULES = ${JSON.stringify(writeRules, null, 2)}
-const READ_ONLY_BASH_RULES = ${JSON.stringify(bashRules, null, 2)}
+const BASH_ALLOW_RULES = ${JSON.stringify(bashRules, null, 2)}
 const BASH_DENY_RULES = ${JSON.stringify(bashDeny, null, 2)}
+const MATERIALIZED_AGENTS = new Set(${JSON.stringify(materializedAgents, null, 2)})
+const SECRET_BASENAME_PATTERNS = ${JSON.stringify(SECRET_BASENAME_PATTERNS, null, 2)}
+const SAFE_ENVIRONMENT_TEMPLATES = new Set(${JSON.stringify(SAFE_ENVIRONMENT_TEMPLATES, null, 2)})
+
+function secretBasename(value) {
+  return SECRET_BASENAME_PATTERNS.some((pattern) => {
+    if (pattern.startsWith("*.")) return value.endsWith(pattern.slice(1))
+    if (pattern.endsWith("*")) return value.startsWith(pattern.slice(0, -1))
+    if (pattern.includes("*")) {
+      const [prefix, suffix] = pattern.split("*", 2)
+      return value.startsWith(prefix) && value.endsWith(suffix)
+    }
+    return value === pattern
+  })
+}
 
 function secretPath(value) {
   const normalized = String(value || "").replaceAll("\\", "/")
   const segments = normalized.split("/")
   const envFile = segments.some((segment) => {
-    if (segment === ".env.example") return false
+    if (SAFE_ENVIRONMENT_TEMPLATES.has(segment)) return false
     if (!segment.startsWith(".env")) return false
     const suffix = segment.slice(4, 5)
     return suffix === "" || ".*?[".includes(suffix)
@@ -187,7 +245,7 @@ function secretPath(value) {
       (segment.startsWith(".") || segment.toLowerCase().includes("env")),
   )
   return (
-    envFile || sensitiveGlob ||
+    envFile || sensitiveGlob || secretBasename(segments.at(-1) || "") ||
     /(^|\/)(?:secrets|\.ssh|\.credentials)(?:\/|$)/.test(normalized) ||
     /(^|\/)\.aws\/credentials$/.test(normalized) ||
     /(^|\/)\.config\/gh\/hosts\.yml$/.test(normalized) ||
@@ -223,9 +281,9 @@ function commandPatternRegex(pattern) {
     const character = pattern[index]
     if (character === "*") {
       output += ".*"
-    } else if (/\s/.test(character)) {
-      output += "\\s+"
-      while (/\s/.test(pattern[index + 1] || "")) index += 1
+    } else if (character === " " || character === "\t") {
+      output += "[ \\t]+"
+      while (pattern[index + 1] === " " || pattern[index + 1] === "\t") index += 1
     } else {
       output += character.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")
     }
@@ -233,19 +291,23 @@ function commandPatternRegex(pattern) {
   return new RegExp(output + "$")
 }
 
-function shellWords(command) {
-  const words = []
+function shellWordTokens(command) {
+  const tokens = []
   let current = ""
+  let hasPathExpansion = false
+  let previousActiveDollar = false
   let quote = null
   let escaped = false
   const flush = () => {
-    if (current) words.push(current)
+    if (current) tokens.push({ value: current, hasPathExpansion })
     current = ""
+    hasPathExpansion = false
   }
   for (const character of command) {
     if (escaped) {
       current += character
       escaped = false
+      previousActiveDollar = false
       continue
     }
     if (character === "\\" && quote !== "'") {
@@ -255,19 +317,32 @@ function shellWords(command) {
     if (quote) {
       if (character === quote) quote = null
       else current += character
+      previousActiveDollar = false
       continue
     }
     if (character === "'" || character === '"') {
       quote = character
+      previousActiveDollar = false
     } else if (/\s/.test(character) || ";|&<>()".includes(character)) {
       flush()
+      previousActiveDollar = false
     } else {
+      const opensParameterExpansion = character === "{" && previousActiveDollar
       current += character
+      if ("*?[".includes(character) || (character === "{" && !opensParameterExpansion)) {
+        hasPathExpansion = true
+      }
+      previousActiveDollar = character === "$"
     }
   }
   if (quote || escaped) return null
   flush()
-  return words
+  return tokens
+}
+
+function shellWords(command) {
+  const tokens = shellWordTokens(command)
+  return tokens?.map((token) => token.value) ?? null
 }
 
 function shellSegments(command) {
@@ -546,7 +621,24 @@ function canonicalDenyCandidates(command) {
 
 const MAX_SHELL_INSPECTION_DEPTH = 4
 const COMMAND_SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"])
-const UNSUPPORTED_EXECUTION_PREFIXES = new Set(["!", "time", "coproc"])
+// Estos delegadores requieren un parser explicito antes de poder habilitarse.
+const UNSUPPORTED_EXECUTION_PREFIXES = new Set([
+  "!", "time", "coproc",
+  "nice", "nohup", "timeout", "setsid", "stdbuf", "taskset", "chrt", "ionice",
+  "doas", "runuser", "su", "pkexec", "watch", "parallel", "entr",
+])
+const UNSAFE_FIND_ACTIONS = new Set([
+  "-exec", "-execdir", "-ok", "-okdir", "-delete",
+])
+const INLINE_CODE_POLICIES = {
+  node: { short: "ep", long: ["--eval", "--print"] },
+  python: { short: "c", long: [] },
+  perl: { short: "eE", long: [] },
+  ruby: { short: "e", long: ["--eval"] },
+  lua: { short: "e", long: [] },
+  r: { short: "e", long: ["--expression"] },
+  php: { short: "r", long: ["--run"] },
+}
 
 function parenthesizedCommand(command, openIndex) {
   let depth = 1
@@ -834,7 +926,11 @@ function hasActiveCodeGeneration(command) {
   return false
 }
 
-function hasUnresolvedParameterExpansion(command) {
+const SAFE_DISPLAY_PARAMETERS = new Set(["HOME", "PWD", "OLDPWD"])
+
+function scanParameterExpansions(command) {
+  const expansions = []
+  let quote = null
   let escaped = false
   for (let index = 0; index < command.length; index += 1) {
     const character = command[index]
@@ -842,16 +938,162 @@ function hasUnresolvedParameterExpansion(command) {
       escaped = false
       continue
     }
-    if (character === "\\") {
+    if (character === "\\" && quote !== "'") {
       escaped = true
+      continue
+    }
+    if (quote === "'") {
+      if (character === quote) quote = null
+      continue
+    }
+    if (character === "'" && quote === null) {
+      quote = "'"
+      continue
+    }
+    if (character === '"') {
+      if (quote === '"') quote = null
+      else if (quote === null) quote = '"'
       continue
     }
     if (character !== "$") continue
     const next = command[index + 1] || ""
     if (next === "(") continue
-    if (next === "{" || /[A-Za-z0-9_@*#?$!\-]/.test(next)) return true
+    if (next === "'" || next === '"') continue
+    if (next === "{") {
+      const closeIndex = command.indexOf("}", index + 2)
+      if (closeIndex < 0) return null
+      const body = command.slice(index + 2, closeIndex)
+      const simple = /^[A-Za-z_][A-Za-z0-9_]*$/.test(body)
+      const name = simple ? body : /^([A-Za-z_][A-Za-z0-9_]*)/.exec(body)?.[1] || body
+      expansions.push({ name, simple })
+      index = closeIndex
+      continue
+    }
+    if (/[A-Za-z_]/.test(next)) {
+      let endIndex = index + 2
+      while (/[A-Za-z0-9_]/.test(command[endIndex] || "")) endIndex += 1
+      expansions.push({ name: command.slice(index + 1, endIndex), simple: true })
+      index = endIndex - 1
+      continue
+    }
+    if (/[0-9?@$*#!\-]/.test(next)) {
+      expansions.push({ name: next, simple: false })
+      index += 1
+    }
+  }
+  return expansions
+}
+
+function hasUnresolvedParameterExpansion(command) {
+  const expansions = scanParameterExpansions(command)
+  return (
+    !expansions ||
+    expansions.some(
+      (expansion) =>
+        !expansion.simple || !SAFE_DISPLAY_PARAMETERS.has(expansion.name),
+    )
+  )
+}
+
+function hasActiveAnsiOrLocaleQuoting(command) {
+  let quote = null
+  let escaped = false
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (character === "\\" && quote !== "'") {
+      escaped = true
+      continue
+    }
+    if (quote) {
+      if (character === quote) quote = null
+      continue
+    }
+    if (
+      character === "$" &&
+      (command[index + 1] === "'" || command[index + 1] === '"')
+    ) return true
+    if (character === "'" || character === '"') quote = character
   }
   return false
+}
+
+function hasActiveProcessSubstitution(command) {
+  let quote = null
+  let escaped = false
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (character === "\\" && quote !== "'") {
+      escaped = true
+      continue
+    }
+    if (quote) {
+      if (character === quote) quote = null
+      continue
+    }
+    if (
+      (character === "<" || character === ">") &&
+      command[index + 1] === "("
+    ) return true
+    if (character === "'" || character === '"') quote = character
+  }
+  return false
+}
+
+function hasActiveRedirection(command) {
+  let quote = null
+  let escaped = false
+  for (const character of command) {
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (character === "\\" && quote !== "'") {
+      escaped = true
+      continue
+    }
+    if (quote) {
+      if (character === quote) quote = null
+      continue
+    }
+    if (character === "<" || character === ">") return true
+    if (character === "'" || character === '"') quote = character
+  }
+  return false
+}
+
+function allowsDynamicConsumers(command) {
+  const sequence = shellSequence(command)
+  if (!sequence) return false
+  return sequence.every((entry) => {
+    const expansions = scanParameterExpansions(entry.command)
+    if (
+      !expansions ||
+      expansions.some(
+        (expansion) =>
+          !expansion.simple || !SAFE_DISPLAY_PARAMETERS.has(expansion.name),
+      )
+    ) return false
+    const dynamic =
+      hasActiveCodeGeneration(entry.command) ||
+      expansions.length > 0
+    if (!dynamic) return true
+    if (hasActiveRedirection(entry.command)) return false
+    const words = shellWords(entry.command)
+    if (!words) return false
+    const stages = invocationStages(words)
+    if (!stages) return false
+    const consumer = stages[stages.length - 1]
+    if (!consumer || !["echo", "printf"].includes(consumer.executable)) return false
+    return consumer.executable !== "printf" || !consumer.args.includes("-v")
+  })
 }
 
 const UNSUPPORTED_SHELL_CONTROL_WORDS = new Set([
@@ -871,7 +1113,49 @@ function hasUnsupportedShellControl(command) {
   })
 }
 
-function hasUnsupportedExecutionPrefix(command) {
+function inlineCodePolicy(executable) {
+  if (/^(?:node|nodejs)(?:\d+(?:\.\d+)*)?$/.test(executable) || executable === "bun") {
+    return INLINE_CODE_POLICIES.node
+  }
+  if (/^(?:python|pypy)(?:2|3)?(?:\.\d+(?:\.\d+)?)?$/.test(executable)) {
+    return INLINE_CODE_POLICIES.python
+  }
+  if (/^perl(?:\d+(?:\.\d+)*)?$/.test(executable)) return INLINE_CODE_POLICIES.perl
+  if (/^ruby(?:\d+(?:\.\d+)*)?$/.test(executable)) return INLINE_CODE_POLICIES.ruby
+  if (/^(?:lua|luajit)(?:\d+(?:\.\d+)*)?$/.test(executable)) {
+    return INLINE_CODE_POLICIES.lua
+  }
+  if (executable === "R" || executable === "Rscript") return INLINE_CODE_POLICIES.r
+  if (/^php(?:\d+(?:\.\d+)*)?$/.test(executable)) return INLINE_CODE_POLICIES.php
+  return null
+}
+
+function hasInlineCodeFlag(args, policy) {
+  for (const argument of args) {
+    if (argument === "--") return false
+    if (!argument.startsWith("-") || argument === "-") continue
+    if (argument.startsWith("--")) {
+      if (
+        policy.long.some(
+          (flag) => argument === flag || argument.startsWith(flag + "="),
+        )
+      ) return true
+      continue
+    }
+    if ([...argument.slice(1)].some((flag) => policy.short.includes(flag))) return true
+  }
+  return false
+}
+
+function hasDenoEvalSubcommand(args) {
+  for (const argument of args) {
+    if (argument === "--") return false
+    if (argument === "eval") return true
+  }
+  return false
+}
+
+function hasUnsafeInvocation(command) {
   const sequence = shellSequence(command)
   if (!sequence) return true
   return sequence.some((entry) => {
@@ -879,7 +1163,18 @@ function hasUnsupportedExecutionPrefix(command) {
     if (!words) return true
     const stages = invocationStages(words)
     if (!stages) return true
-    return stages.some((stage) => UNSUPPORTED_EXECUTION_PREFIXES.has(stage.executable))
+    if (stages.some((stage) => UNSUPPORTED_EXECUTION_PREFIXES.has(stage.executable))) {
+      return true
+    }
+    const effective = stages[stages.length - 1]
+    if (!effective) return false
+    if (
+      effective.executable === "find" &&
+      effective.args.some((argument) => UNSAFE_FIND_ACTIONS.has(argument))
+    ) return true
+    if (effective.executable === "deno") return hasDenoEvalSubcommand(effective.args)
+    const policy = inlineCodePolicy(effective.executable)
+    return Boolean(policy && hasInlineCodeFlag(effective.args, policy))
   })
 }
 
@@ -896,10 +1191,21 @@ function matchesDenyRule(agent, command) {
 
 function passesRecursiveDenyRules(agent, command, depth = 0) {
   if (depth > MAX_SHELL_INSPECTION_DEPTH) return false
+  if (/[\r\n]/.test(command)) return false
+  if (
+    hasActiveAnsiOrLocaleQuoting(command) ||
+    hasActiveProcessSubstitution(command) ||
+    !allowsDynamicConsumers(command)
+  ) return false
+  const tokens = shellWordTokens(command)
+  if (
+    !tokens ||
+    tokens.some((token) => token.hasPathExpansion || secretPath(token.value))
+  ) return false
   if (
     invokesEnvironmentDump(command) ||
     hasUnsupportedShellControl(command) ||
-    hasUnsupportedExecutionPrefix(command)
+    hasUnsafeInvocation(command)
   ) return false
   const denied = matchesDenyRule(agent, command)
   if (denied === null || denied) return false
@@ -1008,9 +1314,9 @@ function unsafeReadOnlyArguments(words) {
   return false
 }
 
-function allowedReadOnlyCommand(agent, command) {
+function allowedBashCommand(agent, command) {
   if (!passesRecursiveDenyRules(agent, command)) return false
-  const rules = READ_ONLY_BASH_RULES[agent]
+  const rules = BASH_ALLOW_RULES[agent]
   if (!rules) return true
   if (unsafeShellSyntax(command)) return false
   const words = shellWords(command)
@@ -1055,6 +1361,13 @@ for await (const chunk of process.stdin) input += chunk
 
 try {
   const payload = JSON.parse(input || "{}")
+  const expectedAgent = process.argv[2]
+  if (!MATERIALIZED_AGENTS.has(expectedAgent)) {
+    throw new Error("Bloqueado por la política ms-*: agente desconocido")
+  }
+  if (payload.agent_type !== undefined && payload.agent_type !== expectedAgent) {
+    throw new Error("Bloqueado por la política ms-*: identidad de agente inconsistente")
+  }
   const tool = payload.tool_name || ""
   const toolInput = payload.tool_input || {}
   const pathValues = [toolInput.file_path, toolInput.path, toolInput.notebook_path].filter(Boolean)
@@ -1068,15 +1381,11 @@ try {
 
   if (tool === "Bash") {
     const command = String(toolInput.command || "")
-    const commandWords = command
-      .split(/[\s;&|<>()]+/)
-      .map((value) => value.replace(/^["']+|["']+$/g, ""))
-      .filter(Boolean)
-    if (invokesEnvironmentDump(command) || commandWords.some(secretPath)) {
+    if (invokesEnvironmentDump(command)) {
       console.error("Bloqueado por la política ms-*: comando con secretos o variables de entorno")
       process.exit(2)
     }
-    if (!allowedReadOnlyCommand(process.argv[2], command)) {
+    if (!allowedBashCommand(expectedAgent, command)) {
       console.error("Bloqueado por la política ms-*: comando denegado para este agente")
       process.exit(2)
     }
@@ -1084,7 +1393,7 @@ try {
 
   if (["Write", "Edit", "NotebookEdit"].includes(tool)) {
     const destination = toolInput.file_path || toolInput.notebook_path || toolInput.path
-    if (!allowedWrite(process.argv[2], destination)) {
+    if (!allowedWrite(expectedAgent, destination)) {
       console.error("Bloqueado por la política ms-*: escritura fuera del alcance del agente")
       process.exit(2)
     }

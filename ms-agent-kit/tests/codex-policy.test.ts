@@ -61,6 +61,44 @@ describe("Codex hardening", () => {
     )
   })
 
+  it("materializes shared filesystem denies and practical direct prefix rules", async () => {
+    const artifacts = await buildArtifacts(["codex"], await testContext())
+    const agent = artifacts.find(
+      (artifact) => artifact.target === "codex" && artifact.kind === "agent",
+    )
+    const policy = policyArtifact(artifacts).content.toString("utf8")
+    const agentContent = agent?.content.toString("utf8") ?? ""
+
+    for (const pattern of [
+      "id_rsa",
+      "**/id_rsa",
+      "secrets.json",
+      "**/secrets.json",
+      "terraform.tfstate*",
+      "**/terraform.tfstate*",
+      "service-account*.json",
+      "**/*.jks",
+      "**/*.keystore",
+      "**/local.settings.json",
+    ]) {
+      expect(agentContent, pattern).toContain(`${JSON.stringify(pattern)} = "deny"`)
+    }
+    for (const directPath of [
+      "id_rsa",
+      "secrets.json",
+      "terraform.tfstate.backup",
+      "service-account-prod.json",
+      "app.jks",
+      "app.keystore",
+      "local.settings.json",
+    ]) {
+      expect(policy, directPath).toContain(JSON.stringify(directPath))
+      expect(policy, `./${directPath}`).toContain(JSON.stringify(`./${directPath}`))
+    }
+    expect(agentContent).not.toContain('".claude/settings.json" = "deny"')
+    expect(agentContent).not.toContain('".git/config" = "deny"')
+  })
+
   it.skipIf(!codexAvailable)("blocks the practical secret matrix without blocking safe files", async () => {
     const context = await testContext()
     const policy = policyArtifact(await buildArtifacts(["codex"], context))

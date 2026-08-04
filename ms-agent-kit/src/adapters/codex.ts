@@ -2,7 +2,7 @@ import path from "node:path"
 import { agentDefinition } from "../core/agent-catalog.js"
 import { frontmatterString, renderMarkdown } from "../core/frontmatter.js"
 import { modelProfile } from "../core/model-profiles.js"
-import { SECRET_PATH_PATTERNS } from "../core/permissions.js"
+import { SECRET_DIRECT_PATHS, SECRET_PATH_PATTERNS } from "../core/permissions.js"
 import { capabilityProfile } from "../core/profiles.js"
 import type { Artifact, BuildContext, Catalog, SourceMarkdown } from "../core/types.js"
 import {
@@ -31,42 +31,10 @@ url = "https://mcp.context7.com/mcp"
 env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }
 `
 
-const CODEX_SECRET_ARGUMENTS = [
-  ".env",
-  "./.env",
-  ".env.local",
-  "./.env.local",
-  ".env.secret",
-  "./.env.secret",
-  ".env.development",
-  "./.env.development",
-  ".env.production",
-  "./.env.production",
-  ".env.staging",
-  "./.env.staging",
-  ".env.test",
-  "./.env.test",
-  ".netrc",
-  "./.netrc",
-  ".npmrc",
-  "./.npmrc",
-  ".pypirc",
-  "./.pypirc",
-  ".aws/credentials",
-  "./.aws/credentials",
-  ".config/gh/hosts.yml",
-  "./.config/gh/hosts.yml",
-  ".docker/config.json",
-  "./.docker/config.json",
-  ".kube/config",
-  "./.kube/config",
-  ".ssh/id_rsa",
-  "./.ssh/id_rsa",
-  ".ssh/id_ed25519",
-  "./.ssh/id_ed25519",
-  "credentials.json",
-  "./credentials.json",
-] as const
+const CODEX_SECRET_ARGUMENTS = SECRET_DIRECT_PATHS.flatMap((secretPath) => [
+  secretPath,
+  `./${secretPath}`,
+])
 
 const CODEX_DIRECT_READERS = [
   "cat",

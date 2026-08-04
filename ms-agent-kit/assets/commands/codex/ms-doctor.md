@@ -52,7 +52,7 @@ Para `ms-tester`, `:read-only` es intencional: puede ejecutar verificaciones que
 
 ## Conteos Y Checks
 
-- Cuenta como administrados únicamente los registros de `~/.ms-agent-kit/state.json` cuyo owner incluya `codex`, cuyo tipo sea `skill` o `command` y cuya ruta esté bajo `~/.codex/skills/`. Verifica que cada archivo exista y tenga frontmatter válido.
+- Cuenta como administrados únicamente los registros de `~/.ms-agent-kit/state.json` cuyo `target` sea `codex` o cuyo array `targets` contenga `codex`, cuyo tipo sea `skill` o `command` y cuya ruta esté bajo `~/.codex/skills/`. Verifica que cada archivo exista y tenga frontmatter válido.
 - Si el estado no existe o no es legible, etiqueta el conteo como `visibles`, no `administradas`, y cuenta solo `~/.codex/skills/*/SKILL.md`; excluye `.system`, plugins, caches y otros clientes.
 - Comprueba TOML válido, roles coherentes, prohibición instructiva de subdelegación, política de secretos instalada, skills `ms-architect`, `ms-status` y `ms-doctor` legibles, e instrucciones `AGENTS.md` realmente aplicables al workspace.
 - Puedes ejecutar `codex --strict-config doctor --json --all`. Trata fallos de red, WebSocket, `TERM=dumb`, aliases de PATH o bases inaccesibles desde el sandbox como límites del entorno hasta reproducirlos fuera de él.
