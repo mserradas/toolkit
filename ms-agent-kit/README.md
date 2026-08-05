@@ -240,7 +240,9 @@ También se puede iniciar una sesión completa con el arquitecto:
 claude --agent ms-architect
 ```
 
-Los ganchos (`hooks`) se aplican a los agentes `ms-*` y sus flujos de trabajo. Las sesiones normales conservan la configuración del usuario en `~/.claude/settings.json`.
+Los ganchos (`hooks`) se aplican a los agentes `ms-*` y sus flujos de trabajo. En ese contexto, la configuración compartible del proyecto en `<project>/.claude/settings.json` sigue disponible por esta capa; en cambio, se deniega el acceso a cualquier `.claude/settings.local.json`, a `~/.claude/settings.json` y a cualquier `.git/config`. También se deniega toda invocación de `git config`, incluso para lectura.
+
+Estos ganchos administrados no alteran las sesiones normales de Claude, que conservan la configuración del usuario.
 
 ### Codex
 

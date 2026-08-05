@@ -3,6 +3,7 @@ import {
   OPENCODE_SECRET_BASH_RULES,
   OPENCODE_SECRET_READ_RULES,
   SECRET_BASENAME_PATTERNS,
+  SENSITIVE_PATH_SEGMENTS,
   isSensitivePath,
 } from "../src/core/permissions.js"
 
@@ -41,7 +42,8 @@ describe("sensitive path policy", () => {
       "terraform.tfvars",
       "service-account.md",
       ".claude/settings.json",
-      ".git/config",
+      ".git/configuration",
+      ".claude/settings.json.example",
     ]) {
       expect(isSensitivePath(filename), filename).toBe(false)
     }
@@ -56,7 +58,23 @@ describe("sensitive path policy", () => {
       expect(OPENCODE_SECRET_BASH_RULES[`* **/${pattern}`]).toBe("deny")
     }
     expect(OPENCODE_SECRET_READ_RULES).not.toHaveProperty(".claude/settings.json")
-    expect(OPENCODE_SECRET_READ_RULES).not.toHaveProperty(".git/config")
+  })
+
+  it("classifies only the approved shared configuration paths", () => {
+    for (const segments of SENSITIVE_PATH_SEGMENTS) {
+      const target = segments.join("/")
+      expect(isSensitivePath(target)).toBe(true)
+      expect(isSensitivePath(`nested/${target}`)).toBe(true)
+      expect(OPENCODE_SECRET_READ_RULES[target]).toBe("deny")
+      expect(OPENCODE_SECRET_READ_RULES[`**/${target}`]).toBe("deny")
+      expect(OPENCODE_SECRET_BASH_RULES[`* ${target}`]).toBe("deny")
+      expect(OPENCODE_SECRET_BASH_RULES[`* */${target}`]).toBe("deny")
+      expect(OPENCODE_SECRET_BASH_RULES[`* **/${target}`]).toBe("deny")
+    }
+    expect(isSensitivePath(".git/configuration")).toBe(false)
+    expect(isSensitivePath(".claude/settings.json")).toBe(false)
+    expect(isSensitivePath(".claude/settings.json.example")).toBe(false)
+    expect(OPENCODE_SECRET_READ_RULES).not.toHaveProperty(".claude/settings.json")
   })
 
   it("derives root, one-level, and multi-level Bash rules from canonical paths", () => {

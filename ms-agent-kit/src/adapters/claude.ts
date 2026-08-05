@@ -7,6 +7,7 @@ import { openCodeRolePermission } from "../core/opencode-role-permissions.js"
 import {
   SAFE_ENVIRONMENT_TEMPLATES,
   SECRET_BASENAME_PATTERNS,
+  SENSITIVE_PATH_SEGMENTS,
 } from "../core/permissions.js"
 import type { Artifact, BuildContext, Catalog, SourceMarkdown } from "../core/types.js"
 import {
@@ -152,69 +153,79 @@ function claudeAgent(agent: SourceMarkdown, guardPath: string): string {
   )
 }
 
-function bashAllowRules(catalog: Catalog): Record<string, string[]> {
-  return Object.fromEntries(
-    catalog.agents.flatMap((agent) => {
-      const profile = capabilityProfile(agentDefinition(agent.name).capabilityProfile)
-      if (!profile.shell) return []
-      const bash = openCodeRolePermission(agent.name).bash
-      if (typeof bash !== "object" || bash === null || Array.isArray(bash)) return []
-      if ((bash as Record<string, unknown>)["*"] !== "deny") return []
-      const rules = Object.entries(bash)
-        .filter(
-          ([pattern, action]) =>
-            pattern !== "*" && action === "allow" && !pattern.startsWith("opencode "),
-        )
-        .map(([pattern]) => pattern)
-      return [[agent.name, rules]]
-    }),
-  )
+type BashDecision = "allow" | "ask" | "deny"
+
+interface BashPolicy {
+  fallback: BashDecision
+  allow: string[]
+  ask: string[]
+  deny: string[]
 }
 
-function bashDenyRules(catalog: Catalog): Record<string, string[]> {
+function closedBashPolicy(): BashPolicy {
+  return { fallback: "deny", allow: [], ask: [], deny: [] }
+}
+
+function bashPolicies(catalog: Catalog): Record<string, BashPolicy> {
   const structurallyInspectedPatterns = new Set(["sh -c *", "*$(*", "*;*"])
+  const decisions = new Set<BashDecision>(["allow", "ask", "deny"])
   return Object.fromEntries(
     catalog.agents.map((agent) => {
       const bash = openCodeRolePermission(agent.name).bash
-      if (bash === "deny") return [agent.name, ["*"]]
-      if (typeof bash !== "object" || bash === null || Array.isArray(bash)) {
-        return [agent.name, []]
+      if (bash === "deny") return [agent.name, closedBashPolicy()]
+      if (
+        typeof bash !== "object" ||
+        bash === null ||
+        Array.isArray(bash) ||
+        Object.getPrototypeOf(bash) !== Object.prototype
+      ) return [agent.name, closedBashPolicy()]
+      const entries = Object.entries(bash)
+      const fallback = (bash as Record<string, unknown>)["*"]
+      if (
+        !decisions.has(fallback as BashDecision) ||
+        entries.some(([, action]) => !decisions.has(action as BashDecision))
+      ) return [agent.name, closedBashPolicy()]
+
+      const policy: BashPolicy = {
+        fallback: fallback as BashDecision,
+        allow: [],
+        ask: [],
+        deny: [],
       }
-      // En los mapas OpenCode, `*` es el fallback y los allow mas especificos lo
-      // sustituyen. Para los roles cerrados ese fallback ya lo materializa la allowlist.
       // Claude inspecciona estructuralmente estos casos y evita sus falsos positivos
       // sobre texto citado sin retirar la proteccion del parser.
-      const rules = Object.entries(bash)
-        .filter(
-          ([pattern, action]) =>
-            pattern !== "*" &&
-            action === "deny" &&
-            !structurallyInspectedPatterns.has(pattern),
-        )
-        .map(([pattern]) => pattern)
-      return [agent.name, rules]
+      for (const [pattern, action] of entries) {
+        if (pattern === "*") continue
+        if (
+          action === "allow" &&
+          (pattern.startsWith("opencode ") || /^git\s+config(?:\s|$)/.test(pattern))
+        ) continue
+        if (action === "deny" && structurallyInspectedPatterns.has(pattern)) continue
+        policy[action as BashDecision].push(pattern)
+      }
+      return [agent.name, policy]
     }),
   )
 }
 
-function claudeGuardSource(catalog: Catalog): string {
+function claudeGuardSource(catalog: Catalog, context: BuildContext): string {
   const writeRules = Object.fromEntries(
     catalog.agents.map((agent) => [
       agent.name,
       capabilityProfile(agentDefinition(agent.name).capabilityProfile).writePaths,
     ]),
   )
-  const bashRules = bashAllowRules(catalog)
-  const bashDeny = bashDenyRules(catalog)
+  const bashPolicyByAgent = bashPolicies(catalog)
   const materializedAgents = catalog.agents.map((agent) => agent.name)
   return String.raw`#!/usr/bin/env node
 import { realpathSync } from "node:fs"
 import path from "node:path"
 
 const WRITE_RULES = ${JSON.stringify(writeRules, null, 2)}
-const BASH_ALLOW_RULES = ${JSON.stringify(bashRules, null, 2)}
-const BASH_DENY_RULES = ${JSON.stringify(bashDeny, null, 2)}
+const BASH_POLICIES = ${JSON.stringify(bashPolicyByAgent, null, 2)}
 const MATERIALIZED_AGENTS = new Set(${JSON.stringify(materializedAgents, null, 2)})
+const SENSITIVE_PATH_SEGMENTS = ${JSON.stringify(SENSITIVE_PATH_SEGMENTS, null, 2)}
+const USER_CLAUDE_SETTINGS = ${JSON.stringify(path.resolve(context.homeDir, ".claude/settings.json"))}
 const SECRET_BASENAME_PATTERNS = ${JSON.stringify(SECRET_BASENAME_PATTERNS, null, 2)}
 const SAFE_ENVIRONMENT_TEMPLATES = new Set(${JSON.stringify(SAFE_ENVIRONMENT_TEMPLATES, null, 2)})
 
@@ -556,8 +567,13 @@ function normalizedRemoveCandidate(args) {
 }
 
 function gitSubcommand(args) {
-  const optionsWithValues = new Set([
-    "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--exec-path",
+  const safeOptionsWithValues = new Set([
+    "-C", "--git-dir", "--work-tree", "--namespace", "--exec-path",
+  ])
+  const safeFlags = new Set([
+    "--no-pager", "--paginate", "-P", "-p", "--bare", "--no-optional-locks",
+    "--literal-pathspecs", "--glob-pathspecs", "--noglob-pathspecs",
+    "--icase-pathspecs", "--no-replace-objects",
   ])
   let index = 0
   while (index < args.length) {
@@ -566,17 +582,33 @@ function gitSubcommand(args) {
       index += 1
       break
     }
-    if (optionsWithValues.has(argument)) {
+    if (
+      argument === "-c" ||
+      argument.startsWith("-c") ||
+      argument === "--config-env" ||
+      argument.startsWith("--config-env=")
+    ) return { name: "", args: [], unsafe: true, ambiguous: false }
+    if (safeOptionsWithValues.has(argument)) {
+      if (!args[index + 1]) return { name: "", args: [], unsafe: false, ambiguous: true }
       index += 2
-    } else if ([...optionsWithValues].some((option) => argument.startsWith(option + "="))) {
+    } else if ([...safeOptionsWithValues].some((option) => argument.startsWith(option + "="))) {
       index += 1
-    } else if (["--no-pager", "--paginate", "-P", "-p", "--bare"].includes(argument)) {
+    } else if (argument.startsWith("-C") && argument !== "-C") {
       index += 1
+    } else if (safeFlags.has(argument)) {
+      index += 1
+    } else if (argument.startsWith("-")) {
+      return { name: "", args: [], unsafe: false, ambiguous: true }
     } else {
       break
     }
   }
-  return { name: args[index] || "", args: args.slice(index + 1) }
+  return {
+    name: args[index] || "",
+    args: args.slice(index + 1),
+    unsafe: false,
+    ambiguous: false,
+  }
 }
 
 function invocationText(invocation) {
@@ -1178,15 +1210,206 @@ function hasUnsafeInvocation(command) {
   })
 }
 
-function matchesDenyRule(agent, command) {
+function validBashPolicy(policy) {
+  return (
+    typeof policy === "object" &&
+    policy !== null &&
+    !Array.isArray(policy) &&
+    ["allow", "ask", "deny"].includes(policy.fallback) &&
+    ["allow", "ask", "deny"].every(
+      (action) =>
+        Array.isArray(policy[action]) &&
+        policy[action].every((pattern) => typeof pattern === "string"),
+    )
+  )
+}
+
+function denyPolicyCandidates(command) {
   const segments = shellSegments(command)
   const sequence = shellSequence(command)
   if (!segments || !sequence) return null
-  const candidates = [command.trim(), ...segments, ...canonicalDenyCandidates(command)]
-  const denyRules = BASH_DENY_RULES[agent] || []
-  return denyRules.some((pattern) =>
+  return [...new Set([command.trim(), ...segments, ...canonicalDenyCandidates(command)])]
+}
+
+function matchesPolicyRules(rules, candidates) {
+  return rules.some((pattern) =>
     candidates.some((candidate) => commandPatternRegex(pattern).test(candidate)),
   )
+}
+
+function matchesDenyRule(agent, command) {
+  const policy = BASH_POLICIES[agent]
+  if (!validBashPolicy(policy)) return true
+  const candidates = denyPolicyCandidates(command)
+  if (!candidates) return null
+  return matchesPolicyRules(policy.deny, candidates)
+}
+
+const FILE_READER_COMMANDS = new Set([
+  "cat", "head", "tail", "file", "stat", "tree", "wc",
+])
+const SEARCH_READER_COMMANDS = new Set(["grep", "rg"])
+const SEARCH_VALUE_SHORT_OPTIONS = new Set(["A", "B", "C", "m"])
+const SEARCH_VALUE_LONG_OPTIONS = new Set([
+  "--after-context", "--before-context", "--context", "--max-count",
+])
+const RG_VALUE_SHORT_OPTIONS = new Set(["g", "t", "T", "j"])
+const RG_VALUE_LONG_OPTIONS = new Set([
+  "--glob", "--iglob", "--type", "--type-not", "--threads", "--engine",
+])
+
+function positionalArguments(args) {
+  const positional = []
+  let optionsEnded = false
+  for (const argument of args) {
+    if (!optionsEnded && argument === "--") {
+      optionsEnded = true
+    } else if (optionsEnded || !argument.startsWith("-") || argument === "-") {
+      positional.push(argument)
+    }
+  }
+  return positional
+}
+
+function shortOptionWithValue(argument, options) {
+  const cluster = argument.slice(1)
+  for (let index = 0; index < cluster.length; index += 1) {
+    if (options.has(cluster[index])) {
+      return { attached: cluster.slice(index + 1) }
+    }
+  }
+  return null
+}
+
+function searchInvocationAnalysis(invocation) {
+  const pathOperands = []
+  const positional = []
+  let patternProvidedByOption = false
+  let optionsEnded = false
+  for (let index = 0; index < invocation.args.length; index += 1) {
+    const argument = invocation.args[index]
+    if (!optionsEnded && argument === "--") {
+      optionsEnded = true
+      continue
+    }
+    if (optionsEnded || !argument.startsWith("-") || argument === "-") {
+      positional.push(argument)
+      continue
+    }
+    if (
+      invocation.executable === "rg" &&
+      (argument === "--pre" ||
+        argument.startsWith("--pre=") ||
+        argument === "--pre-glob" ||
+        argument.startsWith("--pre-glob=") ||
+        argument === "--hostname-bin" ||
+        argument.startsWith("--hostname-bin=") ||
+        argument === "-z" ||
+        argument === "--search-zip" ||
+        (/^-[^-]+/.test(argument) && argument.slice(1).includes("z")))
+    ) return { pathOperands, unsafe: true }
+    const pathOption = ["--file", "--exclude-from", "--ignore-file"].find(
+      (option) => argument === option || argument.startsWith(option + "="),
+    )
+    if (pathOption) {
+      const attached = argument.slice(pathOption.length + 1)
+      const operand = argument === pathOption ? invocation.args[++index] : attached
+      if (!operand) return { pathOperands, unsafe: true }
+      pathOperands.push(operand)
+      if (pathOption === "--file") patternProvidedByOption = true
+      continue
+    }
+    const fileOption = /^-[^-]*f/.test(argument)
+      ? { attached: argument.slice(argument.indexOf("f", 1) + 1) }
+      : null
+    if (fileOption) {
+      const attached = fileOption.attached
+      const operand = attached || invocation.args[++index]
+      if (!operand) return { pathOperands, unsafe: true }
+      pathOperands.push(operand)
+      patternProvidedByOption = true
+      continue
+    }
+    const regexpOption = /^-[^-]*e/.test(argument)
+      ? { attached: argument.slice(argument.indexOf("e", 1) + 1) }
+      : null
+    if (argument === "--regexp" || (regexpOption && !regexpOption.attached)) {
+      if (!invocation.args[++index]) return { pathOperands, unsafe: true }
+      patternProvidedByOption = true
+      continue
+    }
+    if (argument.startsWith("--regexp=") || regexpOption) {
+      patternProvidedByOption = true
+      continue
+    }
+    const longValueOptions = invocation.executable === "rg"
+      ? new Set([...SEARCH_VALUE_LONG_OPTIONS, ...RG_VALUE_LONG_OPTIONS])
+      : SEARCH_VALUE_LONG_OPTIONS
+    const longValueOption = [...longValueOptions].find(
+      (option) => argument === option || argument.startsWith(option + "="),
+    )
+    if (longValueOption) {
+      if (argument === longValueOption && !invocation.args[++index]) {
+        return { pathOperands, unsafe: true }
+      }
+      continue
+    }
+    const shortValueOptions = invocation.executable === "rg"
+      ? new Set([...SEARCH_VALUE_SHORT_OPTIONS, ...RG_VALUE_SHORT_OPTIONS])
+      : SEARCH_VALUE_SHORT_OPTIONS
+    const valueOption = shortOptionWithValue(argument, shortValueOptions)
+    if (valueOption) {
+      if (!valueOption.attached && !invocation.args[++index]) {
+        return { pathOperands, unsafe: true }
+      }
+      continue
+    }
+  }
+  pathOperands.push(...(patternProvidedByOption ? positional : positional.slice(1)))
+  return { pathOperands, unsafe: false }
+}
+
+function invocationPathOperands(invocation) {
+  const positional = positionalArguments(invocation.args)
+  if (FILE_READER_COMMANDS.has(invocation.executable)) return positional
+  if (SEARCH_READER_COMMANDS.has(invocation.executable)) {
+    return searchInvocationAnalysis(invocation).pathOperands
+  }
+  return []
+}
+
+function hasProtectedBashAccess(command) {
+  const sequence = shellSequence(command)
+  if (!sequence) return true
+  for (const entry of sequence) {
+    const words = shellWords(entry.command)
+    if (!words) return true
+    const stages = invocationStages(words)
+    if (!stages) return true
+    for (const invocation of stages) {
+      if (invocation.executable === "git") {
+        const subcommand = gitSubcommand(invocation.args)
+        if (subcommand.unsafe || subcommand.ambiguous || subcommand.name === "config") return true
+        if (
+          subcommand.name === "diff" &&
+          subcommand.args.includes("--no-index") &&
+          positionalArguments(subcommand.args).some(
+            (operand) => operand !== "-" && protectedPath(operand),
+          )
+        ) return true
+      }
+      if (
+        SEARCH_READER_COMMANDS.has(invocation.executable) &&
+        searchInvocationAnalysis(invocation).unsafe
+      ) return true
+      if (
+        invocationPathOperands(invocation).some(
+          (operand) => operand !== "-" && protectedPath(operand),
+        )
+      ) return true
+    }
+  }
+  return false
 }
 
 function passesRecursiveDenyRules(agent, command, depth = 0) {
@@ -1204,6 +1427,7 @@ function passesRecursiveDenyRules(agent, command, depth = 0) {
   ) return false
   if (
     invokesEnvironmentDump(command) ||
+    hasProtectedBashAccess(command) ||
     hasUnsupportedShellControl(command) ||
     hasUnsafeInvocation(command)
   ) return false
@@ -1314,14 +1538,36 @@ function unsafeReadOnlyArguments(words) {
   return false
 }
 
-function allowedBashCommand(agent, command) {
-  if (!passesRecursiveDenyRules(agent, command)) return false
-  const rules = BASH_ALLOW_RULES[agent]
-  if (!rules) return true
-  if (unsafeShellSyntax(command)) return false
+function decideBashCommand(agent, command) {
+  if (!passesRecursiveDenyRules(agent, command)) return "deny"
+  const policy = BASH_POLICIES[agent]
+  if (!validBashPolicy(policy)) return "deny"
   const words = shellWords(command)
-  if (!words || words.length === 0 || unsafeReadOnlyArguments(words)) return false
-  return rules.some((pattern) => commandPatternRegex(pattern).test(command.trim()))
+  if (!words || words.length === 0) return "deny"
+  const denyCandidates = denyPolicyCandidates(command)
+  if (!denyCandidates) return "deny"
+  if (matchesPolicyRules(policy.deny, denyCandidates)) return "deny"
+  if (matchesPolicyRules(policy.ask, denyCandidates)) return "ask"
+  const unsafeAutomaticAllow =
+    unsafeShellSyntax(command) || unsafeReadOnlyArguments(words)
+  if (matchesPolicyRules(policy.allow, [command.trim()])) {
+    return unsafeAutomaticAllow ? "deny" : "allow"
+  }
+  if (policy.fallback === "allow" && unsafeAutomaticAllow) return "deny"
+  return policy.fallback
+}
+
+function emitBashDecision(agent, decision) {
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: decision,
+      permissionDecisionReason:
+        decision === "allow"
+          ? "Permitido por la política Bash del agente " + agent
+          : "Requiere aprobación según la política Bash del agente " + agent,
+    },
+  }))
 }
 
 function canonicalPath(value) {
@@ -1338,6 +1584,132 @@ function canonicalPath(value) {
       candidate = parent
     }
   }
+}
+
+function expandedPath(value) {
+  const input = String(value || "")
+  if (input === "~") return path.dirname(path.dirname(USER_CLAUDE_SETTINGS))
+  if (input.startsWith("~/")) {
+    return path.join(path.dirname(path.dirname(USER_CLAUDE_SETTINGS)), input.slice(2))
+  }
+  if (input.startsWith("~")) {
+    throw new Error("Bloqueado por la política ms-*: expansión de ruta ambigua")
+  }
+  return input
+}
+
+function normalizedPathSegments(value) {
+  const root = path.parse(value).root
+  return value
+    .slice(root.length)
+    .replaceAll("\\", "/")
+    .split("/")
+    .filter(Boolean)
+}
+
+function containsSensitivePathSegments(segments) {
+  return SENSITIVE_PATH_SEGMENTS.some((candidate) =>
+    segments.some(
+      (segment, index) =>
+        segment === candidate[0] && segments[index + 1] === candidate[1],
+    ),
+  )
+}
+
+function protectedConcretePath(value, basePath = process.cwd()) {
+  const expanded = expandedPath(value)
+  const absolute = canonicalPath(
+    path.isAbsolute(expanded) ? expanded : path.resolve(basePath, expanded),
+  )
+  const userSettings = canonicalPath(USER_CLAUDE_SETTINGS)
+  const projectSettings = canonicalPath(path.resolve(process.cwd(), ".claude/settings.json"))
+  if (absolute === userSettings) return true
+  if (absolute === projectSettings) return false
+  return containsSensitivePathSegments(normalizedPathSegments(absolute))
+}
+
+function globCanContainPair(patterns, pair) {
+  const visit = (patternIndex, pairIndex, seen) => {
+    if (pairIndex === pair.length) return true
+    if (patternIndex >= patterns.length) return false
+    const key = patternIndex + ":" + pairIndex
+    if (seen.has(key)) return false
+    seen.add(key)
+    const pattern = patterns[patternIndex]
+    if (pattern === "**") {
+      return (
+        visit(patternIndex + 1, pairIndex, new Set(seen)) ||
+        visit(patternIndex, pairIndex + 1, new Set(seen))
+      )
+    }
+    return (
+      globRegex(pattern).test(pair[pairIndex]) &&
+      visit(patternIndex + 1, pairIndex + 1, seen)
+    )
+  }
+  return patterns.some((_, index) => visit(index, 0, new Set()))
+}
+
+function globMatchesSegments(patterns, values, patternIndex = 0, valueIndex = 0) {
+  if (patternIndex === patterns.length) return valueIndex === values.length
+  const pattern = patterns[patternIndex]
+  if (pattern === "**") {
+    return (
+      globMatchesSegments(patterns, values, patternIndex + 1, valueIndex) ||
+      (valueIndex < values.length &&
+        globMatchesSegments(patterns, values, patternIndex, valueIndex + 1))
+    )
+  }
+  return (
+    valueIndex < values.length &&
+    globRegex(pattern).test(values[valueIndex]) &&
+    globMatchesSegments(patterns, values, patternIndex + 1, valueIndex + 1)
+  )
+}
+
+function canonicalGlobSegments(value, basePath) {
+  const expanded = expandedPath(value)
+  if (/[\[\]{}]/.test(expanded)) {
+    throw new Error("Bloqueado por la política ms-*: patrón de ruta ambiguo")
+  }
+  const absolute = path.isAbsolute(expanded)
+    ? path.normalize(expanded)
+    : path.resolve(basePath, expanded)
+  const segments = normalizedPathSegments(absolute)
+  const firstGlob = segments.findIndex((segment) => /[*?[]/.test(segment))
+  if (firstGlob < 0) return normalizedPathSegments(canonicalPath(absolute))
+  const root = path.parse(absolute).root
+  const concretePrefix = path.join(root, ...segments.slice(0, firstGlob))
+  return [
+    ...normalizedPathSegments(canonicalPath(concretePrefix)),
+    ...segments.slice(firstGlob),
+  ]
+}
+
+function protectedGlobPath(value, basePath = process.cwd()) {
+  const patterns = canonicalGlobSegments(value, basePath)
+  if (
+    SENSITIVE_PATH_SEGMENTS.some((pair) => globCanContainPair(patterns, pair))
+  ) return true
+  return globMatchesSegments(
+    patterns,
+    normalizedPathSegments(canonicalPath(USER_CLAUDE_SETTINGS)),
+  )
+}
+
+function protectedPath(value, basePath = process.cwd(), glob = false) {
+  return glob
+    ? protectedGlobPath(value, basePath)
+    : protectedConcretePath(value, basePath)
+}
+
+function protectedSearchRoot(value) {
+  const expanded = expandedPath(value)
+  const absolute = canonicalPath(
+    path.isAbsolute(expanded) ? expanded : path.resolve(process.cwd(), expanded),
+  )
+  const segments = normalizedPathSegments(absolute)
+  return [".git", ".claude"].includes(segments.at(-1) || "")
 }
 
 function allowedWrite(agent, value) {
@@ -1372,9 +1744,22 @@ try {
   const toolInput = payload.tool_input || {}
   const pathValues = [toolInput.file_path, toolInput.path, toolInput.notebook_path].filter(Boolean)
 
-  if (tool === "Glob" && toolInput.pattern) pathValues.push(toolInput.pattern)
-  if (tool === "Grep" && toolInput.glob) pathValues.push(toolInput.glob)
-  if (pathValues.some(secretPath)) {
+  const protectedDirectPath = (value) =>
+    protectedPath(value, process.cwd(), /[*?[]/.test(String(value)))
+  const globPattern = tool === "Glob"
+    ? toolInput.pattern
+    : tool === "Grep"
+      ? toolInput.glob
+      : undefined
+  const globBase = toolInput.path
+    ? path.resolve(process.cwd(), expandedPath(toolInput.path))
+    : process.cwd()
+  if (
+    pathValues.some((value) => secretPath(value) || protectedDirectPath(value)) ||
+    (tool === "Grep" && toolInput.path && protectedSearchRoot(toolInput.path)) ||
+    (globPattern &&
+      (secretPath(globPattern) || protectedPath(globPattern, globBase, true)))
+  ) {
     console.error("Bloqueado por la política ms-*: acceso a una ruta sensible")
     process.exit(2)
   }
@@ -1385,9 +1770,13 @@ try {
       console.error("Bloqueado por la política ms-*: comando con secretos o variables de entorno")
       process.exit(2)
     }
-    if (!allowedBashCommand(expectedAgent, command)) {
+    const decision = decideBashCommand(expectedAgent, command)
+    if (decision === "deny") {
       console.error("Bloqueado por la política ms-*: comando denegado para este agente")
       process.exit(2)
+    }
+    if (payload.hook_event_name === "PreToolUse") {
+      emitBashDecision(expectedAgent, decision)
     }
   }
 
@@ -1467,7 +1856,7 @@ export function buildClaudeArtifacts(catalog: Catalog, context: BuildContext): A
       name: "ms-agent-guard",
       root,
       destination: guardPath,
-      content: claudeGuardSource(catalog),
+      content: claudeGuardSource(catalog, context),
     }),
   )
 

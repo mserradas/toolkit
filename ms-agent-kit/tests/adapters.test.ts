@@ -710,6 +710,44 @@ describe("platform adapters", () => {
 
   })
 
+  it("materializes a validated ternary Bash policy for every Claude agent", async () => {
+    const artifacts = await buildArtifacts(["claude"], await context())
+    const guard = artifacts.find(
+      (artifact) => artifact.kind === "policy" && artifact.name === "ms-agent-guard",
+    )
+    const source = guard?.content.toString("utf8") ?? ""
+    const match = /const BASH_POLICIES = (\{[\s\S]*?\})\nconst MATERIALIZED_AGENTS/.exec(source)
+    expect(match).not.toBeNull()
+    const policies = JSON.parse(match![1]) as Record<
+      string,
+      { fallback: string; allow: string[]; ask: string[]; deny: string[] }
+    >
+    const catalog = await loadCatalog(DEFAULT_ASSETS_ROOT)
+
+    expect(Object.keys(policies).sort()).toEqual(catalog.agents.map((agent) => agent.name).sort())
+    expect(policies["ms-codex"].fallback).toBe("ask")
+    for (const agent of catalog.agents) {
+      const policy = policies[agent.name]
+      expect(["allow", "ask", "deny"]).toContain(policy.fallback)
+      expect(policy).toEqual(expect.objectContaining({
+        allow: expect.any(Array),
+        ask: expect.any(Array),
+        deny: expect.any(Array),
+      }))
+      if (openCodeRolePermission(agent.name).bash === "deny") {
+        expect(policy).toEqual({ fallback: "deny", allow: [], ask: [], deny: [] })
+      }
+    }
+    expect(
+      Object.values(policies).flatMap((policy) => policy.allow),
+    ).not.toEqual(expect.arrayContaining([expect.stringMatching(/^opencode\s/)]))
+    expect(
+      Object.values(policies).flatMap((policy) => policy.allow),
+    ).not.toEqual(expect.arrayContaining([expect.stringMatching(/^git\s+config(?:\s|$)/)]))
+    expect(source).not.toContain("BASH_ALLOW_RULES")
+    expect(source).not.toContain("if (!rules) return true")
+  })
+
   it("renders Codex TOML agents and parent orchestration skills", async () => {
     const buildContext = await context()
     const artifacts = await buildArtifacts(["codex"], buildContext)

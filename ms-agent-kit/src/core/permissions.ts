@@ -20,6 +20,11 @@ export const SAFE_ENVIRONMENT_TEMPLATES = [
   ".env.template",
 ] as const
 
+export const SENSITIVE_PATH_SEGMENTS = [
+  [".git", "config"],
+  [".claude", "settings.local.json"],
+] as const
+
 export const SECRET_DIRECT_PATHS = [
   ".env",
   ".env.local",
@@ -55,6 +60,7 @@ export const SECRET_DIRECT_PATHS = [
   "app.jks",
   "app.keystore",
   "local.settings.json",
+  ...SENSITIVE_PATH_SEGMENTS.map((segments) => segments.join("/")),
 ] as const
 
 const BASE_SECRET_PATH_PATTERNS = [
@@ -94,6 +100,10 @@ const BASE_SECRET_PATH_PATTERNS = [
   "**/Library/Keychains/**",
   "credentials.json",
   "**/credentials.json",
+  ".git/config",
+  "**/.git/config",
+  ".claude/settings.local.json",
+  "**/.claude/settings.local.json",
   "secrets/**",
   "**/secrets/**",
   "*.key",
@@ -158,6 +168,14 @@ export function isSensitivePath(input: string): boolean {
   if (segments.some((segment) => ["secrets", ".ssh", ".credentials"].includes(segment))) {
     return true
   }
+  if (
+    SENSITIVE_PATH_SEGMENTS.some((candidate) =>
+      segments.some(
+        (segment, index) =>
+          segment === candidate[0] && segments[index + 1] === candidate[1],
+      ),
+    )
+  ) return true
   if (/\.(?:key|pem|p12|pfx)$/.test(basename)) return true
   if (matchesSecretBasename(basename)) return true
 

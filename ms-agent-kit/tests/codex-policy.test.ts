@@ -96,7 +96,8 @@ describe("Codex hardening", () => {
       expect(policy, `./${directPath}`).toContain(JSON.stringify(`./${directPath}`))
     }
     expect(agentContent).not.toContain('".claude/settings.json" = "deny"')
-    expect(agentContent).not.toContain('".git/config" = "deny"')
+    expect(agentContent).toContain('".git/config" = "deny"')
+    expect(agentContent).toContain('".claude/settings.local.json" = "deny"')
   })
 
   it.skipIf(!codexAvailable)("blocks the practical secret matrix without blocking safe files", async () => {

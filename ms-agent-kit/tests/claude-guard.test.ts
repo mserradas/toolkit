@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
@@ -31,13 +31,28 @@ async function setupClaude(): Promise<{ artifacts: Artifact[]; projectRoot: stri
   return { artifacts, projectRoot }
 }
 
-async function setupGuard(): Promise<{ guardPath: string; projectRoot: string }> {
+async function setupGuard(
+  transformGuard: (content: string) => string = (content) => content,
+): Promise<{ guardPath: string; projectRoot: string }> {
   const { artifacts, projectRoot } = await setupClaude()
   const guard = artifacts.find((artifact) => artifact.kind === "policy" && artifact.name === "ms-agent-guard")
   if (!guard) throw new Error("No se genero el guard de Claude")
   await mkdir(path.dirname(guard.destination), { recursive: true })
-  await writeFile(guard.destination, guard.content)
+  await writeFile(guard.destination, transformGuard(guard.content.toString("utf8")))
   return { guardPath: guard.destination, projectRoot }
+}
+
+function transformBashPolicies(
+  content: string,
+  transform: (policies: Record<string, unknown>) => Record<string, unknown>,
+): string {
+  const match = /const BASH_POLICIES = (\{[\s\S]*?\})\nconst MATERIALIZED_AGENTS/.exec(content)
+  if (!match) throw new Error("No se encontraron las políticas Bash materializadas")
+  const policies = JSON.parse(match[1]) as Record<string, unknown>
+  return content.replace(
+    match[0],
+    `const BASH_POLICIES = ${JSON.stringify(transform(policies), null, 2)}\nconst MATERIALIZED_AGENTS`,
+  )
 }
 
 function runGuard(
@@ -45,15 +60,19 @@ function runGuard(
   projectRoot: string,
   agent: string,
   payload: Record<string, unknown>,
-): Promise<{ code: number | null; stderr: string }> {
+): Promise<{ code: number | null; stderr: string; stdout: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [guardPath, agent], { cwd: projectRoot })
     let stderr = ""
+    let stdout = ""
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString()
     })
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString()
+    })
     child.on("error", reject)
-    child.on("close", (code) => resolve({ code, stderr }))
+    child.on("close", (code) => resolve({ code, stderr, stdout }))
     child.stdin.end(JSON.stringify(payload))
   })
 }
@@ -174,7 +193,7 @@ describe("Claude permission guard", () => {
       ),
     )
     const exclusions = await Promise.all(
-      [".claude/settings.json", ".git/config"].map((relativePath) =>
+      [".claude/settings.json", ".git/configuration"].map((relativePath) =>
         runGuard(guardPath, projectRoot, "ms-scout", {
           tool_name: "Read",
           tool_input: { file_path: path.join(projectRoot, relativePath) },
@@ -185,6 +204,270 @@ describe("Claude permission guard", () => {
     expect(reads.every((result) => result.code === 2)).toBe(true)
     expect(shellArguments.every((result) => result.code === 2)).toBe(true)
     expect(exclusions.every((result) => result.code === 0)).toBe(true)
+  })
+
+  it("protects contextual configuration paths without blocking similar names", async () => {
+    const { guardPath, projectRoot } = await setupGuard()
+    const homeDir = path.join(projectRoot, "home")
+    const gitDir = path.join(projectRoot, ".git")
+    const projectClaudeDir = path.join(projectRoot, ".claude")
+    const userClaudeDir = path.join(homeDir, ".claude")
+    await Promise.all([
+      mkdir(gitDir, { recursive: true }),
+      mkdir(projectClaudeDir, { recursive: true }),
+      mkdir(userClaudeDir, { recursive: true }),
+    ])
+    await Promise.all([
+      writeFile(path.join(gitDir, "config"), "[core]\n"),
+      writeFile(path.join(gitDir, "configuration"), "ordinary\n"),
+      writeFile(path.join(projectClaudeDir, "settings.local.json"), "{}\n"),
+      writeFile(path.join(projectClaudeDir, "settings.json"), "{}\n"),
+      writeFile(path.join(projectClaudeDir, "settings.json.example"), "{}\n"),
+      writeFile(path.join(userClaudeDir, "settings.json"), "{}\n"),
+    ])
+    await symlink(path.join(gitDir, "config"), path.join(projectRoot, "config-link"))
+    await symlink(
+      path.join(userClaudeDir, "settings.json"),
+      path.join(projectRoot, "user-settings-link"),
+    )
+
+    const denied = await Promise.all([
+      runGuard(guardPath, projectRoot, "ms-scout", {
+        tool_name: "Read",
+        tool_input: { file_path: ".git/config" },
+      }),
+      runGuard(guardPath, projectRoot, "ms-scout", {
+        tool_name: "Read",
+        tool_input: { file_path: path.join(projectClaudeDir, "settings.local.json") },
+      }),
+      runGuard(guardPath, projectRoot, "ms-scout", {
+        tool_name: "Read",
+        tool_input: { file_path: "~/.claude/settings.json" },
+      }),
+      runGuard(guardPath, projectRoot, "ms-scout", {
+        tool_name: "Read",
+        tool_input: { file_path: path.join(projectRoot, "config-link") },
+      }),
+      runGuard(guardPath, projectRoot, "ms-scout", {
+        tool_name: "Read",
+        tool_input: { file_path: path.join(projectRoot, "user-settings-link") },
+      }),
+      runGuard(guardPath, projectRoot, "ms-scout", {
+        tool_name: "Glob",
+        tool_input: { pattern: "**/.git/config" },
+      }),
+      runGuard(guardPath, projectRoot, "ms-scout", {
+        tool_name: "Glob",
+        tool_input: { path: homeDir, pattern: ".claude/settings.json" },
+      }),
+      runGuard(guardPath, projectRoot, "ms-scout", {
+        tool_name: "Grep",
+        tool_input: { pattern: "token", glob: "**/.claude/settings.local.json" },
+      }),
+      runGuard(guardPath, projectRoot, "ms-scout", {
+        tool_name: "Grep",
+        tool_input: { pattern: "core", path: gitDir },
+      }),
+    ])
+    const allowed = await Promise.all([
+      runGuard(guardPath, projectRoot, "ms-scout", {
+        tool_name: "Read",
+        tool_input: { file_path: path.join(projectClaudeDir, "settings.json") },
+      }),
+      runGuard(guardPath, projectRoot, "ms-scout", {
+        tool_name: "Read",
+        tool_input: { file_path: path.join(gitDir, "configuration") },
+      }),
+      runGuard(guardPath, projectRoot, "ms-scout", {
+        tool_name: "Read",
+        tool_input: { file_path: path.join(projectClaudeDir, "settings.json.example") },
+      }),
+      runGuard(guardPath, projectRoot, "ms-scout", {
+        tool_name: "Grep",
+        tool_input: { pattern: ".git/config", glob: "*.md" },
+      }),
+    ])
+
+    expect(denied.every((result) => result.code === 2)).toBe(true)
+    expect(allowed.every((result) => result.code === 0)).toBe(true)
+  })
+
+  it("blocks protected Bash operands and semantic git config invocations", async () => {
+    const { guardPath, projectRoot } = await setupGuard()
+    const gitDir = path.join(projectRoot, ".git")
+    await mkdir(gitDir, { recursive: true })
+    await mkdir(path.join(projectRoot, ".claude"), { recursive: true })
+    await writeFile(path.join(gitDir, "config"), "[core]\n")
+    await writeFile(path.join(projectRoot, ".claude/settings.json"), "{}\n")
+    await symlink(path.join(gitDir, "config"), path.join(projectRoot, "config-link"))
+    const deniedCommands = [
+      "cat .git/config",
+      "cat config-link",
+      "grep core .git/config",
+      "git config --get core.editor",
+      "git -C repo config --get core.editor",
+      "git --git-dir=.git config --get core.editor",
+      "command git config --get core.editor",
+      "env X=1 git config --get core.editor",
+      "sh -c 'git config --get core.editor'",
+    ]
+    const allowedCommands = [
+      "cat .claude/settings.json",
+      "printf '.git/config'",
+      "grep '.git/config' README.md",
+      "git configuration",
+      "printf 'git config --get core.editor'",
+      "cat .git/configuration",
+      "cat .claude/settings.json.example",
+    ]
+    const denied = await Promise.all(
+      deniedCommands.map((command) =>
+        runGuard(guardPath, projectRoot, "ms-codex", {
+          tool_name: "Bash",
+          tool_input: { command },
+        }),
+      ),
+    )
+    const allowed = await Promise.all(
+      allowedCommands.map((command) =>
+        runGuard(guardPath, projectRoot, "ms-codex", {
+          tool_name: "Bash",
+          tool_input: { command },
+        }),
+      ),
+    )
+
+    expect(
+      denied.map((result, index) => ({ command: deniedCommands[index], code: result.code })),
+    ).toEqual(deniedCommands.map((command) => ({ command, code: 2 })))
+    expect(
+      allowed.map((result, index) => ({ command: allowedCommands[index], code: result.code })),
+    ).toEqual(allowedCommands.map((command) => ({ command, code: 0 })))
+  })
+
+  it("closes option and canonicalization bypasses without widening automatic allows", async () => {
+    const { guardPath, projectRoot } = await setupGuard()
+    const preToolPayload = (command: string) => ({
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command },
+    })
+    const deniedCommands = [
+      "git -c diff.external='printf EXTERNAL\\n' diff README.md",
+      "git --config-env=diff.external=EXTERNAL_DIFF diff README.md",
+      "grep -Ff .git/config README.md",
+      "grep --file=.git/config README.md",
+      "grep --exclude-from .git/config TODO README.md",
+      "rg -Ff .git/config README.md",
+      "rg --ignore-file=.git/config TODO README.md",
+      "git --no-optional-locks config --list --show-origin",
+      "git --unknown-global-option config --list",
+      "git diff --no-index .git/config /dev/null",
+      "rg --pre 'cat' TODO README.md",
+      "rg --pre=cat TODO README.md",
+      "rg --pre-glob '*.md' TODO README.md",
+    ]
+    const askCommands = [
+      "command git diff README.md",
+      "git --no-pager diff README.md",
+      "printf '.git/config'",
+    ]
+    const allowCommands = [
+      "git diff README.md",
+      "rg TODO README.md",
+      "pnpm test",
+      "grep '.git/config' README.md",
+    ]
+    const denied = await Promise.all(
+      deniedCommands.map((command) =>
+        runGuard(guardPath, projectRoot, "ms-codex", preToolPayload(command)),
+      ),
+    )
+    const asked = await Promise.all(
+      askCommands.map((command) =>
+        runGuard(guardPath, projectRoot, "ms-codex", preToolPayload(command)),
+      ),
+    )
+    const allowed = await Promise.all(
+      allowCommands.map((command) =>
+        runGuard(guardPath, projectRoot, "ms-codex", preToolPayload(command)),
+      ),
+    )
+
+    expect(denied.every((result) => result.code === 2 && result.stdout === "")).toBe(true)
+    expect(
+      asked.map((result) => JSON.parse(result.stdout).hookSpecificOutput.permissionDecision),
+    ).toEqual(askCommands.map(() => "ask"))
+    expect(asked.every((result) => result.code === 0 && result.stderr === "")).toBe(true)
+    expect(
+      allowed.map((result) => JSON.parse(result.stdout).hookSpecificOutput.permissionDecision),
+    ).toEqual(allowCommands.map(() => "allow"))
+    expect(allowed.every((result) => result.code === 0 && result.stderr === "")).toBe(true)
+  })
+
+  it("parses search option values while denying rg external execution options", async () => {
+    const { guardPath, projectRoot } = await setupGuard()
+    const preToolPayload = (command: string) => ({
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command },
+    })
+    const unsafeCommands = [
+      "rg --hostname-bin hostname TODO README.md",
+      "rg --hostname-bin=hostname TODO README.md",
+      "rg -z TODO archive.zip",
+      "rg --search-zip TODO archive.zip",
+    ]
+    const textualMentions = [
+      "grep -m 1 '.git/config' README.md",
+      "grep --max-count=1 '.git/config' README.md",
+      "grep -A 2 '.git/config' README.md",
+      "grep --before-context 2 '.git/config' README.md",
+      "grep -C2 '.git/config' README.md",
+      "grep -nC2 '.git/config' README.md",
+      "grep --context=2 '.git/config' README.md",
+      "rg -C 2 '.git/config' README.md",
+      "rg --after-context=2 '.git/config' README.md",
+      "rg -g '*.md' '.git/config' README.md",
+      "rg --iglob '*.md' '.git/config' README.md",
+      "rg -t rust '.git/config' README.md",
+      "rg -T javascript '.git/config' README.md",
+      "rg -j 2 '.git/config' README.md",
+      "rg --engine auto '.git/config' README.md",
+    ]
+    const protectedFiles = [
+      "grep -m 1 TODO .git/config",
+      "grep --after-context=2 TODO .git/config",
+      "grep -nC2 TODO .git/config",
+      "rg -C 2 TODO .git/config",
+      "rg --context=2 TODO .git/config",
+      "rg -g '*.md' TODO .git/config",
+      "rg --type rust TODO .git/config",
+      "rg --threads=2 TODO .git/config",
+      "rg --engine auto TODO .git/config",
+    ]
+    const unsafe = await Promise.all(
+      unsafeCommands.map((command) =>
+        runGuard(guardPath, projectRoot, "ms-codex", preToolPayload(command)),
+      ),
+    )
+    const allowed = await Promise.all(
+      textualMentions.map((command) =>
+        runGuard(guardPath, projectRoot, "ms-codex", preToolPayload(command)),
+      ),
+    )
+    const deniedPaths = await Promise.all(
+      protectedFiles.map((command) =>
+        runGuard(guardPath, projectRoot, "ms-codex", preToolPayload(command)),
+      ),
+    )
+
+    expect(unsafe.every((result) => result.code === 2 && result.stdout === "")).toBe(true)
+    expect(deniedPaths.every((result) => result.code === 2 && result.stdout === "")).toBe(true)
+    expect(allowed.every((result) => result.code === 0 && result.stderr === "")).toBe(true)
+    expect(
+      allowed.map((result) => JSON.parse(result.stdout).hookSpecificOutput.permissionDecision),
+    ).toEqual(textualMentions.map(() => "allow"))
   })
 
   it("blocks quoted secret fragments and active path expansions recursively", async () => {
@@ -698,6 +981,134 @@ describe("Claude permission guard", () => {
     expect(allowedVerification.code).toBe(0)
   })
 
+  it("emits deterministic PreToolUse decisions for allow, explicit ask, and fallback ask", async () => {
+    const { guardPath, projectRoot } = await setupGuard()
+    const payload = (command: string) => ({
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command },
+    })
+    const allowed = await runGuard(
+      guardPath,
+      projectRoot,
+      "ms-codex",
+      payload("pnpm test"),
+    )
+    const explicitAsk = await runGuard(
+      guardPath,
+      projectRoot,
+      "ms-codex",
+      payload("npm install package"),
+    )
+    const fallbackAsk = await runGuard(
+      guardPath,
+      projectRoot,
+      "ms-codex",
+      payload("touch proof.txt"),
+    )
+
+    const expected = (decision: "allow" | "ask") => JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: decision,
+        permissionDecisionReason:
+          decision === "allow"
+            ? "Permitido por la política Bash del agente ms-codex"
+            : "Requiere aprobación según la política Bash del agente ms-codex",
+      },
+    })
+    expect(allowed).toEqual({ code: 0, stderr: "", stdout: expected("allow") })
+    expect(explicitAsk).toEqual({ code: 0, stderr: "", stdout: expected("ask") })
+    expect(fallbackAsk).toEqual({ code: 0, stderr: "", stdout: expected("ask") })
+    expect(JSON.parse(allowed.stdout)).toMatchObject({
+      hookSpecificOutput: { permissionDecision: "allow" },
+    })
+  })
+
+  it("gives structural and explicit denies precedence without contaminating stdout", async () => {
+    const { guardPath, projectRoot } = await setupGuard()
+    const denied = await Promise.all(
+      ["git push origin main", "pnpm test && pwd"].map((command) =>
+        runGuard(guardPath, projectRoot, "ms-codex", {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command },
+        }),
+      ),
+    )
+    const closedRole = await runGuard(guardPath, projectRoot, "ms-designer", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "pnpm test" },
+    })
+
+    expect(denied.every((result) => result.code === 2 && result.stdout === "")).toBe(true)
+    expect(closedRole.code).toBe(2)
+    expect(closedRole.stdout).toBe("")
+  })
+
+  it("resolves overlapping ask and allow rules to ask", async () => {
+    const { guardPath, projectRoot } = await setupGuard((content) =>
+      transformBashPolicies(content, (policies) => {
+        const codex = policies["ms-codex"] as {
+          ask: string[]
+        }
+        codex.ask.push("pnpm test*")
+        return policies
+      }),
+    )
+    const result = await runGuard(guardPath, projectRoot, "ms-codex", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "pnpm test" },
+    })
+
+    expect(result.code).toBe(0)
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      hookSpecificOutput: { permissionDecision: "ask" },
+    })
+  })
+
+  it("fails closed when a materialized Bash policy is absent or malformed", async () => {
+    const transformations = [
+      (policies: Record<string, unknown>) => {
+        delete policies["ms-codex"]
+        return policies
+      },
+      (policies: Record<string, unknown>) => {
+        const codex = policies["ms-codex"] as Record<string, unknown>
+        delete codex.fallback
+        return policies
+      },
+      (policies: Record<string, unknown>) => {
+        const codex = policies["ms-codex"] as Record<string, unknown>
+        codex.fallback = "defer"
+        return policies
+      },
+      (policies: Record<string, unknown>) => {
+        const codex = policies["ms-codex"] as Record<string, unknown>
+        codex.allow = ["pnpm test*", 42]
+        return policies
+      },
+    ]
+    const guards = await Promise.all(
+      transformations.map((transform) =>
+        setupGuard((content) => transformBashPolicies(content, transform)),
+      ),
+    )
+    const results = await Promise.all(
+      guards.map(({ guardPath, projectRoot }) =>
+        runGuard(guardPath, projectRoot, "ms-codex", {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "pnpm test" },
+        }),
+      ),
+    )
+
+    expect(results.every((result) => result.code === 2 && result.stdout === "")).toBe(true)
+  })
+
   it("fails closed for unknown or inconsistent agent identities", async () => {
     const { guardPath, projectRoot } = await setupGuard()
     const unknown = await runGuard(guardPath, projectRoot, "ms-unknown", {
@@ -1048,7 +1459,9 @@ describe("Claude permission guard", () => {
 
     expect(missing.code).toBe(2)
     expect(missing.stderr).toContain("falta Contrato para ms-architect")
+    expect(missing.stdout).toBe("")
     expect(partial.code).toBe(0)
+    expect(partial.stdout).toBe("")
   })
 
   it("materializes the Claude web and question capability matrix", async () => {
