@@ -19,15 +19,38 @@ error()   { echo -e "  ${RED}✗${NC} $1"; exit 1; }
 
 installed() { command -v "$1" &>/dev/null; }
 
-jetbrains_mono_nerd_font_installed() {
+registered_user_shell() {
+    local current_user shell_record registered_shell
+
+    current_user="$(id -un)" || return 1
+    shell_record="$(dscl . -read "/Users/$current_user" UserShell 2>/dev/null)" || return 1
+    registered_shell="${shell_record#UserShell: }"
+
+    [[ "$registered_shell" != "$shell_record" && -n "$registered_shell" ]] || return 1
+    printf '%s\n' "$registered_shell"
+}
+
+geist_mono_font_installed() {
     local font_dir font_file
     for font_dir in "$HOME/Library/Fonts" "/Library/Fonts"; do
         [[ -d "$font_dir" ]] || continue
-        for font_file in "$font_dir"/JetBrainsMono*NerdFont*.{ttf,otf}; do
+        for font_file in "$font_dir"/GeistMono*.{ttf,otf}; do
             [[ -e "$font_file" ]] && return 0
         done
     done
     return 1
+}
+
+tmux_version_supported() {
+    local version major remainder minor
+    version="$(tmux -V 2>/dev/null)" || return 1
+    version="${version#tmux }"
+    major="${version%%.*}"
+    remainder="${version#*.}"
+    minor="${remainder%%[^0-9]*}"
+
+    [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
+    (( major > 3 || (major == 3 && minor >= 5) ))
 }
 
 # --- HOMEBREW ---
@@ -36,7 +59,9 @@ install_homebrew() {
     if installed brew; then
         success "Homebrew ya instalado"
     else
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        local installer
+        installer="$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        /bin/bash -c "$installer"
         # Añadir al PATH según arquitectura
         if [[ -f /opt/homebrew/bin/brew ]]; then
             eval "$(/opt/homebrew/bin/brew shellenv)"
@@ -53,7 +78,7 @@ install_packages() {
 
     local casks=(
         ghostty
-        font-jetbrains-mono-nerd-font
+        font-geist-mono
     )
 
     local formulae=(
@@ -73,18 +98,25 @@ install_packages() {
     for cask in "${casks[@]}"; do
         if brew list --cask "$cask" &>/dev/null; then
             success "$cask ya instalado"
-        elif [[ "$cask" == "font-jetbrains-mono-nerd-font" ]] && jetbrains_mono_nerd_font_installed; then
+        elif [[ "$cask" == "font-geist-mono" ]] && geist_mono_font_installed; then
             success "$cask ya instalado (fuente detectada)"
         else
-            brew install --cask "$cask" && success "$cask instalado"
+            brew install --cask "$cask"
+            success "$cask instalado"
         fi
     done
 
     for formula in "${formulae[@]}"; do
         if brew list "$formula" &>/dev/null; then
-            success "$formula ya instalado"
+            if [[ "$formula" == "tmux" ]] && ! tmux_version_supported; then
+                brew upgrade tmux
+                success "tmux actualizado a una versión compatible"
+            else
+                success "$formula ya instalado"
+            fi
         else
-            brew install "$formula" && success "$formula instalado"
+            brew install "$formula"
+            success "$formula instalado"
         fi
     done
 }
@@ -93,21 +125,25 @@ install_packages() {
 set_fish_shell() {
     log "Fish como shell por defecto"
 
-    local fish_path
+    local fish_path registered_shell
     if [[ -f /opt/homebrew/bin/fish ]]; then
         fish_path="/opt/homebrew/bin/fish"
     else
         fish_path="/usr/local/bin/fish"
     fi
 
-    if ! grep -q "$fish_path" /etc/shells; then
+    if ! grep -Fqx "$fish_path" /etc/shells; then
         echo "$fish_path" | sudo tee -a /etc/shells
         success "Fish añadido a /etc/shells"
     else
         success "Fish ya estaba en /etc/shells"
     fi
 
-    if [[ "$SHELL" == "$fish_path" ]]; then
+    if ! registered_shell="$(registered_user_shell)"; then
+        error "No se pudo consultar el shell registrado del usuario con dscl"
+    fi
+
+    if [[ "$registered_shell" == "$fish_path" ]]; then
         success "Fish ya es el shell por defecto"
     else
         chsh -s "$fish_path"
@@ -119,10 +155,14 @@ set_fish_shell() {
 setup_tpm() {
     log "TPM (gestor de plugins tmux)"
 
-    if [[ -d "$HOME/.tmux/plugins/tpm" ]]; then
+    local tpm_dir="$HOME/.tmux/plugins/tpm"
+
+    if [[ -x "$tpm_dir/bin/install_plugins" ]]; then
         success "TPM ya instalado"
+    elif [[ -e "$tpm_dir" ]]; then
+        error "TPM está incompleto: falta un instalador ejecutable en $tpm_dir/bin/install_plugins"
     else
-        git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+        git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
         success "TPM instalado"
     fi
 }
@@ -140,9 +180,17 @@ copy_configs() {
     copy_with_backup() {
         local src="$1"
         local dst="$2"
+        local backup timestamp counter
         if [[ -f "$dst" ]]; then
-            cp "$dst" "${dst}.backup"
-            warn "Backup creado: ${dst}.backup"
+            timestamp="$(date +%Y%m%d-%H%M%S)"
+            backup="${dst}.backup.${timestamp}"
+            counter=1
+            while [[ -e "$backup" ]]; do
+                backup="${dst}.backup.${timestamp}.${counter}"
+                counter=$((counter + 1))
+            done
+            cp -p "$dst" "$backup"
+            warn "Backup creado: $backup"
         fi
         cp "$src" "$dst"
         success "$(basename "$dst") copiado"
@@ -171,7 +219,7 @@ install_tmux_plugins() {
         trap - RETURN
     }
 
-    if [[ -f "$tpm_installer" ]]; then
+    if [[ -x "$tpm_installer" ]]; then
         if ! tmux has-session &>/dev/null; then
             tmux new-session -d -s "$bootstrap_session"
             started_bootstrap=true
@@ -216,10 +264,30 @@ healthcheck() {
         fi
     }
 
+    check_config() {
+        local label="$1"
+        local source="$2"
+        local destination="$3"
+
+        if [[ ! -f "$destination" ]]; then
+            check "$label" "no encontrado en $destination"
+        elif cmp -s "$source" "$destination"; then
+            check "$label" "ok"
+        else
+            check "$label" "diferente de la versión del repositorio"
+        fi
+    }
+
     # Binarios
     installed brew      && check "Homebrew"           "ok" || check "Homebrew"           "no encontrado"
     installed fish      && check "Fish"               "ok" || check "Fish"               "no encontrado"
-    installed tmux      && check "Tmux"               "ok" || check "Tmux"               "no encontrado"
+    if ! installed tmux; then
+        check "Tmux >= 3.5" "no encontrado"
+    elif tmux_version_supported; then
+        check "Tmux >= 3.5" "ok"
+    else
+        check "Tmux >= 3.5" "versión actual: $(tmux -V)"
+    fi
     installed starship  && check "Starship"           "ok" || check "Starship"           "no encontrado"
     installed eza       && check "eza"                "ok" || check "eza"                "no encontrado"
     installed fzf       && check "fzf"                "ok" || check "fzf"                "no encontrado"
@@ -227,34 +295,52 @@ healthcheck() {
     installed zoxide    && check "zoxide"             "ok" || check "zoxide"             "no encontrado"
     installed fnm       && check "fnm"                "ok" || check "fnm"                "no encontrado"
     installed terminal-notifier && check "terminal-notifier" "ok" || check "terminal-notifier" "no encontrado"
+    geist_mono_font_installed && check "Geist Mono" "ok" || check "Geist Mono" "no encontrada"
 
     # Configs
-    [[ -f ~/.config/ghostty/config ]]   && check "Config Ghostty"  "ok" || check "Config Ghostty"  "no encontrado en ~/.config/ghostty/config"
-    [[ -f ~/.config/fish/config.fish ]] && check "Config Fish"     "ok" || check "Config Fish"     "no encontrado en ~/.config/fish/config.fish"
-    [[ -f ~/.tmux.conf ]]               && check "Config Tmux"     "ok" || check "Config Tmux"     "no encontrado en ~/.tmux.conf"
-    [[ -f ~/.config/starship.toml ]]    && check "Config Starship" "ok" || check "Config Starship" "no encontrado en ~/.config/starship.toml"
+    check_config "Config Ghostty"  "$DOTFILES_DIR/ghostty/config"          "$HOME/.config/ghostty/config"
+    check_config "Config Fish"     "$DOTFILES_DIR/fish/config.fish"        "$HOME/.config/fish/config.fish"
+    check_config "Config Tmux"     "$DOTFILES_DIR/tmux/.tmux.conf"         "$HOME/.tmux.conf"
+    check_config "Config Starship" "$DOTFILES_DIR/starship/starship.toml"  "$HOME/.config/starship.toml"
 
     # TPM y plugins
-    [[ -d ~/.tmux/plugins/tpm ]]             && check "TPM"              "ok" || check "TPM"              "no encontrado en ~/.tmux/plugins/tpm"
-    [[ -d ~/.tmux/plugins/tmux-yank ]]       && check "Plugin tmux-yank" "ok" || check "Plugin tmux-yank" "no instalado"
-    [[ -d ~/.tmux/plugins/tmux-resurrect ]]  && check "Plugin tmux-resurrect" "ok" || check "Plugin tmux-resurrect" "no instalado"
-    [[ -d ~/.tmux/plugins/tmux-ukiyo ]]      && check "Plugin tmux-ukiyo" "ok" || check "Plugin tmux-ukiyo" "no instalado"
+    [[ -x ~/.tmux/plugins/tpm/bin/install_plugins ]] && check "TPM"                  "ok" || check "TPM"                       "instalador no encontrado o no ejecutable"
+    [[ -d ~/.tmux/plugins/tmux-yank ]]          && check "Plugin tmux-yank"          "ok" || check "Plugin tmux-yank"          "no instalado"
+    [[ -d ~/.tmux/plugins/vim-tmux-navigator ]] && check "Plugin vim-tmux-navigator" "ok" || check "Plugin vim-tmux-navigator" "no instalado"
+    [[ -d ~/.tmux/plugins/tmux-resurrect ]]     && check "Plugin tmux-resurrect"     "ok" || check "Plugin tmux-resurrect"     "no instalado"
+    [[ -d ~/.tmux/plugins/tmux-which-key ]]     && check "Plugin tmux-which-key"     "ok" || check "Plugin tmux-which-key"     "no instalado"
+    [[ -d ~/.tmux/plugins/tmux-ukiyo ]]         && check "Plugin tmux-ukiyo"         "ok" || check "Plugin tmux-ukiyo"         "no instalado"
+    [[ -d ~/.tmux/plugins/tmux-continuum ]]     && check "Plugin tmux-continuum"     "ok" || check "Plugin tmux-continuum"     "no instalado"
 
     # Shell por defecto
-    local fish_path
+    local fish_path registered_shell
     [[ -f /opt/homebrew/bin/fish ]] && fish_path="/opt/homebrew/bin/fish" || fish_path="/usr/local/bin/fish"
-    [[ "$SHELL" == "$fish_path" ]] && check "Fish como shell por defecto" "ok" || check "Fish como shell por defecto" "shell actual: $SHELL"
+    if registered_shell="$(registered_user_shell)"; then
+        [[ "$registered_shell" == "$fish_path" ]] && check "Fish como shell por defecto" "ok" || check "Fish como shell por defecto" "shell registrado: $registered_shell"
+    else
+        check "Fish como shell por defecto" "no se pudo consultar el shell registrado con dscl"
+    fi
 
     if [[ "$ok" == true ]]; then
         echo -e "\n${GREEN}${BOLD}✓ Todo correcto${NC}"
     else
         echo -e "\n${YELLOW}${BOLD}! Algunos checks fallaron — revisa los errores arriba${NC}"
+        return 1
     fi
 }
 
 # --- MAIN ---
+usage() {
+    echo "Uso: $0 [--check]"
+}
+
 main() {
-    if [[ "$1" == "--check" ]]; then
+    if (( $# > 1 )) || { (( $# == 1 )) && [[ "$1" != "--check" ]]; }; then
+        usage >&2
+        return 1
+    fi
+
+    if [[ "${1:-}" == "--check" ]]; then
         echo -e "\n${BOLD}toolkit/dotfiles — healthcheck${NC}"
         echo "----------------------------------------"
         healthcheck

@@ -1,6 +1,19 @@
+# Docker Desktop
+fish_add_path --append --path "$HOME/.docker/bin"
+
 # homebrew
-eval (/opt/homebrew/bin/brew shellenv)
+if not set -q HOMEBREW_PREFIX
+    for brew_path in /opt/homebrew/bin/brew /usr/local/bin/brew
+        if test -x "$brew_path"
+            eval ($brew_path shellenv)
+            break
+        end
+    end
+end
 set -g fish_greeting ""
+
+# Disable all Claude Code compatibility in OpenCode.
+set -gx OPENCODE_DISABLE_CLAUDE_CODE 1
 
 function alert
     set -l message (test -n "$argv[1]"; and echo $argv; or echo "Proceso finalizado")
@@ -13,12 +26,19 @@ function alert
 end
 
 if status is-interactive
-    starship init fish | source
-    fzf --fish | source
-    atuin init fish | source
-    zoxide init fish | source
-    fnm env --use-on-cd | source
-    
+    if type -q starship
+        starship init fish | source
+    end
+    if type -q atuin
+        atuin init fish | source
+    end
+    if type -q zoxide
+        zoxide init fish | source
+    end
+    if type -q fnm
+        fnm env --use-on-cd --shell fish | source
+    end
+
     abbr --add g git
     abbr --add gs git status
     abbr --add ga git add .
@@ -47,16 +67,20 @@ if status is-interactive
     abbr --add pnd pnpm dev
     abbr --add pnb pnpm build
     abbr --add pnt pnpm test
-    abbr --add pns pnpm start
 
-    abbr --add c clear
     abbr --add cc claude
     abbr --add oc opencode
     abbr --add occ 'opencode -c'
 
-    abbr --add bu 'brew update && brew upgrade --greedy && brew cleanup --prune=all -s && brew autoremove'
+    abbr --add c clear
+    abbr --add bu 'brew update && brew upgrade && brew autoremove && brew cleanup'
 
 end
 
 # Editor Default
 set -gx EDITOR vim
+
+# Machine-specific settings that must not be synced to the repository.
+if test -f "$HOME/.config/fish/local.fish"
+    source "$HOME/.config/fish/local.fish"
+end
