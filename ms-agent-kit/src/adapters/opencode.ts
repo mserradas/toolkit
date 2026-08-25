@@ -51,7 +51,6 @@ function openCodeConfig(): string {
       $schema: "https://opencode.ai/config.json",
       model: defaultModel.openCodeModel,
       default_agent: OPENCODE_DEFAULT_AGENT,
-      plugin: ["@mohak34/opencode-notifier@0.2.8"],
       permission: {
         bash: OPENCODE_SECRET_BASH_RULES,
         read: OPENCODE_SECRET_READ_RULES,
@@ -112,7 +111,6 @@ export function buildOpenCodeArtifacts(catalog: Catalog, context: BuildContext):
   )
 
   for (const file of catalog.openCodeConfigFiles) {
-    if (context.scope === "project" && file.relativePath === "opencode-notifier.json") continue
     const destinationRoot =
       file.relativePath === "package.json" ? root : configRoot
     artifacts.push(

@@ -1,28 +1,27 @@
 # Dotfiles — entorno de terminal para macOS
 
-Instala y configura un entorno de terminal completo basado en Ghostty, Fish, Tmux y Starship. El proceso es automático, repetible y crea copias de seguridad versionadas antes de reemplazar configuraciones existentes.
+Instala y configura un entorno de terminal basado en Ghostty, Fish, Herdr y Starship. El proceso es repetible y crea copias de seguridad versionadas antes de reemplazar configuraciones existentes.
 
-## Resultado
+## Responsabilidades
 
-| Componente | Función |
+| Componente | Responsabilidad |
 |---|---|
-| Ghostty | Emulador de terminal con tema GitHub Dark y fuente Geist Mono |
-| Fish | Intérprete interactivo con abreviaciones e integración de herramientas |
-| Tmux + TPM | Sesiones persistentes, divisiones, navegación, guardado automático y panel emergente |
-| Starship | Indicador de comandos (`prompt`) con estado de Git, duración y versiones de entornos de ejecución |
+| Ghostty | Representar el terminal, aplicar fuente y tema, y reenviar atajos de macOS |
+| Fish | Proporcionar el intérprete interactivo, abreviaciones e integración de herramientas |
+| Herdr | Administrar Spaces, tabs, divisiones, procesos persistentes, agentes y notificaciones |
+| Starship | Mostrar el indicador de comandos con estado de Git, duración y versiones de entornos |
 | Herramientas | `eza`, `fzf`, `atuin`, `zoxide`, `fnm`, `git`, `pnpm` y `terminal-notifier` |
 
-Ghostty arranca el intérprete configurado en `$SHELL` y abre o recupera automáticamente la sesión Tmux `work`. Si Tmux no está disponible, abre el intérprete directamente para no dejar la terminal inutilizable. Los atajos nativos que crean o reabren tabs y divisiones, junto con la restauración de estado de Ghostty, están desactivados: Tmux es el multiplexor y propietario de la persistencia.
+Ghostty inicia Herdr por su nombre en `PATH`. Si Herdr no está disponible, muestra un aviso y abre Fish para que la terminal siga siendo utilizable. Ghostty no administra tabs, divisiones ni restauración de estado: esas funciones pertenecen únicamente a Herdr.
 
 ## Requisitos
 
 - macOS en Apple Silicon o Intel.
-- Tmux 3.5 o posterior. El instalador actualiza una instalación anterior cuando es necesario.
 - Conexión a Internet.
 - Una cuenta con permisos para usar `sudo` y cambiar el intérprete con `chsh`.
-- Herramientas de línea de comandos de Xcode para `git`. macOS ofrece instalarlas la primera vez que se ejecuta el comando.
+- Herramientas de línea de comandos de Xcode para `git`. macOS ofrece instalarlas cuando se ejecuta por primera vez.
 
-El instalador añade Homebrew si no está disponible y detecta automáticamente sus rutas habituales en Apple Silicon (`/opt/homebrew`) e Intel (`/usr/local`).
+El instalador añade Homebrew si no está disponible y detecta sus ubicaciones habituales en ambas arquitecturas.
 
 ## Camino rápido
 
@@ -35,9 +34,9 @@ cd dotfiles
 
 Durante la ejecución pueden aparecer solicitudes de Homebrew, `sudo` o `chsh`. Al terminar:
 
-1. Cierra la terminal actual.
-2. Abre Ghostty.
-3. Comprueba que Fish y la sesión Tmux `work` se inician correctamente.
+1. Cierra las ventanas existentes de Ghostty.
+2. Abre Ghostty de nuevo.
+3. Comprueba que Herdr muestra el Space persistente y que sus paneles usan Fish.
 
 Verifica toda la instalación en cualquier momento:
 
@@ -50,12 +49,11 @@ Verifica toda la instalación en cualquier momento:
 | Orden | Acción | Comportamiento al repetirla |
 |---:|---|---|
 | 1 | Instala Homebrew | Se omite si ya existe |
-| 2 | Instala aplicaciones, paquetes y fuente | Homebrew conserva lo instalado y actualiza Tmux si es anterior a 3.5 |
+| 2 | Instala aplicaciones, paquetes y fuente | Homebrew conserva lo que ya está instalado |
 | 3 | Registra Fish en `/etc/shells` y lo configura como intérprete predeterminado | Solo cambia lo necesario |
-| 4 | Instala TPM en `~/.tmux/plugins/tpm` | Conserva la instalación existente |
-| 5 | Copia las configuraciones | Crea un backup versionado y reemplaza el destino |
-| 6 | Instala los complementos de Tmux | Usa el instalador de TPM, incluso sin una sesión Tmux previa |
-| 7 | Ejecuta la comprobación de estado | Detecta binarios, fuente, archivos, complementos o configuraciones desactualizadas |
+| 4 | Valida y copia las cuatro configuraciones | Crea un backup versionado y reemplaza cada destino |
+| 5 | Instala las integraciones de Herdr para OpenCode y Codex | Solo actúa cuando ya existe la carpeta de configuración del cliente |
+| 6 | Ejecuta la comprobación de estado | Detecta binarios, fuente, archivos, sintaxis e integraciones desactualizadas |
 
 ### Paquetes instalados
 
@@ -63,7 +61,7 @@ Verifica toda la instalación en cualquier momento:
 Aplicaciones: Ghostty
 Fuente:       Geist Mono
 Intérprete:   fish
-Terminal:     tmux, starship
+Terminal:     herdr, starship
 Navegación:   eza, fzf, zoxide
 Historial:    atuin
 Entornos:     fnm
@@ -76,14 +74,14 @@ Utilidades:   git, pnpm, terminal-notifier
 |---|---|---|
 | `ghostty/config` | `~/.config/ghostty/config` | `~/.config/ghostty/config.backup.<fecha>` |
 | `fish/config.fish` | `~/.config/fish/config.fish` | `~/.config/fish/config.fish.backup.<fecha>` |
-| `tmux/.tmux.conf` | `~/.tmux.conf` | `~/.tmux.conf.backup.<fecha>` |
+| `herdr/config.toml` | `~/.config/herdr/config.toml` | `~/.config/herdr/config.toml.backup.<fecha>` |
 | `starship/starship.toml` | `~/.config/starship.toml` | `~/.config/starship.toml.backup.<fecha>` |
 
-Los backups usan el formato `.backup.YYYYMMDD-HHMMSS`; si dos ejecuciones coinciden en el mismo segundo, se añade un sufijo numérico. Las versiones anteriores se conservan.
+Los backups usan el formato `.backup.YYYYMMDD-HHMMSS`. Si dos ejecuciones coinciden en el mismo segundo, se añade un sufijo numérico; las versiones anteriores se conservan.
 
 ## Mantener las configuraciones
 
-El flujo recomendado es editar la configuración activa, sincronizarla al repositorio y revisar las diferencias (`diff`):
+El flujo recomendado es editar la configuración activa, sincronizarla al repositorio y revisar las diferencias:
 
 ```bash
 cd dotfiles
@@ -91,24 +89,21 @@ cd dotfiles
 git diff -- .
 ```
 
-`sync.sh` copia hacia el repositorio las configuraciones actuales de Ghostty, Fish, Tmux y Starship. Antes de escribir, valida las cuatro fuentes y prepara todas las copias. Si una operación falla, restaura lo que ya hubiera cambiado.
+`sync.sh` copia hacia el repositorio las configuraciones actuales de Ghostty, Fish, Herdr y Starship. Antes de escribir, valida las cuatro fuentes y prepara todas las copias. Si una operación falla, restaura lo que ya hubiera cambiado.
 
-Sin argumentos, la sincronización se detiene si cualquiera de los cuatro archivos del repositorio ya tiene cambios locales, evitando sobrescribir trabajo pendiente. Tras revisarlos, puedes conservarlos en Git o usar explícitamente el reemplazo deliberado:
+Sin argumentos, la sincronización se detiene si cualquiera de los cuatro archivos del repositorio ya tiene cambios locales. Para reemplazarlos deliberadamente:
 
 ```bash
 ./sync.sh --force
 ```
 
-Las configuraciones usan `$HOME`, `#{HOME}`, `$SHELL` y detección de Homebrew para no guardar el nombre de usuario, la arquitectura o la ruta de un ordenador concreto.
-
-Para aplicar en el usuario actual las configuraciones guardadas en el repositorio, usa el sentido contrario:
+Para aplicar en el usuario actual las configuraciones guardadas en el repositorio:
 
 ```bash
-cd dotfiles
 ./sync.sh --apply
 ```
 
-Este modo crea un backup versionado de cada configuración activa antes de reemplazarla. No instala paquetes: en un ordenador nuevo ejecuta primero `./install.sh`.
+Este modo crea un backup versionado de cada configuración activa antes de reemplazarla. No instala paquetes; en un ordenador nuevo ejecuta primero `./install.sh`.
 
 ## Ajustes locales por ordenador
 
@@ -118,9 +113,8 @@ Puedes añadir opciones que no deban viajar con el repositorio. Estos archivos s
 |---|---|
 | Fish | `~/.config/fish/local.fish` |
 | Ghostty | `~/.config/ghostty/local` |
-| Tmux | `~/.tmux.local.conf` |
 
-Son apropiados para rutas, alias, variables o preferencias exclusivas de un equipo. Fish puede leer `local.fish` durante la preparación de Tmux y de nuevo al abrir el intérprete interactivo, así que su contenido debe ser silencioso e idempotente. No guardes secretos en texto plano salvo que controles expresamente sus permisos y ciclo de vida.
+Son apropiados para rutas, alias, variables o preferencias exclusivas de un equipo. Su contenido debe ser silencioso e idempotente. No guardes secretos en texto plano salvo que controles expresamente sus permisos y ciclo de vida.
 
 ## Atajos principales
 
@@ -128,25 +122,31 @@ Son apropiados para rutas, alias, variables o preferencias exclusivas de un equi
 
 | Atajo | Acción |
 |---|---|
-| `Cmd+K` | Limpiar pantalla |
-| `Cmd+G` | Abrir o cerrar la sesión flotante `scratch` mediante Tmux |
+| `Cmd+K` | Limpiar la pantalla |
+| `Cmd+G` | Enviar `Ctrl+A`, `Alt+G` a Herdr para abrir el terminal emergente; repetirlo en el prompt lo cierra |
 | `Shift+Enter` | Enviar una entrada distinguible a aplicaciones compatibles |
 
-Los atajos nativos que crean o reabren tabs y divisiones de Ghostty están desactivados. Usa las ventanas y divisiones de Tmux para evitar dos capas de multiplexación.
+Los atajos nativos que crean tabs y divisiones de Ghostty están desactivados para evitar dos capas de organización.
 
-### Tmux
+### Herdr
+
+Herdr conserva su mapa de atajos predeterminado; la única personalización general es usar `Ctrl+A` como prefijo. Los atajos con prefijo se ejecutan pulsando `Ctrl+A`, soltándolo y pulsando la segunda tecla.
 
 | Atajo | Acción |
 |---|---|
-| `Ctrl+A` | Prefijo de Tmux |
-| `Ctrl+A`, `c` | Crear una ventana en el directorio personal |
-| `Ctrl+A`, `v` | División horizontal conservando el directorio actual |
-| `Ctrl+A`, `d` | División vertical conservando el directorio actual |
-| `Ctrl+A`, `r` | Recargar la configuración |
-| `Ctrl+A`, `<` / `>` | Mover la ventana hacia atrás o adelante |
-| `Alt+G` | Abrir o cerrar la sesión flotante `scratch` |
-| `Ctrl+A`, `I` | Instalar complementos manualmente con TPM |
-| `Ctrl+A`, `K` | Cerrar las demás sesiones tras confirmación |
+| `Ctrl+A`, `Shift+N` | Crear un Space |
+| `Ctrl+A`, `w` | Abrir el selector de Spaces |
+| `Ctrl+A`, `Shift+G` | Crear un Space asociado a un Git worktree |
+| `Ctrl+A`, `c` | Crear una tab |
+| `Ctrl+A`, `v` | Crear una división lateral |
+| `Ctrl+A`, `-` | Crear una división inferior |
+| `Ctrl+A`, `Shift+R` | Recargar la configuración |
+| `Ctrl+A`, `r` | Entrar en el modo de redimensionado |
+| `Alt+G` o `Cmd+G` | Abrir el terminal emergente; Ghostty añade el prefijo y repetirlo en el prompt lo cierra |
+| `Ctrl+A`, `?` | Mostrar la ayuda de atajos |
+| `Ctrl+A`, `q` | Separar el cliente sin detener los procesos |
+
+El cierre mediante `Alt+G` o `Cmd+G` pertenece al Fish del popup. Si hay una aplicación en primer plano dentro del popup, sal primero de ella. Herdr conserva los procesos cuando se cierra la ventana. Al volver a abrir Ghostty, el cliente se conecta a la sesión persistente existente.
 
 ### Fish
 
@@ -154,27 +154,50 @@ La configuración inicializa Starship, Atuin, Zoxide y FNM solo en sesiones inte
 
 Consulta la lista completa en [`fish/config.fish`](./fish/config.fish).
 
-## Recuperación
+## Integraciones de agentes
 
-No existe un desinstalador automático. Para localizar las copias de una configuración, de más reciente a más antigua:
+El instalador ejecuta de forma idempotente las integraciones oficiales de Herdr para:
+
+- OpenCode, si existe `~/.config/opencode`.
+- Codex, si existe `~/.codex`.
+
+Si un cliente no está configurado, se omite sin considerar la instalación fallida. Las integraciones comunican a Herdr el estado y la sesión de cada agente; Herdr agrupa los agentes por Space y entrega notificaciones del sistema tras un segundo.
+
+Después de instalar un cliente nuevo, vuelve a ejecutar `./install.sh` para añadir su integración. Comprueba el estado con:
 
 ```bash
-ls -1t ~/.config/fish/config.fish.backup.*
+herdr integration status
+./install.sh --check
+```
+
+## Recuperación
+
+Para localizar las copias de una configuración, de más reciente a más antigua:
+
+```bash
+ls -1t ~/.config/herdr/config.toml.backup.*
 ```
 
 Revisa la versión elegida y cópiala sobre el archivo activo:
 
 ```bash
-cp ~/.config/fish/config.fish.backup.YYYYMMDD-HHMMSS ~/.config/fish/config.fish
+cp ~/.config/herdr/config.toml.backup.YYYYMMDD-HHMMSS ~/.config/herdr/config.toml
 ```
 
-Aplica el mismo patrón a Ghostty, Tmux o Starship. Los paquetes instalados con Homebrew se eliminan por separado mediante `brew uninstall` o `brew uninstall --cask`.
+Aplica el mismo patrón a Ghostty, Fish o Starship. Después recarga Herdr con `Ctrl+A`, `Shift+R` o reinicia el servidor de manera controlada si fuera necesario. Los paquetes instalados con Homebrew se eliminan por separado mediante `brew uninstall` o `brew uninstall --cask`.
 
 ## Solución de problemas
 
-### `git` abre el instalador de Xcode
+### Ghostty abre Fish sin Herdr
 
-Acepta la instalación de las herramientas de línea de comandos, espera a que termine y vuelve a ejecutar el comando inicial.
+Comprueba que el ejecutable está disponible en `PATH`:
+
+```bash
+command -v herdr
+./install.sh --check
+```
+
+La configuración de Ghostty muestra un aviso antes de usar el intérprete como alternativa.
 
 ### Fish no es el intérprete activo
 
@@ -185,29 +208,20 @@ echo "$SHELL"
 ./install.sh --check
 ```
 
-En Apple Silicon suele mostrar `/opt/homebrew/bin/fish`; en Intel, `/usr/local/bin/fish`.
+La ruta exacta depende de la arquitectura y de la instalación de Homebrew.
 
-### Faltan complementos de Tmux
+### No llegan notificaciones
 
-Abre Tmux y ejecuta `Ctrl+A`, seguido de `I`. Después repite la comprobación de estado.
+Autoriza Herdr en Ajustes del Sistema → Notificaciones y confirma que `delivery = "system"` permanece en `~/.config/herdr/config.toml`.
 
 ### No aparecen iconos
 
 Comprueba que Ghostty usa `Geist Mono` y que la fuente aparece en `~/Library/Fonts` o `/Library/Fonts`. El paquete administrado por Homebrew es `font-geist-mono`.
 
-### No llegan notificaciones
+## Compatibilidad y límites
 
-Autoriza a `terminal-notifier` o Ghostty en Ajustes del Sistema → Notificaciones.
-
-## Compatibilidad
-
-- `install.sh` detecta Homebrew en `/opt/homebrew` y `/usr/local`.
-- Fish detecta Homebrew en ambas ubicaciones y Ghostty usa el intérprete registrado en `$SHELL`; no hay rutas ligadas a un usuario o arquitectura concretos.
-- `tmux-yank` gestiona la integración con el portapapeles del sistema; el instalador completo sigue diseñado para macOS.
-
-## Límites
-
-- El proyecto instala una configuración personal y reemplaza los cuatro archivos declarados.
+- Los scripts detectan Homebrew en Apple Silicon e Intel.
+- Ghostty y el popup de Herdr resuelven sus ejecutables mediante `PATH`; no guardan rutas ligadas a un usuario o arquitectura.
+- El proyecto instala una configuración personal y reemplaza exactamente los cuatro archivos declarados.
 - No gestiona secretos ni credenciales.
-- No elimina automáticamente paquetes, complementos o configuraciones.
-- La configuración compartida administra cuatro archivos completos; usa los archivos locales opcionales para diferencias específicas de cada ordenador.
+- No elimina automáticamente paquetes o configuraciones ajenas a esos cuatro archivos.

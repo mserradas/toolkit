@@ -41,18 +41,6 @@ geist_mono_font_installed() {
     return 1
 }
 
-tmux_version_supported() {
-    local version major remainder minor
-    version="$(tmux -V 2>/dev/null)" || return 1
-    version="${version#tmux }"
-    major="${version%%.*}"
-    remainder="${version#*.}"
-    minor="${remainder%%[^0-9]*}"
-
-    [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
-    (( major > 3 || (major == 3 && minor >= 5) ))
-}
-
 # --- HOMEBREW ---
 install_homebrew() {
     log "Homebrew"
@@ -83,7 +71,7 @@ install_packages() {
 
     local formulae=(
         fish
-        tmux
+        herdr
         starship
         eza
         fzf
@@ -108,12 +96,7 @@ install_packages() {
 
     for formula in "${formulae[@]}"; do
         if brew list "$formula" &>/dev/null; then
-            if [[ "$formula" == "tmux" ]] && ! tmux_version_supported; then
-                brew upgrade tmux
-                success "tmux actualizado a una versión compatible"
-            else
-                success "$formula ya instalado"
-            fi
+            success "$formula ya instalado"
         else
             brew install "$formula"
             success "$formula instalado"
@@ -151,29 +134,18 @@ set_fish_shell() {
     fi
 }
 
-# --- TPM ---
-setup_tpm() {
-    log "TPM (gestor de plugins tmux)"
-
-    local tpm_dir="$HOME/.tmux/plugins/tpm"
-
-    if [[ -x "$tpm_dir/bin/install_plugins" ]]; then
-        success "TPM ya instalado"
-    elif [[ -e "$tpm_dir" ]]; then
-        error "TPM está incompleto: falta un instalador ejecutable en $tpm_dir/bin/install_plugins"
-    else
-        git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
-        success "TPM instalado"
-    fi
-}
-
 # --- CONFIGS ---
 copy_configs() {
     log "Copiando configuraciones"
 
+    if ! HERDR_CONFIG_PATH="$DOTFILES_DIR/herdr/config.toml" herdr config check &>/dev/null; then
+        error "La configuración de Herdr del repositorio no es válida"
+    fi
+
     # Crear directorios necesarios
     mkdir -p ~/.config/ghostty
     mkdir -p ~/.config/fish
+    mkdir -p ~/.config/herdr
     mkdir -p ~/.config
 
     # Función para copiar con backup
@@ -198,52 +170,26 @@ copy_configs() {
 
     copy_with_backup "$DOTFILES_DIR/ghostty/config"       ~/.config/ghostty/config
     copy_with_backup "$DOTFILES_DIR/fish/config.fish"     ~/.config/fish/config.fish
-    copy_with_backup "$DOTFILES_DIR/tmux/.tmux.conf"      ~/.tmux.conf
+    copy_with_backup "$DOTFILES_DIR/herdr/config.toml"     ~/.config/herdr/config.toml
     copy_with_backup "$DOTFILES_DIR/starship/starship.toml" ~/.config/starship.toml
 }
 
-# --- PLUGINS TMUX ---
-install_tmux_plugins() {
-    log "Plugins de Tmux"
+# --- INTEGRACIONES HERDR ---
+install_herdr_integrations() {
+    log "Integraciones de Herdr"
 
-    local plugins_dir="$HOME/.tmux/plugins/"
-    local tpm_installer="${plugins_dir}tpm/bin/install_plugins"
-    local bootstrap_session="dotfiles-tpm-bootstrap-$$"
-    local started_bootstrap=false
-
-    cleanup_tmux_bootstrap() {
-        if [[ "$started_bootstrap" == true ]]; then
-            tmux kill-session -t "$bootstrap_session" &>/dev/null || true
-            started_bootstrap=false
-        fi
-        trap - RETURN
-    }
-
-    if [[ -x "$tpm_installer" ]]; then
-        if ! tmux has-session &>/dev/null; then
-            tmux new-session -d -s "$bootstrap_session"
-            started_bootstrap=true
-            trap cleanup_tmux_bootstrap RETURN
-        fi
-
-        local install_status=0
-        tmux set-environment -g TMUX_PLUGIN_MANAGER_PATH "$plugins_dir" || install_status=$?
-
-        if [[ "$install_status" -eq 0 ]]; then
-            "$tpm_installer" || install_status=$?
-        fi
-
-        if [[ "$started_bootstrap" == true ]]; then
-            cleanup_tmux_bootstrap
-        fi
-
-        if [[ "$install_status" -ne 0 ]]; then
-            return "$install_status"
-        fi
-
-        success "Plugins instalados"
+    if [[ -d "$HOME/.config/opencode" ]]; then
+        herdr integration install opencode
+        success "Integración de OpenCode instalada"
     else
-        warn "TPM no encontrado en ${plugins_dir}tpm; instala los plugins manualmente con Ctrl+a + I"
+        success "Integración de OpenCode omitida (cliente no configurado)"
+    fi
+
+    if [[ -d "$HOME/.codex" ]]; then
+        herdr integration install codex
+        success "Integración de Codex instalada"
+    else
+        success "Integración de Codex omitida (cliente no configurado)"
     fi
 }
 
@@ -278,16 +224,24 @@ healthcheck() {
         fi
     }
 
+    check_integration() {
+        local target="$1"
+        local label="$2"
+        local status
+
+        if ! status="$(herdr integration status 2>/dev/null)"; then
+            check "$label" "no se pudo consultar"
+        elif grep -Eq "^${target}: current " <<< "$status"; then
+            check "$label" "ok"
+        else
+            check "$label" "no instalada o desactualizada"
+        fi
+    }
+
     # Binarios
     installed brew      && check "Homebrew"           "ok" || check "Homebrew"           "no encontrado"
     installed fish      && check "Fish"               "ok" || check "Fish"               "no encontrado"
-    if ! installed tmux; then
-        check "Tmux >= 3.5" "no encontrado"
-    elif tmux_version_supported; then
-        check "Tmux >= 3.5" "ok"
-    else
-        check "Tmux >= 3.5" "versión actual: $(tmux -V)"
-    fi
+    installed herdr     && check "Herdr"              "ok" || check "Herdr"              "no encontrado"
     installed starship  && check "Starship"           "ok" || check "Starship"           "no encontrado"
     installed eza       && check "eza"                "ok" || check "eza"                "no encontrado"
     installed fzf       && check "fzf"                "ok" || check "fzf"                "no encontrado"
@@ -300,17 +254,22 @@ healthcheck() {
     # Configs
     check_config "Config Ghostty"  "$DOTFILES_DIR/ghostty/config"          "$HOME/.config/ghostty/config"
     check_config "Config Fish"     "$DOTFILES_DIR/fish/config.fish"        "$HOME/.config/fish/config.fish"
-    check_config "Config Tmux"     "$DOTFILES_DIR/tmux/.tmux.conf"         "$HOME/.tmux.conf"
+    check_config "Config Herdr"    "$DOTFILES_DIR/herdr/config.toml"        "$HOME/.config/herdr/config.toml"
     check_config "Config Starship" "$DOTFILES_DIR/starship/starship.toml"  "$HOME/.config/starship.toml"
 
-    # TPM y plugins
-    [[ -x ~/.tmux/plugins/tpm/bin/install_plugins ]] && check "TPM"                  "ok" || check "TPM"                       "instalador no encontrado o no ejecutable"
-    [[ -d ~/.tmux/plugins/tmux-yank ]]          && check "Plugin tmux-yank"          "ok" || check "Plugin tmux-yank"          "no instalado"
-    [[ -d ~/.tmux/plugins/vim-tmux-navigator ]] && check "Plugin vim-tmux-navigator" "ok" || check "Plugin vim-tmux-navigator" "no instalado"
-    [[ -d ~/.tmux/plugins/tmux-resurrect ]]     && check "Plugin tmux-resurrect"     "ok" || check "Plugin tmux-resurrect"     "no instalado"
-    [[ -d ~/.tmux/plugins/tmux-which-key ]]     && check "Plugin tmux-which-key"     "ok" || check "Plugin tmux-which-key"     "no instalado"
-    [[ -d ~/.tmux/plugins/tmux-ukiyo ]]         && check "Plugin tmux-ukiyo"         "ok" || check "Plugin tmux-ukiyo"         "no instalado"
-    [[ -d ~/.tmux/plugins/tmux-continuum ]]     && check "Plugin tmux-continuum"     "ok" || check "Plugin tmux-continuum"     "no instalado"
+    if installed herdr; then
+        if HERDR_CONFIG_PATH="$HOME/.config/herdr/config.toml" herdr config check &>/dev/null; then
+            check "Sintaxis Herdr" "ok"
+        else
+            check "Sintaxis Herdr" "configuración activa no válida"
+        fi
+        if [[ -d "$HOME/.config/opencode" ]]; then
+            check_integration "opencode" "Integración Herdr para OpenCode"
+        fi
+        if [[ -d "$HOME/.codex" ]]; then
+            check_integration "codex" "Integración Herdr para Codex"
+        fi
+    fi
 
     # Shell por defecto
     local fish_path registered_shell
@@ -353,9 +312,8 @@ main() {
     install_homebrew
     install_packages
     set_fish_shell
-    setup_tpm
     copy_configs
-    install_tmux_plugins
+    install_herdr_integrations
     healthcheck
 
     echo -e "\n${GREEN}${BOLD}✓ Instalación completada${NC}"

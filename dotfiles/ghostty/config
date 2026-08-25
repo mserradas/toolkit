@@ -10,7 +10,7 @@ window-padding-color = extend
 window-step-resize = false
 window-padding-balance = true
 
-# Tmux owns tabs, splits and terminal-state restoration.
+# Herdr owns Spaces, tabs, splits and terminal-state restoration.
 window-save-state = never
 keybind = cmd+d=ignore
 keybind = cmd+shift+d=ignore
@@ -24,7 +24,8 @@ keybind = alt+left=unbind
 keybind = alt+right=unbind
 
 # Miscellaneous
-keybind = cmd+g=text:\x1bg
+keybind = cmd+g=text:\x01\x1bg
+keybind = alt+g=text:\x01\x1bg
 
 # Use it by writing 'vim' first and then the keybinding to open the file with vim
 keybind = alt+s=write_screen_file:paste
@@ -33,8 +34,8 @@ keybind = shift+enter=text:\x1b\r
 # Theme
 theme = GitHub Dark
 
-# Tmux
-command = "$SHELL" -l -c 'if type -q tmux; exec tmux new-session -A -s work; else; echo "tmux no está instalado; iniciando el shell"; exec "$SHELL" -l; end'
+# Herdr
+command = /bin/sh -c 'PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; export PATH; if command -v herdr >/dev/null 2>&1; then exec herdr; fi; echo "Herdr no está instalado; iniciando Fish"; if command -v fish >/dev/null 2>&1; then exec fish -l; fi; exec "${SHELL:-/bin/sh}" -l'
 
 # Machine-specific settings loaded after this shared configuration.
 config-file = ?local

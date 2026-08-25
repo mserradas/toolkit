@@ -6,7 +6,7 @@ Dos instaladores complementarios para reproducir un entorno de trabajo: uno prep
 
 | Proyecto | Resultado | Plataformas objetivo | Documentación |
 |---|---|---|---|
-| `dotfiles` | Ghostty, Fish, Tmux, Starship y herramientas del intérprete de comandos | macOS | [Guía de dotfiles](./dotfiles/README.md) |
+| `dotfiles` | Ghostty, Fish, Herdr, Starship y herramientas del intérprete de comandos | macOS | [Guía de dotfiles](./dotfiles/README.md) |
 | `ms-agent-kit` | Agentes `ms-*`, flujos de trabajo, `skills`, permisos y configuración portable | OpenCode, Claude Code y Codex | [Guía de ms-agent-kit](./ms-agent-kit/README.md) |
 
 Los proyectos pueden usarse por separado. En una Mac nueva, el orden recomendado es `dotfiles` primero y `ms-agent-kit` después.

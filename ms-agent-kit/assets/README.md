@@ -11,7 +11,6 @@ Solo contiene estas superficies portables:
 - `docs/agents.md`
 - `config/tui.json`
 - `config/package.json`
-- `config/opencode-notifier.json`
 
 El adaptador genera `opencode.json` con rutas correctas para el scope de destino. No se copian credenciales, cachés, locks, dependencias instaladas ni estado de sesiones/plugins.
 Los adaptadores también añaden la política portable de permisos al generar cada plataforma.

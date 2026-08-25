@@ -172,10 +172,10 @@ El ciclo de sesiones y delegaciones queda bajo control del usuario y de las inst
 | Claude Code | Agent nativo | Haiku, esfuerzo bajo | Permisos por rol y límite de turnos cuando el cliente lo permite |
 | Codex | Subagente nativo | Modelo heredado, razonamiento bajo | Contrato y política de prompt; no recibe actualmente un hard turn budget |
 
-OpenCode carga plugins npm y MCPs desde `opencode.json`. La configuración declara notifier y Context7; la clave de Context7 se resuelve exclusivamente desde `CONTEXT7_API_KEY`, nunca desde el catálogo. Los agentes con acceso a documentación deben preferir Context7 antes de `webfetch` cuando aplique.
+OpenCode carga MCPs desde `opencode.json` y complementos de la TUI desde `tui.json`. La configuración declara Context7; su clave se resuelve exclusivamente desde `CONTEXT7_API_KEY`, nunca desde el catálogo. Los agentes con acceso a documentación deben preferir Context7 antes de `webfetch` cuando aplique.
 
 OpenCode instala automáticamente los plugins npm declarados en su configuración. El kit no distribuye plugins TypeScript locales, `node_modules`, locks ni cachés.
 
-La TUI carga las preferencias portables desde `tui.json`, incluido `opencode-subagent-statusline`. El estado y cache del plugin se generan localmente y no se distribuyen.
+La TUI carga las preferencias portables desde `tui.json`, incluido `opencode-subagent-statusline`. El estado y cache del plugin se generan localmente y no se distribuyen. El kit no declara `@mohak34/opencode-notifier` y mantiene desactivadas las notificaciones propias de OpenCode para que el entorno anfitrión pueda centralizarlas.
 
 Este documento queda como documentación humana del sistema: mapa de agentes, flujo recomendado y reglas de alto nivel. Si cambias el contrato operativo, actualiza `agents-shared.md` y las referencias de los subagentes que lo usan.

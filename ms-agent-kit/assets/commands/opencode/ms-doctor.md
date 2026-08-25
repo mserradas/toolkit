@@ -18,13 +18,13 @@ Argumento: `$ARGUMENTS`
 
 Revisa solo el contexto OpenCode:
 
-- `~/.config/opencode/opencode.json`, `tui.json` y `opencode-notifier.json` cuando existan.
+- `~/.config/opencode/opencode.json` y `tui.json` cuando existan.
 - `~/.config/opencode/agents/ms-*.md`, `commands/ms-*.md`, `skills/*/SKILL.md` y `docs/agents*.md`.
 - En scope de proyecto, las rutas equivalentes bajo `.opencode/` y la configuración OpenCode del repositorio.
 
 Valida con `opencode debug agent` los siete agentes mínimos: `ms-architect`, `ms-codex`, `ms-fastlane`, `ms-tester`, `ms-debugger`, `ms-plan` y `ms-discovery`. Con argumento `full`, valida todos los `ms-*`. Usa `opencode debug skill` para contar las skills efectivamente visibles; no sumes instalaciones de Claude o Codex.
 
-Comprueba JSON válido, carga y color de agentes, permisos por rol, denegaciones finales de secretos, reglas compartidas incorporadas una sola vez, comandos `ms-status` y `ms-doctor`, plugins declarados y MCP `context7` sin clave literal.
+Comprueba JSON válido, carga y color de agentes, permisos por rol, denegaciones finales de secretos, reglas compartidas incorporadas una sola vez, comandos `ms-status` y `ms-doctor`, `opencode-subagent-statusline` habilitado, notificaciones propias de la TUI desactivadas, ausencia de `@mohak34/opencode-notifier` y MCP `context7` sin clave literal.
 
 ## Salida
 

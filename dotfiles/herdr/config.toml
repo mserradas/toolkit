@@ -1,0 +1,28 @@
+onboarding = false
+
+[theme]
+name = "terminal"
+auto_switch = false
+
+[terminal]
+shell_mode = "auto"
+new_cwd = "follow"
+
+[keys]
+prefix = "ctrl+a"
+
+[[keys.command]]
+key = "prefix+alt+g"
+type = "popup"
+command = "PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"; export PATH; exec fish -l -C 'bind \\ca\\eg exit'"
+description = "abrir o cerrar terminal temporal"
+width = "90%"
+height = "90%"
+
+[ui]
+agent_panel_sort = "spaces"
+show_agent_labels_on_pane_borders = true
+
+[ui.toast]
+delivery = "system"
+delay_seconds = 1

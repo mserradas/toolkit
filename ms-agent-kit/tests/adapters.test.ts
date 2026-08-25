@@ -542,16 +542,14 @@ describe("platform adapters", () => {
     const configurations = artifacts.filter((artifact) => artifact.kind === "configuration")
     const opencode = configurations.find((artifact) => artifact.name === "opencode.json")
     const tui = configurations.find((artifact) => artifact.name === "tui.json")
-    const notifier = configurations.find((artifact) => artifact.name === "opencode-notifier.json")
 
-    expect(artifacts).toHaveLength(26)
-    expect(configurations).toHaveLength(3)
+    expect(artifacts).toHaveLength(25)
+    expect(configurations).toHaveLength(2)
     expect(opencode?.destination).toBe(path.join(buildContext.homeDir, ".config", "opencode", "opencode.json"))
     const openCodeConfig = JSON.parse(opencode!.content.toString("utf8"))
     expect(openCodeConfig).toMatchObject({
       model: "openai/gpt-5.6-sol",
       default_agent: "ms-architect",
-      plugin: ["@mohak34/opencode-notifier@0.2.8"],
       mcp: {
         context7: {
           headers: { CONTEXT7_API_KEY: "{env:CONTEXT7_API_KEY}" },
@@ -568,6 +566,15 @@ describe("platform adapters", () => {
       },
     })
     expect(openCodeConfig).not.toHaveProperty("instructions")
+    expect(openCodeConfig).not.toHaveProperty("plugin")
+    expect(
+      artifacts.some((artifact) => artifact.name === "opencode-notifier.json"),
+    ).toBe(false)
+    expect(
+      configurations.some((artifact) =>
+        artifact.content.toString("utf8").includes("@mohak34/opencode-notifier"),
+      ),
+    ).toBe(false)
     expect(
       artifacts.find(
         (artifact) =>
@@ -576,16 +583,7 @@ describe("platform adapters", () => {
     ).toBeDefined()
     expect(JSON.parse(tui!.content.toString("utf8"))).toMatchObject({
       plugin: ["opencode-subagent-statusline@1.2.0"],
-      attention: { enabled: true, notifications: true, sound: false },
-    })
-    expect(JSON.parse(notifier!.content.toString("utf8"))).toMatchObject({
-      notificationSystem: "osascript",
-      suppressWhenFocused: true,
-      minDuration: 5,
-      events: {
-        question: { sound: false, notification: true },
-        plan_exit: { sound: false, notification: true },
-      },
+      attention: { enabled: true, notifications: false, sound: false },
     })
     expect(opencode!.content.toString("utf8")).not.toMatch(/sk-[A-Za-z0-9]/)
   })

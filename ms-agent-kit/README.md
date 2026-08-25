@@ -8,7 +8,7 @@ El instalador calcula un plan antes de escribir, conserva el estado de propiedad
 
 | Cliente | Componentes instalados | Integración principal |
 |---|---|---|
-| OpenCode | 12 agentes, 2 comandos `/ms-*` y 7 `skills` generales | Configuración, interfaz de terminal (`TUI`), Context7, notificaciones y permisos por agente |
+| OpenCode | 12 agentes, 2 comandos `/ms-*` y 7 `skills` generales | Configuración, interfaz de terminal (`TUI`), Context7, statusline de subagentes y permisos por agente |
 | Claude Code | 12 subagentes, 2 habilidades invocables (`slash skills`) `/ms-*` y 7 `skills` generales | Límites de herramientas y protección compartida `PreToolUse` |
 | Codex | 11 agentes especialistas, 2 comandos como `skills` y 7 `skills` generales | Perfiles, reglas de seguridad, Context7 y `$ms-architect` como orquestador padre |
 
@@ -194,7 +194,7 @@ OpenCode conserva comandos y menciones de agentes:
 @ms-scout localiza el flujo de autenticación
 ```
 
-La instalación global administra `opencode.json`, `tui.json`, notificaciones, agentes, comandos y `skills`. Los únicos complementos activos son paquetes externos declarados en la configuración; no hay plugins TypeScript locales ni interceptores del ciclo de delegación.
+La instalación global administra `opencode.json`, `tui.json`, agentes, comandos y `skills`. Conserva `opencode-subagent-statusline` como complemento de la TUI, desactiva las notificaciones propias de OpenCode y no declara `@mohak34/opencode-notifier`; no hay plugins TypeScript locales ni interceptores del ciclo de delegación.
 
 Context7 lee la clave desde el entorno y no la persiste en el catálogo:
 

@@ -61,26 +61,26 @@ configure_paths() {
         SOURCES=(
             "$DOTFILES_DIR/ghostty/config"
             "$DOTFILES_DIR/fish/config.fish"
-            "$DOTFILES_DIR/tmux/.tmux.conf"
+            "$DOTFILES_DIR/herdr/config.toml"
             "$DOTFILES_DIR/starship/starship.toml"
         )
         DESTINATIONS=(
             "$HOME/.config/ghostty/config"
             "$HOME/.config/fish/config.fish"
-            "$HOME/.tmux.conf"
+            "$HOME/.config/herdr/config.toml"
             "$HOME/.config/starship.toml"
         )
     else
         SOURCES=(
             "$HOME/.config/ghostty/config"
             "$HOME/.config/fish/config.fish"
-            "$HOME/.tmux.conf"
+            "$HOME/.config/herdr/config.toml"
             "$HOME/.config/starship.toml"
         )
         DESTINATIONS=(
             "$DOTFILES_DIR/ghostty/config"
             "$DOTFILES_DIR/fish/config.fish"
-            "$DOTFILES_DIR/tmux/.tmux.conf"
+            "$DOTFILES_DIR/herdr/config.toml"
             "$DOTFILES_DIR/starship/starship.toml"
         )
     fi
