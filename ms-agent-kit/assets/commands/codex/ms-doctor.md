@@ -41,9 +41,10 @@ No clasifiques un agente usando solo `extends`. Resuelve el perfil indicado por 
 
 | Agente | Escrituras requeridas |
 |---|---|
-| `ms-plan` | `docs/prd/**` |
-| `ms-designer` | `docs/design/**` |
-| `ms-spec` | `docs/spec/**` |
+| `ms-plan` | `.agents/docs/prd/**` |
+| `ms-discovery` | `.agents/docs/discovery/**` |
+| `ms-designer` | `.agents/docs/design/**` |
+| `ms-spec` | `.agents/docs/spec/**` |
 | `ms-writer` | `README.md`, `CHANGELOG.md`, `docs/changelog/**`, `docs/guides/**`, `docs/api/**`, `docs/release-notes/**` |
 
 Marca incompatibilidad solo si falta una concesión requerida, una denegación la bloquea o Codex rechaza el perfil. No recomiendes cambiar estos agentes a `:workspace` cuando los overrides acotados están completos.

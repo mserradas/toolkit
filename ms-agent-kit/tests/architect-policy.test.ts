@@ -287,6 +287,8 @@ describe("ms-architect policy", () => {
     for (const technicalTerm of ["feature", "runtime", "schemas", "endpoints", "benchmarks"]) {
       expect(`${plan}\n${discovery}`).toContain(technicalTerm)
     }
+    expect(plan).toContain("documentación pública en `docs/`")
+    expect(plan).toContain("PRDs previos en `.agents/docs/prd/`")
     expect(writer).toContain("## [Unreleased]")
     expect(writer).toContain("### Added")
   })

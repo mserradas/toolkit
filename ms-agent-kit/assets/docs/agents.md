@@ -80,11 +80,11 @@ Con el perfil `balanced`, cada agente conserva `skill` y `lsp` según el permiso
 
 | Agente | Perfil OpenCode | Presupuesto | Uso principal | Toca archivos |
 |---|---|---:|---|---|
-| `ms-plan` | `openai/gpt-5.6-sol`, `variant: high` | — | Hace preguntas y crea PRDs | Solo `docs/prd/**` |
-| `ms-discovery` | `openai/gpt-5.6-sol`, `variant: high` | — | Debate ideas tempranas, clasifica inconvenientes y propone experimentos | Solo `docs/discovery/**` si el usuario pide guardar |
+| `ms-plan` | `openai/gpt-5.6-sol`, `variant: high` | — | Hace preguntas y crea PRDs | Solo `.agents/docs/prd/**` |
+| `ms-discovery` | `openai/gpt-5.6-sol`, `variant: high` | — | Debate ideas tempranas, clasifica inconvenientes y propone experimentos | Solo `.agents/docs/discovery/**` si el usuario pide guardar |
 | `ms-architect` | `openai/gpt-5.6-sol`, `variant: high` | — | Orquesta el flujo técnico, inspecciona en solo lectura y decide fastlane/spec/TDD | No |
-| `ms-spec` | `openai/gpt-5.6-sol`, `variant: high` | 20 | Crea specs funcionales verificables y cierra specs tras implementación verificada | Solo `docs/spec/**` |
-| `ms-designer` | `openai/gpt-5.6-sol`, `variant: high` | 20 | Crea TDDs desde PRDs/specs aprobados | Solo `docs/design/**` |
+| `ms-spec` | `openai/gpt-5.6-sol`, `variant: high` | 20 | Crea specs funcionales verificables y cierra specs tras implementación verificada | Solo `.agents/docs/spec/**` |
+| `ms-designer` | `openai/gpt-5.6-sol`, `variant: high` | 20 | Crea TDDs desde PRDs/specs aprobados | Solo `.agents/docs/design/**` |
 | `ms-fastlane` | `openai/gpt-5.6-luna`, `variant: low` | 12 | Ejecuta cambios acotados sin cadena de subagentes | Sí, scope limitado |
 | `ms-codex` | `openai/gpt-5.6-sol`, `variant: high` | 20 | Implementa código con scope cerrado | Sí |
 | `ms-tester` | `openai/gpt-5.6-luna`, `variant: low` | 16 | Corre tests, lint, type-check y format-check | No |
@@ -135,7 +135,7 @@ OpenCode y Claude Code materializan `toolCycleBudget` para limitar cada misión.
 - `ms-architect` usa `judgment-day` únicamente cuando el usuario pide doble juez o revisión adversarial.
 - `ms-architect` usa `delegation-brief` antes de delegar paquetes nivel 3-4, TDD/spec, bugs, reviews, auditorías, verificaciones o retries; fastlane y nivel 2 trivial pueden usar brief corto.
 - `/ms-status` informa el estado observable desde el contexto actual, Git y artefactos durables sin continuar ni persistir trabajo.
-- `ms-spec` no diseña arquitectura técnica ni implementación; produce comportamiento, reglas, casos borde y criterios verificables en `docs/spec/**`, y al cierre registra evidencia, estado final y drift.
+- `ms-spec` no diseña arquitectura técnica ni implementación; produce comportamiento, reglas, casos borde y criterios verificables en `.agents/docs/spec/**`, y al cierre registra evidencia, estado final y drift.
 - `ms-designer` no asigna ejecutores; solo diseña el TDD.
 - `ms-designer` incluye previsión de revisión en la sección de paquetes del TDD.
 - `ms-fastlane` se bloquea si el cambio no califica como acotado: máximo 3 archivos totales, <=120 LOC estimadas, sin contrato público, datos persistidos, seguridad, infra, CI/CD, dependencias, ambigüedad de producto ni decisión irreversible.

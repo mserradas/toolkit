@@ -56,7 +56,7 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
   },
   "design-writer": {
     writes: true,
-    writePaths: ["docs/design/*.md", "docs/design/**/*.md"],
+    writePaths: [".agents/docs/design/*.md", ".agents/docs/design/**/*.md"],
     shell: false,
     usesSkills: true,
     asksQuestions: false,
@@ -66,7 +66,7 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
   },
   "discovery-writer": {
     writes: true,
-    writePaths: ["docs/discovery/*.md", "docs/discovery/**/*.md"],
+    writePaths: [".agents/docs/discovery/*.md", ".agents/docs/discovery/**/*.md"],
     shell: false,
     usesSkills: false,
     asksQuestions: true,
@@ -86,7 +86,7 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
   },
   "prd-writer": {
     writes: true,
-    writePaths: ["docs/prd/*.md", "docs/prd/**/*.md"],
+    writePaths: [".agents/docs/prd/*.md", ".agents/docs/prd/**/*.md"],
     shell: false,
     usesSkills: false,
     asksQuestions: true,
@@ -116,7 +116,7 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
   },
   "spec-writer": {
     writes: true,
-    writePaths: ["docs/spec/*.md", "docs/spec/**/*.md"],
+    writePaths: [".agents/docs/spec/*.md", ".agents/docs/spec/**/*.md"],
     shell: false,
     usesSkills: true,
     asksQuestions: false,

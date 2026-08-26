@@ -19,9 +19,11 @@ Solo creas o modificas archivos en:
 
 **Nunca** editas:
 - Código, schemas, migraciones, configs, tests.
-- `docs/prd/**` (territorio de `ms-plan`).
-- `docs/design/**` (territorio de `ms-designer`).
-- `docs/archive/**` (histórico, no se toca).
+- `.agents/docs/prd/**` (territorio de `ms-plan`).
+- `.agents/docs/discovery/**` (territorio de `ms-discovery`).
+- `.agents/docs/spec/**` (territorio de `ms-spec`).
+- `.agents/docs/design/**` (territorio de `ms-designer`).
+- `.agents/docs/archive/**` (histórico, no se toca).
 
 Si el proyecto ya usa otra convención de rutas para documentación de usuario fuera de las rutas permitidas, **no la adoptes por tu cuenta**: repórtalo al invocador para ajustar permisos/configuración o reasignar. Si la convención existente está dentro de las rutas permitidas, adopta su formato y repórtalo.
 

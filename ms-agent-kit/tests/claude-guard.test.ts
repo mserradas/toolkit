@@ -1416,6 +1416,10 @@ describe("Claude permission guard", () => {
     const { guardPath, projectRoot } = await setupGuard()
     const allowed = await runGuard(guardPath, projectRoot, "ms-designer", {
       tool_name: "Write",
+      tool_input: { file_path: path.join(projectRoot, ".agents/docs/design/feature.md") },
+    })
+    const blockedLegacyPath = await runGuard(guardPath, projectRoot, "ms-designer", {
+      tool_name: "Write",
       tool_input: { file_path: path.join(projectRoot, "docs/design/feature.md") },
     })
     const blocked = await runGuard(guardPath, projectRoot, "ms-designer", {
@@ -1424,6 +1428,7 @@ describe("Claude permission guard", () => {
     })
 
     expect(allowed.code).toBe(0)
+    expect(blockedLegacyPath.code).toBe(2)
     expect(blocked.code).toBe(2)
     expect(blocked.stderr).toContain("fuera del alcance")
   })

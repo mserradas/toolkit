@@ -536,6 +536,28 @@ describe("platform adapters", () => {
     }
   })
 
+  it("restricts operational document writers to .agents/docs", () => {
+    const roles = [
+      ["ms-plan", "prd-writer", "prd"],
+      ["ms-discovery", "discovery-writer", "discovery"],
+      ["ms-spec", "spec-writer", "spec"],
+      ["ms-designer", "design-writer", "design"],
+    ] as const
+
+    for (const [role, profile, directory] of roles) {
+      const expectedPaths = [
+        `.agents/docs/${directory}/*.md`,
+        `.agents/docs/${directory}/**/*.md`,
+      ]
+      expect(capabilityProfile(profile).writePaths).toEqual(expectedPaths)
+      expect(openCodeRolePermission(role, "balanced").edit).toEqual({
+        "*": "deny",
+        [expectedPaths[0]]: "allow",
+        [expectedPaths[1]]: "allow",
+      })
+    }
+  })
+
   it("builds a reproducible global OpenCode configuration without secrets", async () => {
     const buildContext = await context("user")
     const artifacts = await buildArtifacts(["opencode"], buildContext)
@@ -842,7 +864,7 @@ describe("platform adapters", () => {
     const designer = artifacts.find(
       (artifact) => artifact.name === "ms-designer" && artifact.kind === "agent",
     )
-    expect(designer!.content.toString("utf8")).toContain('"docs/design/**" = "write"')
+    expect(designer!.content.toString("utf8")).toContain('".agents/docs/design/**" = "write"')
     expect(architectSkill!.destination).toContain(path.join(".agents", "skills", "ms-architect", "SKILL.md"))
     expect(parseMarkdown(architectSkill!.content.toString("utf8")).body).toContain(
       "Contrato para ms-architect",

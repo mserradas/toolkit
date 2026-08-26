@@ -38,9 +38,11 @@ Project context snapshot:
     typecheck: null
     format_check: null
   docs:
-    prd_dir: "docs/prd"
-    spec_dir: "docs/spec"
-    design_dir: "docs/design"
+    discovery_dir: ".agents/docs/discovery"
+    prd_dir: ".agents/docs/prd"
+    spec_dir: ".agents/docs/spec"
+    design_dir: ".agents/docs/design"
+    archive_dir: ".agents/docs/archive"
   risks_or_unknowns: []
   invalidation_inputs:
     manifests: []

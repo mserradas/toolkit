@@ -433,8 +433,8 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
   "ms-designer": {
     "edit": {
       "*": "deny",
-      "docs/design/*.md": "allow",
-      "docs/design/**/*.md": "allow"
+      ".agents/docs/design/*.md": "allow",
+      ".agents/docs/design/**/*.md": "allow"
     },
     "bash": {
       "*": "deny",
@@ -453,8 +453,8 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
   "ms-discovery": {
     "edit": {
       "*": "deny",
-      "docs/discovery/*.md": "allow",
-      "docs/discovery/**/*.md": "allow"
+      ".agents/docs/discovery/*.md": "allow",
+      ".agents/docs/discovery/**/*.md": "allow"
     },
     "bash": "deny",
     "webfetch": "allow",
@@ -605,8 +605,8 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
   "ms-plan": {
     "edit": {
       "*": "deny",
-      "docs/prd/*.md": "allow",
-      "docs/prd/**/*.md": "allow"
+      ".agents/docs/prd/*.md": "allow",
+      ".agents/docs/prd/**/*.md": "allow"
     },
     "bash": "deny",
     "webfetch": "allow",
@@ -734,8 +734,8 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
   "ms-spec": {
     "edit": {
       "*": "deny",
-      "docs/spec/*.md": "allow",
-      "docs/spec/**/*.md": "allow"
+      ".agents/docs/spec/*.md": "allow",
+      ".agents/docs/spec/**/*.md": "allow"
     },
     "bash": {
       "*": "deny",
