@@ -124,6 +124,7 @@ describe("interactive installer prompts", () => {
         projectRoot: "/workspace/project",
         statePath: "/workspace/project/.ms-agent-kit/state.json",
         counts: { ...emptyCounts(), create: 3, unchanged: 12 },
+        conflicts: [],
       },
       driver,
     )
@@ -163,6 +164,7 @@ describe("interactive installer prompts", () => {
         projectRoot: "/workspace",
         statePath: "/Users/example/.ms-agent-kit/state.json",
         counts,
+        conflicts: [],
       },
       driver,
     )
@@ -173,6 +175,72 @@ describe("interactive installer prompts", () => {
     expect(notes[0]?.message).not.toContain("Conflictos")
     expect(notes[0]?.message).toContain("~/.ms-agent-kit/state.json")
     expect(outros).toEqual(["No hay cambios que aplicar"])
+  })
+
+  it("lists each conflict with a shortened path and reason without duplicates", () => {
+    const { driver, notes } = fakeDriver()
+
+    showInstallSummary(
+      {
+        targets: ["codex"],
+        scope: "user",
+        homeDir: "/Users/example",
+        projectRoot: "/workspace",
+        statePath: "/Users/example/.ms-agent-kit/state.json",
+        counts: { ...emptyCounts(), conflict: 3 },
+        conflicts: [
+          {
+            path: "/Users/example/.codex/agents/reviewer.md",
+            reason: "el archivo cambió desde la última instalación",
+          },
+          {
+            path: "/Users/example/.claude/agents/planner.md",
+            reason: "existe un archivo no administrado con contenido distinto",
+          },
+          {
+            path: "/Users/example/.codex/agents/reviewer.md",
+            reason: "el archivo cambió desde la última instalación",
+          },
+        ],
+      },
+      driver,
+    )
+
+    expect(notes[0]?.message).toContain(
+      [
+        "Conflictos",
+        "  ! Requieren atención · 3 incidencias en 2 rutas",
+        "  ~/.claude/agents/planner.md",
+        "    ! existe un archivo no administrado con contenido distinto",
+        "  ~/.codex/agents/reviewer.md",
+        "    ! el archivo cambió desde la última instalación",
+      ].join("\n"),
+    )
+    expect(notes[0]?.message?.match(/~\/\.codex\/agents\/reviewer\.md/g)).toHaveLength(1)
+    expect(notes[0]?.message?.match(/el archivo cambió desde la última instalación/g)).toHaveLength(1)
+  })
+
+  it("keeps the compact conflict count when each incident has its own route", () => {
+    const { driver, notes } = fakeDriver()
+
+    showInstallSummary(
+      {
+        targets: ["codex"],
+        scope: "user",
+        homeDir: "/Users/example",
+        projectRoot: "/workspace",
+        statePath: "/Users/example/.ms-agent-kit/state.json",
+        counts: { ...emptyCounts(), conflict: 2 },
+        conflicts: [
+          { path: "/Users/example/.codex/config.toml", reason: "bloque modificado" },
+          { path: "/Users/example/.config/opencode/opencode.json", reason: "archivo modificado" },
+        ],
+      },
+      driver,
+    )
+
+    expect(notes[0]?.message).toContain("Conflictos\n  ! Requieren atención · 2")
+    expect(notes[0]?.message).not.toContain("2 incidencias en 2 rutas")
   })
 
   it("renders the final result vertically and hides zero counters", () => {

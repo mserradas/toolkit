@@ -26,6 +26,11 @@ import {
 
 export type PlanSummaryCounts = Record<PlanAction | ObsoleteAction, number>
 
+export interface InteractivePlanConflict {
+  path: string
+  reason: string
+}
+
 export interface InteractivePlanSummary {
   targets: Target[]
   scope: InstallScope
@@ -33,6 +38,7 @@ export interface InteractivePlanSummary {
   projectRoot: string
   statePath: string
   counts: PlanSummaryCounts
+  conflicts: InteractivePlanConflict[]
 }
 
 export interface InteractiveDriver {
@@ -129,6 +135,31 @@ function displayPath(value: string, homeDir: string): string {
   return value
 }
 
+function formatConflicts(conflicts: InteractivePlanConflict[], homeDir: string): string[] {
+  const grouped = new Map<string, Set<string>>()
+  for (const conflict of conflicts) {
+    const reasons = grouped.get(conflict.path) ?? new Set<string>()
+    reasons.add(conflict.reason)
+    grouped.set(conflict.path, reasons)
+  }
+
+  return [...grouped.entries()]
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    .flatMap(([conflictPath, reasons]) => [
+      `  ${ui.path(displayPath(conflictPath, homeDir))}`,
+      ...[...reasons].sort().map((reason) => `    ${ui.danger(`! ${reason}`)}`),
+    ])
+}
+
+function formatConflictCount(total: number, conflicts: InteractivePlanConflict[]): string {
+  const routeCount = new Set(conflicts.map((conflict) => conflict.path)).size
+  if (routeCount === total) return `! Requieren atención · ${total}`
+
+  const incidents = total === 1 ? "incidencia" : "incidencias"
+  const routes = routeCount === 1 ? "ruta" : "rutas"
+  return `! Requieren atención · ${total} ${incidents} en ${routeCount} ${routes}`
+}
+
 export function planNeedsConfirmation(counts: PlanSummaryCounts): boolean {
   return changeLabels.some(([action]) => counts[action] > 0) || counts.conflict > 0
 }
@@ -166,7 +197,8 @@ export function formatInstallSummary(summary: InteractivePlanSummary): string {
     body.push(
       "",
       ui.heading("Conflictos"),
-      `  ${styleChange("conflict", `! Requieren atención · ${summary.counts.conflict}`)}`,
+      `  ${styleChange("conflict", formatConflictCount(summary.counts.conflict, summary.conflicts))}`,
+      ...formatConflicts(summary.conflicts, summary.homeDir),
     )
   }
 

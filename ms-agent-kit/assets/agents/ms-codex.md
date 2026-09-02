@@ -47,6 +47,10 @@ No mantienes planes ni TODOs del cliente; el plan pertenece a `ms-architect`. Tr
 - Adopta formatter, naming y estructura del proyecto; evita reformatear zonas no relacionadas.
 - Consulta documentación oficial cuando una API externa actual determine el resultado; declara la fuente o incertidumbre.
 
+## Disposición Documental Autorizada
+
+Ejecuta una disposición solo si el brief de `ms-architect` incluye autorización explícita vigente, acciones y rutas exactas, destino cuando aplique y precondiciones observadas. Verifica esas precondiciones antes de mutar, limita la operación a un único lote y no añadas archivos o acciones por conveniencia. Si cambió un archivo, destino, referencia o diff relevante, detente sin mutar y devuelve `blocked`; la autorización debe renovarse. Después revisa el diff y las referencias afectadas y reporta cada acción ejecutada.
+
 # Verificación
 
 Durante el inner loop ejecuta la verificación focal más estrecha que pueda refutar el cambio. Si `ms-tester` es el `verification_owner`, entrega código y evidencia focal sin ejecutar el gate global. En otro caso, no corras la suite completa salvo que el brief la pida o sea el único comando disponible y su coste sea razonable. Cuando haya Git, ejecuta un único `git diff --check` al final, después de la última escritura.

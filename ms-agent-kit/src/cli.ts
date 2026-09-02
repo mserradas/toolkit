@@ -207,6 +207,9 @@ function printInteractivePlan(plan: InstallPlan, options: CliOptions): void {
     projectRoot: options.context.projectRoot,
     statePath: plan.statePath,
     counts: planSummary(plan),
+    conflicts: plan.items
+      .filter((item) => item.action === "conflict")
+      .map((item) => ({ path: item.artifact.destination, reason: item.reason })),
   })
 }
 

@@ -39,8 +39,29 @@ Usa este modo solo con implementación aceptada y evidencia disponible.
 1. Compara comportamiento final con la spec.
 2. Registra evidencia: archivos, tests, comandos o artefactos.
 3. Documenta drift aprobado y actualiza criterios si la fuente de verdad cambió.
-4. Marca estado `Implementado`, `Verificado`, `Archivado` o `Reemplazado`.
-5. No borres la spec; enlaza su reemplazo cuando corresponda.
+4. Marca estado `Implementado` o `Verificado`; si fue sustituida, marca `Reemplazado` y enlaza la spec vigente. Solo marca `Archivado` con autorización explícita.
+5. Actualiza `Última revisión`, `Implementado en` y `Reemplazado por` solo cuando apliquen y exista evidencia.
+6. Mantén la spec activa y actualizada mientras describa comportamiento soportado. Si quedó reemplazada o el comportamiento desapareció, clasifícala como candidata a archivo o eliminación según la trazabilidad necesaria.
+7. No borres ni muevas la spec. Marcar `Archivado`, cambiar a `Retención: Histórica`, mover o eliminar requiere autorización explícita; sin ella, registra la propuesta. `Histórica` exige motivo.
+
+## Metadatos
+
+Toda spec nueva o actualizada conserva este bloque mínimo, sin exigir campos inaplicables:
+
+```markdown
+> Estado: Borrador | En revisión | Aprobada | Pausada | Cancelada | Implementado | Verificado | Archivado | Reemplazado
+> Feature ID: <id-estable>
+> Contexto: global | branch:<ref> | release:<versión> (omitir solo si global)
+> Última revisión: YYYY-MM-DD
+> Retención: Activa | Temporal | Histórica
+> Revisar cuando: <evento o condición; obligatorio para Temporal e Histórica salvo retención legal indefinida justificada>
+> Ámbito afectado: <contratos, rutas o símbolos, solo cuando aplique>
+> Implementado en: <referencia, solo cuando aplique>
+> Reemplazado por: <ruta, solo cuando aplique>
+> Motivo de retención: <obligatorio si Retención es Histórica>
+```
+
+Mantén como máximo una spec activa por `Feature ID` + `Contexto`. Al crear el ID usa un ticket o ID explícito; si no existe, usa el slug canónico inicial y congélalo. No inventes otro en fases posteriores ni lo cambies al renombrar. Las demás enlazan `Reemplazado por` o se reportan como candidatas de disposición. Una spec parcial que continuará conserva `Temporal` y `Revisar cuando`. En modo cierre solo actualizas tu propia spec con la evidencia suministrada; no editas PRDs, TDDs, documentación pública ni histórico.
 
 # Contenido
 

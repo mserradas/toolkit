@@ -76,10 +76,19 @@ Sigue esta plantilla salvo que exista un PRD previo con otro formato; en ese cas
 ```markdown
 # PRD — <Nombre de la feature>
 
-> Estado: Borrador | En revisión | Aprobado
+> Estado: Borrador | En revisión | Aprobado | Pausado | Cancelado | Reemplazado
+> Feature ID: <id-estable>
+> Contexto: global | branch:<ref> | release:<versión> (omitir solo si global)
 > Autor: ms-plan
 > Fecha: YYYY-MM-DD
+> Última revisión: YYYY-MM-DD
 > Versión: 0.1
+> Retención: Activa | Temporal | Histórica
+> Revisar cuando: <evento o condición; obligatorio para Temporal e Histórica salvo retención legal indefinida justificada>
+> Ámbito afectado: <contrato público, solo cuando aplique; no inventar internals>
+> Implementado en: <referencia, solo cuando aplique>
+> Reemplazado por: <ruta, solo cuando aplique>
+> Motivo de retención: <obligatorio si Retención es Histórica>
 
 ## 1. Resumen ejecutivo
 <3–5 líneas: qué, para quién, por qué ahora>
@@ -148,7 +157,8 @@ Sigue esta plantilla salvo que exista un PRD previo con otro formato; en ese cas
 8. **Sin prescripción de implementación.** Schemas SQL, firmas de función, estructura de carpetas, diagramas de secuencia internos, pseudocódigo → fuera. Es del TDD.
 9. **Consideraciones de seguridad / compliance / datos sensibles** cuando la feature lo exige; declaradas N/A cuando no aplica.
 10. **Cierre completo**: no se entrega sin preguntas abiertas, asunciones y próximo paso declarados.
-11. **No pedir diseño técnico.** Puedes preguntar restricciones visibles de producto ("¿cambia una API pública?", "¿debe funcionar offline?", "¿hay requisitos de accesibilidad?"). No preguntes tablas, endpoints internos, clases, librerías o estructura de carpetas.
+11. **Ciclo de vida bajo pedido.** Solo actualiza un PRD existente cuando el usuario lo pide. Mantén como máximo un PRD activo por `Feature ID` + `Contexto`. Al crear el ID usa un ticket o ID explícito; si no existe, usa el slug canónico inicial y congélalo. No inventes otro en fases posteriores ni lo cambies al renombrar. Actualiza `Última revisión`, `Implementado en` o `Reemplazado por` solo con evidencia suministrada o verificable. El PRD permanece activo mientras la decisión de producto siga vigente; tras implementar, pausar, cancelar, reemplazar o abandonar, conserva solo el rationale útil. Un trabajo parcial conserva `Temporal` y un evento observable en `Revisar cuando`. Puedes proponer promoción, archivo o eliminación, pero no mueves, archivas ni eliminas archivos sin petición y autorización explícitas del usuario. `Retención: Histórica` exige un motivo concreto.
+12. **No pedir diseño técnico.** Puedes preguntar restricciones visibles de producto ("¿cambia una API pública?", "¿debe funcionar offline?", "¿hay requisitos de accesibilidad?"). No preguntes tablas, endpoints internos, clases, librerías o estructura de carpetas.
 
 # Estilo
 

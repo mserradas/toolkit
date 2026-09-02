@@ -51,6 +51,32 @@ Incluye únicamente secciones útiles:
 
 Marca `N/A` solo cuando ayuda al revisor a confirmar que un riesgo fue considerado. Evita plantillas infladas, pseudocódigo implementable y bloques de producción. Referencia símbolos y rutas en vez de copiar código.
 
+Todo TDD nuevo o actualizado incluye estos metadatos, omitiendo campos que no apliquen:
+
+```markdown
+> Estado: Borrador | En revisión | Aprobado | Pausado | Cancelado | Implementado | Reemplazado
+> Feature ID: <id-estable>
+> Contexto: global | branch:<ref> | release:<versión> (omitir solo si global)
+> Última revisión: YYYY-MM-DD
+> Retención: Activa | Temporal | Histórica
+> Revisar cuando: <evento o condición; obligatorio para Temporal e Histórica salvo retención legal indefinida justificada>
+> Ámbito afectado: <contratos, rutas o símbolos, solo cuando aplique>
+> Implementado en: <referencia, solo cuando aplique>
+> Reemplazado por: <ruta, solo cuando aplique>
+> Motivo de retención: <obligatorio si Retención es Histórica>
+```
+
+Mantén como máximo un TDD activo por `Feature ID` + `Contexto`. Al crear el ID usa un ticket o ID explícito; si no existe, usa el slug canónico inicial y congélalo. No inventes otro en fases posteriores ni lo cambies al renombrar. Los demás enlazan `Reemplazado por` o se reportan como candidatos de disposición. Un TDD parcial que continuará conserva `Temporal` y `Revisar cuando`.
+
+# Modo Cierre
+
+Con implementación aceptada y evidencia suministrada, actualiza únicamente el TDD propio:
+
+1. Registra estado, última revisión, referencia de implementación y drift aprobado.
+2. Identifica decisiones técnicas duraderas y propone sintetizarlas en README, documentación pública permitida o la convención ADR/arquitectura ya existente mediante un owner autorizado.
+3. Tras esa promoción, propone eliminar el TDD; solo propone archivarlo si existe valor histórico explícito. Si no hay destino autorizado, conserva un TDD compacto y reporta el gap.
+4. No escribas el destino promovido ni muevas, archives o elimines archivos. Esas acciones requieren owner y autorización explícita; `Retención: Histórica` exige motivo.
+
 # Calidad
 
 - Deriva stack, comandos y convenciones del repo; no los inventes.

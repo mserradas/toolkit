@@ -20,6 +20,8 @@ El catálogo actual incluye 12 agentes, 2 comandos y 7 `skills` generales. En Co
 
 Las misiones se preparan para unas 8–12 iteraciones. Si el primer presupuesto se agota, se divide o reduce el trabajo pendiente en lugar de repetir la misma delegación. Los presupuestos especiales son: `ms-fastlane` 12, `ms-scout` 12 y `ms-tester` 16; los demás subagentes usan 20.
 
+`.agents/docs/` es memoria de trabajo versionada, con retención y disposición controladas; consulta [Artefactos del flujo](#artefactos-del-flujo).
+
 ## Idioma de la documentación
 
 Los agentes ms-* escriben en español neutro y profesional toda la prosa humana de documentos nuevos o actualizados, aunque el repositorio use otro idioma. Esto incluye títulos, metadatos, explicaciones, requisitos, decisiones, criterios de aceptación, tablas, changelog y notas de publicación.
@@ -102,6 +104,86 @@ ms-agent-kit install \
 ```
 
 Si se omite `--project`, el directorio actual se usa como raíz del proyecto.
+
+## Artefactos del flujo
+
+Versiona los artefactos activos que todavía explican una decisión o comportamiento vigente. `.agents/docs/` es memoria de trabajo, no un almacén permanente: al cerrar un flujo se conserva, promueve o propone retirar cada documento con una razón observable. La carpeta `docs/` queda reservada para documentación dirigida a usuarios y desarrolladores, como guías, API, changelog y notas de versión.
+
+| Artefacto | Ruta canónica | Uso |
+|---|---|---|
+| Discovery | `.agents/docs/discovery/` | Notas tempranas, supuestos y experimentos |
+| PRD | `.agents/docs/prd/` | Problema, alcance y requisitos de producto |
+| Spec | `.agents/docs/spec/` | Comportamiento observable y criterios verificables |
+| TDD | `.agents/docs/design/` | Decisiones y diseño técnico |
+| Histórico | `.agents/docs/archive/` | Trazabilidad justificada; no es una fuente activa ni un vertedero |
+
+### Ciclo de vida práctico
+
+| Tipo | Mientras aporta | Al dejar de aportar |
+|---|---|---|
+| Discovery | Temporal; conserva supuestos y evidencia aún no absorbida | Sintetiza lo útil en el PRD y propone eliminar la nota, salvo evidencia única |
+| PRD | Activo mientras siga vigente la decisión de producto | Conserva solo el rationale útil; propone archivo únicamente con razón histórica |
+| Spec | Activa y actualizada mientras describa comportamiento soportado | Propone archivo o eliminación según la trazabilidad necesaria |
+| TDD | Activo durante diseño e implementación | Promueve decisiones duraderas a la convención existente y propone eliminarlo; si no hay destino autorizado, lo compacta y reporta el gap |
+
+En cada combinación de tipo + `Feature ID` + `Contexto` debe existir como máximo un artefacto activo. `Feature ID` usa un ticket o ID explícito si existe; si no, usa el slug canónico inicial y queda congelado para todas las fases. `Contexto` distingue `global`, `branch:<ref>` y `release:<versión>`, y puede omitirse solo para `global`. Los demás enlazan `Reemplazado por` o se reportan como candidatos de disposición. Todo artefacto mantenido usa estos metadatos mínimos:
+
+- `Feature ID`, `Estado` y `Última revisión`.
+- `Contexto` cuando no sea `global`.
+- `Retención: Activa | Temporal | Histórica`.
+- `Revisar cuando` para `Temporal` e `Histórica`, salvo retención legal indefinida justificada.
+- `Ámbito afectado` cuando pueda vincularse con contratos, rutas o símbolos; un PRD no inventa internals.
+- `Implementado en` y `Reemplazado por` solo cuando apliquen.
+- Motivo de retención obligatorio cuando `Retención` es `Histórica`.
+
+Al cerrar un flujo nivel 3–4, `ms-architect` informa una de cuatro clasificaciones: `mantener activo`, `promover`, `archivar propuesto` o `eliminar propuesto`, junto con razón y evidencia. Fastlane y nivel 2 claro no crean un subflujo documental. Archivar, mover o eliminar siempre requiere autorización explícita; ningún agente lo ejecuta automáticamente.
+
+### Casos de mantenimiento
+
+| Situación | Acción |
+|---|---|
+| Trabajo pausado, cancelado, abandonado o reemplazado | Aplica el gate nivel 3–4; si continuará, mantiene `Temporal` con un evento observable |
+| Ramas o releases divergentes | Separa por `Contexto` y reporta conflicto; no combina ni retira automáticamente |
+| Drift posterior | Si se toca `Ámbito afectado` o se cumple `Revisar cuando`, exige revisión antes de reutilizar |
+| Referencia o promoción | Comprueba destino, ciclos, identidad, evidencia y ausencia de duplicación activa |
+| Mutación autorizada | Lista acciones/rutas exactas, obtiene autorización vigente, ejecuta un solo lote y revisa diff/referencias; cualquier cambio relevante invalida la autorización |
+| PRD o discovery desactualizado | Emite `handoff_required`; el usuario ejecuta el handoff o acepta la deuda documental |
+
+Para mantenimiento explícito, usa como argumento completo `/ms-status docs` o `/ms-status maintenance`: lista solo cabeceras, metadatos y enlaces, y lee cuerpos únicamente ante conflicto. Otros argumentos, como `docs-api`, mantienen la inspección focal.
+
+### Cómo selecciona los artefactos `ms-architect`
+
+1. Si el usuario indica una ruta, `ms-architect` usa esa referencia. Si no existe, detiene el flujo y lo informa; no la sustituye silenciosamente.
+2. Sin una ruta explícita, busca un candidato único por `feature slug` dentro del directorio canónico.
+3. Si encuentra varios candidatos, usa estado y trazabilidad. No decide por fecha ni `mtime`.
+4. Lee solo el artefacto activo y sus referencias directas. No carga todo `.agents/docs/` ni ejecuta `ms-project-init` para resolver una ruta ya conocida.
+5. Si la petición vigente, el PRD, la spec o el TDD se contradicen, reporta el drift antes de avanzar.
+
+Un PRD con estado `Borrador` o `En revisión` no autoriza una implementación. Los artefactos con `Retención: Histórica`, estado `Archivado` o `Reemplazado`, o guardados en `.agents/docs/archive/`, no se usan como entrada activa.
+
+Cuando una delegación depende de estos documentos, recibe las rutas ya resueltas para evitar búsquedas repetidas:
+
+```yaml
+artifact_inputs:
+  feature_id: "feature-id-estable"
+  context: "global"
+  prd: ".agents/docs/prd/feature-2026-09-01.md"
+  spec: ".agents/docs/spec/feature.md"
+  design: null
+```
+
+### Proyectos con rutas anteriores
+
+Las carpetas `docs/discovery`, `docs/prd`, `docs/spec`, `docs/design` y `docs/archive` se consideran legacy. El kit no las mueve automáticamente ni escribe nuevos artefactos en ellas.
+
+Antes de migrarlas:
+
+1. Comprueba si ya existe un documento equivalente en `.agents/docs/`.
+2. Conserva un único artefacto activo por objetivo y actualiza sus referencias.
+3. Propón mover a `.agents/docs/archive/` solo los documentos con valor histórico explícito y motivo de retención.
+4. Mueve o elimina únicamente después de obtener autorización explícita y revisar el diff.
+
+Después de actualizar estas fuentes, vuelve a instalar la configuración para que los clientes reciban los contratos nuevos y ejecuta `ms-agent-kit doctor` para comprobar la instalación.
 
 ## Comandos
 

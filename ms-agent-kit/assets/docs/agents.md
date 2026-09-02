@@ -1,6 +1,6 @@
 # Agentes ms-*
 
-> Actualizado: 2026-07-23
+> Actualizado: 2026-09-01
 
 Este equipo separa producto, arquitectura, implementación, verificación y auditoría.
 
@@ -26,6 +26,41 @@ TDD aprobado -> ms-architect -> work units -> verificación -> cierre de spec si
 3. Las misiones se dimensionan para unas 8–12 iteraciones. Si el primer presupuesto se agota con trabajo pendiente, el arquitecto divide o reduce la misión en vez de encadenar extensiones.
 4. Usa `implementer` cuando `ms-codex` o `ms-fastlane` cubre los gates, `ms-tester` cuando queda un gate independiente pendiente y `none` en tareas sin ejecución verificable. Un `PASS` vigente, ejecutado o reutilizado, cubre el gate mientras no haya escrituras posteriores que puedan invalidarlo.
 
+### Resolución de artefactos
+
+Los artefactos operativos viven en `.agents/docs/{discovery,prd,spec,design}` y su histórico en `.agents/docs/archive`; `docs/` se reserva para documentación pública. `ms-architect` prioriza una ruta explícita del usuario: si no existe en disco, la reporta como input inválido y bloqueante, sin sustituirla silenciosamente. Solo en ausencia de ruta explícita usa el candidato único por feature slug. Nunca desempata por fecha o `mtime`: usa trazabilidad y estado, reporta drift entre petición, PRD, spec y TDD respetando el ámbito de cada uno, y pide decisión solo cuando cambie el resultado.
+
+Un PRD `Borrador` o `En revisión` no autoriza implementación; los artefactos con `Retención: Histórica`, estado `Archivado` o `Reemplazado`, o ubicados en `.agents/docs/archive/**`, no son fuentes activas. Las rutas legacy `docs/{discovery,prd,spec,design,archive}` solo se reportan para migración o confirmación y no reciben escrituras nuevas. Las delegaciones dependientes reciben un bloque `artifact_inputs` con las rutas resueltas, y `ms-project-init` refleja el root canónico, directorios, artefactos activos y rutas legacy sin escanear ampliamente el árbol.
+
+### Ciclo de vida
+
+`.agents/docs` es memoria de trabajo versionada. El happy path es conservar como máximo un artefacto activo por tipo y feature, actualizar sus metadatos y revisar su utilidad al cerrar un flujo nivel 3–4. `.agents/docs/archive` no es una fuente activa ni un vertedero.
+
+| Artefacto | Regla de retención |
+|---|---|
+| Discovery | Temporal por defecto; al pasar a PRD se absorbe la evidencia útil y se propone eliminar la nota salvo evidencia única |
+| PRD | Activo mientras la decisión siga vigente; después solo se conserva el rationale útil |
+| Spec | Activa y actualizada mientras el comportamiento siga soportado |
+| TDD | Tras implementar, sus decisiones duraderas se promueven a la convención existente; si no hay destino autorizado, se compacta y se reporta el gap |
+
+Los metadatos mínimos son `Feature ID`, `Estado`, `Última revisión` y `Retención: Activa | Temporal | Histórica`; `Contexto: global | branch:<ref> | release:<versión>` puede omitirse solo para `global`. `Feature ID` usa un ticket o ID explícito cuando existe; en otro caso usa el slug canónico inicial y queda congelado para todas las fases. `Revisar cuando` es obligatorio para `Temporal` e `Histórica`, salvo retención legal indefinida justificada; `Ámbito afectado`, `Implementado en` y `Reemplazado por` se añaden solo cuando aplican. `Histórica` exige un motivo de retención concreto. La unicidad se evalúa por tipo + `Feature ID` + `Contexto`, no por título o slug.
+
+En el cierre, `ms-architect` reporta por artefacto `mantener activo`, `promover`, `archivar propuesto` o `eliminar propuesto`, con razón y evidencia. El archivo solo se propone por auditoría, compliance, una decisión mayor o petición del usuario; Git conserva el historial de material puramente operativo. Archivar, mover o eliminar requiere autorización explícita y nunca se ejecuta automáticamente. Fastlane y nivel 2 claro no abren un subflujo documental.
+
+#### Casos de mantenimiento
+
+| Caso | Regla operativa |
+|---|---|
+| Pausa, cancelación o reemplazo nivel 3–4 | Ejecuta el gate; si continuará, conserva `Temporal` y fija un evento observable en `Revisar cuando` |
+| Rama o versión divergente | Separa por `Contexto`; no combina ni dispone automáticamente |
+| Cambio posterior | Si toca `Ámbito afectado` o cumple `Revisar cuando`, marca `review_required` y compara antes de reutilizar |
+| Referencias | Valida existencia, ciclos, identidad/contexto e `Implementado en`; referencias externas quedan no verificadas sin búsqueda automática |
+| Promoción | Comprueba destino, contenido duradero, referencias actualizadas y que no haya duplicación activa antes de retirar el origen |
+| Disposición autorizada | Muestra lote exacto, obtiene autorización, delega una única mutación a `ms-codex` y revisa diff/referencias; cualquier cambio relevante invalida la autorización |
+| PRD o discovery pendiente | Emite `handoff_required` para el usuario; spec y TDD se actualizan por sus agentes dentro de sus límites |
+
+Cuando el argumento normalizado completo sea `/ms-status docs` o `/ms-status maintenance`, lista solo cabeceras, metadatos y enlaces; lee cuerpos solo para resolver conflictos. El modo normal —incluido un objetivo como `docs-api`— sigue focal y no escanea todo `.agents/docs`.
+
 ## Comandos
 
 | Comando | Uso |
@@ -46,7 +81,7 @@ Se incorporan ideas útiles sin añadir una segunda familia de agentes:
 - **`ms-project-init`**: skill ligera para detectar stack, arquitectura, comandos de verificación y riesgos desconocidos antes de cambios grandes.
 - **`work-unit-commits`**: skill para partir trabajo en unidades revisables con tests/docs acoplados al comportamiento que verifican.
 - **`ms-spec`**: spec funcional ligera para cerrar comportamiento, reglas, criterios y contratos antes del TDD cuando el cambio lo justifica.
-- **Cierre de spec**: modo de `ms-spec` inspirado en OpenSpec archive; actualiza estado, evidencia y drift para que la spec siga siendo útil.
+- **Cierre de spec**: `ms-spec` actualiza estado, retención, evidencia y drift; propone disposición sin borrar ni mover.
 - **Preguntas interactivas con `question`**: `ms-architect`, `ms-plan` y `ms-discovery` usan el selector nativo de OpenCode para decisiones bloqueantes, entrevistas de producto y pausas entre fases.
 - **`ms-doctor`**: diagnóstico read-only específico del cliente; no mezcla configuración ni inventarios de skills entre OpenCode, Claude Code y Codex.
 - **Context7 MCP**: documentación actual de librerías/frameworks/APIs desde `https://mcp.context7.com/mcp`, usada antes de `webfetch` cuando aplica.
@@ -119,6 +154,7 @@ OpenCode y Claude Code materializan `toolCycleBudget` para limitar cada misión.
 - `ms-architect` enruta el diagnóstico operativo de solo lectura sobre procesos, contenedores, servicios o CI a `ms-debugger`; tests/lint/typecheck/build a `ms-tester`; y una operación mutante explícitamente autorizada a `ms-codex`. No prueba primero comandos operativos bloqueados por su rol.
 - `ms-architect` delega tests, linters, formatters, servidores, instalaciones, migraciones, commits, pushes y cualquier comando con efectos secundarios.
 - `ms-architect` elige primero un nivel de orquestación; no decide agentes por inercia.
+- `ms-architect` resuelve artefactos durables antes de decidir spec/TDD o delegar; lee solo el activo y sus referencias directas, sin cargar todo `.agents/docs` ni invocar `ms-project-init` para una ruta ya conocida.
 - `ms-architect` es el único propietario del plan y del `TODO`; los workers ejecutan la misión recibida y entregan evidencia, sin crear un plan paralelo.
 - `ms-architect` exige `Contrato para ms-architect` a todo worker o subagente de su flujo antes de aceptar resultados; esta regla no aplica a los primarios `ms-plan` y `ms-discovery`.
 - `ms-architect` no invoca más de 3 subagentes por ola salvo justificación explícita, compacta cada ola en máximo 10 bullets y acepta contratos completos sin reanalizar reportes enteros.
@@ -131,12 +167,12 @@ OpenCode y Claude Code materializan `toolCycleBudget` para limitar cada misión.
 - `ms-architect` carga la skill `ms-project-init` cuando no hay snapshot confiable de stack/comandos o antes de un nivel 4.
 - `ms-architect` carga `work-unit-commits` para partir nivel 3-4 por comportamiento entregable, no por tipo de archivo.
 - `ms-architect` usa `ms-spec` solo para cambios nivel 3-4, features ambiguas, contratos públicos, datos, seguridad, migraciones o decisiones irreversibles; no lo usa en fastlane ni nivel 2 claro.
-- `ms-architect` delega el modo de cierre de `ms-spec` antes del cierre final si una implementación nivel 3-4 tuvo spec funcional y el resultado afecta comportamiento observable. La spec se marca `Implementado`, `Verificado`, `Archivado` o `Reemplazado` con evidencia; no se borra.
+- `ms-architect` delega el modo de cierre de `ms-spec` antes del cierre final si una implementación nivel 3-4 tuvo spec funcional y el resultado afecta comportamiento observable. La spec registra `Implementado` o `Verificado` y evidencia; `Reemplazado` enlaza la spec vigente. `Archivado`, mover o eliminar se proponen según trazabilidad y requieren autorización explícita.
 - `ms-architect` usa `judgment-day` únicamente cuando el usuario pide doble juez o revisión adversarial.
 - `ms-architect` usa `delegation-brief` antes de delegar paquetes nivel 3-4, TDD/spec, bugs, reviews, auditorías, verificaciones o retries; fastlane y nivel 2 trivial pueden usar brief corto.
-- `/ms-status` informa el estado observable desde el contexto actual, Git y artefactos durables sin continuar ni persistir trabajo.
+- `/ms-status` informa en solo lectura el estado observable, `Estado`/`Retención` de artefactos activos y candidatos de disposición con evidencia; no continúa el trabajo ni decide borrados.
 - `ms-spec` no diseña arquitectura técnica ni implementación; produce comportamiento, reglas, casos borde y criterios verificables en `.agents/docs/spec/**`, y al cierre registra evidencia, estado final y drift.
-- `ms-designer` no asigna ejecutores; solo diseña el TDD.
+- `ms-designer` no asigna ejecutores; diseña el TDD y, en modo cierre, solo actualiza su propio artefacto con evidencia suministrada y propone promoción o disposición.
 - `ms-designer` incluye previsión de revisión en la sección de paquetes del TDD.
 - `ms-fastlane` se bloquea si el cambio no califica como acotado: máximo 3 archivos totales, <=120 LOC estimadas, sin contrato público, datos persistidos, seguridad, infra, CI/CD, dependencias, ambigüedad de producto ni decisión irreversible.
 - `ms-codex` no rediseña ni amplía scope.

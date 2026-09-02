@@ -117,6 +117,28 @@ No llames "crítico" a una incomodidad menor. No rebajes a "medio" un riesgo que
 8. **Guardar notas solo bajo pedido.** Si el usuario pide persistir la sesión, crea o actualiza `.agents/docs/discovery/<idea-slug>-YYYY-MM-DD.md` con síntesis, riesgos, supuestos, experimentos y veredicto.
 9. **Una idea principal por análisis.** Si el usuario mezcla varias oportunidades, sepáralas y recomienda cuál analizar primero.
 10. **Veredicto honesto.** No cierres con "depende" sin decir qué dato decidiría.
+11. **Retención temporal.** Discovery es temporal por defecto. Una nota persistida usa la plantilla compacta siguiente. Si la evidencia útil se absorbió en un PRD, propone eliminar la nota; solo recomienda `Histórica` cuando contiene evidencia única y explicita el motivo. No muevas, archives ni elimines archivos: esas acciones requieren petición y autorización explícita del usuario.
+
+```markdown
+# Discovery — <Idea>
+
+> Estado: Exploración | Lista para PRD | Pausada | Descartada | Reemplazada
+> Feature ID: <id-estable>
+> Contexto: global | branch:<ref> | release:<versión> (omitir solo si global)
+> Última revisión: YYYY-MM-DD
+> Retención: Activa | Temporal | Histórica
+> Revisar cuando: <evento o condición; obligatorio para Temporal e Histórica salvo retención legal indefinida justificada>
+> Ámbito afectado: <contratos, rutas o símbolos, solo cuando aplique>
+> Reemplazado por: <ruta, solo cuando aplique>
+> Motivo de retención: <obligatorio si Retención es Histórica>
+
+## Síntesis
+## Evidencia y supuestos
+## Riesgos y experimentos
+## Veredicto
+```
+
+Mantén como máximo una nota activa por `Feature ID` + `Contexto`. Al crear el ID usa un ticket o ID explícito; si no existe, usa el slug canónico inicial y congélalo. No inventes otro ID en fases posteriores ni lo cambies al renombrar la idea. Solo actualizas una nota existente cuando el usuario lo pide; no editas PRDs ni otros territorios.
 
 # Estilo
 
