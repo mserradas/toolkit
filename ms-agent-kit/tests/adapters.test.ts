@@ -62,8 +62,14 @@ describe("platform adapters", () => {
       ]),
     )
 
-    expect(counts).toEqual({ opencode: 25, claude: 23, codex: 22 })
-    expect(artifacts).toHaveLength(70)
+    const catalog = await loadCatalog(DEFAULT_ASSETS_ROOT)
+    const skillFiles = catalog.skills.reduce((count, skill) => count + skill.files.length, 0)
+    expect(counts).toEqual({
+      opencode: catalog.agents.length + catalog.commands.length + skillFiles + catalog.documentation.length + catalog.openCodeConfigFiles.length + catalog.openCodePlugins.length + 1,
+      claude: catalog.agents.length + catalog.commands.length + skillFiles + 2,
+      codex: catalog.agents.length - 1 + catalog.commands.length + catalog.skills.filter((skill) => skill.name !== "skill-creator").reduce((count, skill) => count + skill.files.length, 0) + 3,
+    })
+    expect(artifacts).toHaveLength(Object.values(counts).reduce((sum, count) => sum + count, 0))
     expect(new Set(artifacts.map((artifact) => artifact.destination)).size).toBe(artifacts.length)
     expect(
       artifacts.every((artifact) =>
@@ -110,7 +116,8 @@ describe("platform adapters", () => {
       const content = source!.content.toString("utf8")
       expect(content).toContain("Toda prosa humana de documentación")
       expect(content).toContain("Conserva sin traducir identificadores")
-      expect(content).toContain("normaliza al español toda la prosa humana")
+      expect(content).toContain("conserva el idioma del documento existente")
+      expect(content).not.toContain("normaliza al español toda la prosa humana")
     }
     expect(
       artifacts.some((artifact) => ["ms-progress", "ms-continue"].includes(artifact.name)),
@@ -158,8 +165,9 @@ describe("platform adapters", () => {
     )
 
     expect(agents).toHaveLength(12)
-    expect(skills).toHaveLength(7)
-    expect(new Set(skills.map((artifact) => artifact.name))).toHaveLength(7)
+    const catalog = await loadCatalog(DEFAULT_ASSETS_ROOT)
+    expect(skills).toHaveLength(catalog.skills.reduce((count, skill) => count + skill.files.length, 0))
+    expect(new Set(skills.map((artifact) => artifact.name))).toHaveLength(catalog.skills.length)
     for (const agent of agents) {
       const definition = agentDefinition(agent.name)
       const profile = modelProfile(definition.modelProfile)
@@ -184,7 +192,7 @@ describe("platform adapters", () => {
         expect(document.frontmatter.steps).toBe(definition.toolCycleBudget)
       }
       const rolePermission = openCodeRolePermission(agent.name)
-      expect(permission.skill).toBe(rolePermission.skill)
+      expect(permission.skill).toEqual(rolePermission.skill)
       expect(permission.lsp).toBe(rolePermission.lsp)
       expect(permission.question).toBe(definition.mode === "primary" ? "allow" : "deny")
       expect(permission.todowrite).toBe(rolePermission.todowrite)
@@ -271,15 +279,15 @@ describe("platform adapters", () => {
 
   it("offers balanced, strict, and trusted OpenCode permission profiles", () => {
     const balanced = openCodeRolePermission("ms-codex", "balanced")
-    expect(balanced).toMatchObject({ lsp: "deny", todowrite: "deny", skill: "deny", question: "deny" })
+    expect(balanced).toMatchObject({ lsp: "deny", todowrite: "deny", skill: { "*": "allow", "ms-architect": "deny" }, question: "deny" })
     expect(balanced.bash).toMatchObject({ "*": "ask", "rm -rf*": "deny", "npm install*": "ask" })
 
     const strict = openCodeRolePermission("ms-codex", "strict")
-    expect(strict).toMatchObject({ lsp: "deny", todowrite: "deny", skill: "deny" })
+    expect(strict).toMatchObject({ lsp: "deny", todowrite: "deny", skill: { "*": "allow", "ms-architect": "deny" } })
     expect(strict.bash).toMatchObject({ "*": "ask", "rm -rf*": "deny" })
 
     const trusted = openCodeRolePermission("ms-codex", "trusted")
-    expect(trusted).toMatchObject({ lsp: "deny", todowrite: "deny", skill: "deny", websearch: "allow" })
+    expect(trusted).toMatchObject({ lsp: "deny", todowrite: "deny", skill: { "*": "allow", "ms-architect": "deny" }, websearch: "allow" })
     expect(trusted.bash).toMatchObject({ "*": "allow", "rm -rf*": "deny", "npm install*": "allow" })
     expect(trusted.task).toEqual({ "*": "deny" })
 
@@ -291,7 +299,7 @@ describe("platform adapters", () => {
         expect(rolePermission.question).toBe(definition.mode === "primary" ? "allow" : "deny")
         if (profile === "balanced") {
           const strictPermission = openCodeRolePermission(name, "strict")
-          expect(rolePermission.skill).toBe(strictPermission.skill)
+          expect(rolePermission.skill).toEqual(strictPermission.skill)
           expect(rolePermission.lsp).toBe(strictPermission.lsp)
         }
       }
@@ -565,7 +573,8 @@ describe("platform adapters", () => {
     const opencode = configurations.find((artifact) => artifact.name === "opencode.json")
     const tui = configurations.find((artifact) => artifact.name === "tui.json")
 
-    expect(artifacts).toHaveLength(25)
+    const catalog = await loadCatalog(DEFAULT_ASSETS_ROOT)
+    expect(artifacts).toHaveLength(catalog.agents.length + catalog.commands.length + catalog.skills.reduce((count, skill) => count + skill.files.length, 0) + catalog.documentation.length + catalog.openCodeConfigFiles.length + catalog.openCodePlugins.length + 1)
     expect(configurations).toHaveLength(2)
     expect(opencode?.destination).toBe(path.join(buildContext.homeDir, ".config", "opencode", "opencode.json"))
     const openCodeConfig = JSON.parse(opencode!.content.toString("utf8"))
@@ -719,6 +728,8 @@ describe("platform adapters", () => {
     const expectedWorkflowAgents = new Map([
       ["ms-doctor", "ms-architect"],
       ["ms-status", "ms-architect"],
+      ["ms-fastlane", "ms-fastlane"],
+      ["ms-handoff", "ms-architect"],
     ])
     expect(commands).toHaveLength(expectedWorkflowAgents.size)
     for (const command of commands) {
@@ -852,7 +863,8 @@ describe("platform adapters", () => {
       const content = agents.find((agent) => agent.name === name)!.content.toString("utf8")
       expect(content).toContain(noWorkerPlan)
       expect(content).toContain(noCoordination)
-      expect(content).toContain(noSkills)
+      if (name === "ms-scout") expect(content).toContain(noSkills)
+      else expect(content).toContain("Puedes cargar skills técnicas seleccionadas")
     }
     for (const name of ["ms-plan", "ms-discovery"]) {
       const content = agents.find((agent) => agent.name === name)!.content.toString("utf8")

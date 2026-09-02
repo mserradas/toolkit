@@ -19,6 +19,7 @@ Prepara instrucciones autosuficientes para un worker; no ejecuta la misión. Ús
 - Define aceptación observable, evidencia de entrega y verificaciones conocidas; no inventes comandos.
 - Designa un único `verification_owner`: `implementer | ms-tester | none`. Usa `implementer` para `ms-codex` o `ms-fastlane`, `ms-tester` cuando quede un gate independiente pendiente y `none` para tareas sin ejecución verificable.
 - Declara dependencias, evidencia existente y estado del workspace desde esa evidencia.
+- Incluye `skill_inputs` únicamente con rutas exactas ya resueltas de skills técnicas pertinentes. Si no hacen falta usa `[]`; no pases protocolos de orquestación a ejecutores ni amplíes sus permisos.
 - En un reintento envía solo el delta: qué preservar, qué falta y qué efectos o verificaciones no repetir. Nunca reenvíes el brief original sin cambios.
 
 ## Plantilla
@@ -33,6 +34,9 @@ Contexto necesario:
   - <decisiones, archivos, símbolos o dependencias imprescindibles>
   - Evidencia existente: <comando/resultado reutilizable o “ninguna”>
   - Estado del workspace: <writes/cambios desde la evidencia>
+
+skill_inputs:
+  - <ruta exacta de una skill técnica pertinente; [] si no aplica>
 
 Alcance permitido:
   - <archivos, módulos, comportamiento o comandos>

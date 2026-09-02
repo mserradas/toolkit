@@ -1512,7 +1512,10 @@ describe("Claude permission guard", () => {
     for (const command of commands) {
       const frontmatter = parseMarkdown(command.content.toString("utf8")).frontmatter
       expect(frontmatter.context).toBe("fork")
-      expect(frontmatter.agent).toBe("ms-architect")
+      const expectedAgent = command.name === "ms-fastlane" ? "ms-fastlane" : "ms-architect"
+      expect(frontmatter.agent).toBe(expectedAgent)
+      expect(frontmatter.hooks).toHaveProperty("PreToolUse")
+      if (command.name === "ms-fastlane") expect(frontmatter.hooks).toHaveProperty("Stop")
     }
   })
 })

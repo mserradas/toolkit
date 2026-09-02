@@ -7,12 +7,16 @@ import path from "node:path"
 import process from "node:process"
 import { parseArgs, promisify } from "node:util"
 import { buildArtifacts } from "./adapters/index.js"
+import { runProjectCommand } from "./cli/project.js"
 import { DEFAULT_ASSETS_ROOT, loadCatalog } from "./core/catalog.js"
 import { AppError, normalizeAppError, throwIfAborted } from "./core/errors.js"
+import { loadKitConfiguration } from "./core/kit-config.js"
+import { resolvedModels } from "./core/model-profiles.js"
 import { parseMarkdown } from "./core/frontmatter.js"
 import { applyPlan, installationStatus, uninstallTargets } from "./core/installer.js"
 import { withOperationLock, type MutableOperation } from "./core/operation-lock.js"
 import { createPlan } from "./core/planner.js"
+import { commandCapabilities, diagnoseClient, inspectRuntimeProject, installationCapabilities, probeOptions, projectContextDiagnostic, resolveClientExecutable } from "./core/runtime-diagnostics.js"
 import { createTerminationController, type TerminationSignal } from "./core/termination.js"
 import {
   finishWithoutChanges,
@@ -50,6 +54,7 @@ Uso:
   ms-agent-kit install [opciones]
   ms-agent-kit status [opciones]
   ms-agent-kit uninstall [opciones]
+  ms-agent-kit project init|inspect [--project <ruta>] [--json] [--dry-run]
 
 Opciones:
   --target <valor>    Cliente objetivo: \`opencode\`, \`claude\`, \`codex\` o \`all\`. Puede repetirse.
@@ -219,6 +224,7 @@ function printPlan(plan: InstallPlan, asJson: boolean): void {
       `${JSON.stringify(
         {
           statePath: plan.statePath,
+          models: plan.models,
           summary: planSummary(plan),
           items: [
             ...plan.items.map((item) => ({
@@ -247,6 +253,11 @@ function printPlan(plan: InstallPlan, asJson: boolean): void {
   }
 
   const summary = planSummary(plan)
+  if (plan.models) {
+    for (const [target, profiles] of Object.entries(plan.models)) {
+      process.stdout.write(`Modelos ${target}: ${Object.entries(profiles).map(([name, model]) => `${name}=${model.model ?? "heredado"} (${model.modelSource}; esfuerzo ${model.reasoningEffort ?? "heredado"}, ${model.reasoningEffortSource})`).join("; ")}. Disponibilidad no comprobada.\n`)
+    }
+  }
   process.stdout.write(
     `Plan de instalación: ${summary.create} crear, ${summary.update} actualizar, ${summary.adopt} adoptar, ${summary.unchanged} sin cambios, ${summary.remove} eliminar, ${summary.restore} restaurar, ${summary.detach} desvincular, ${summary.skip} omitir, ${summary.conflict} conflictos\n`,
   )
@@ -378,6 +389,7 @@ async function duplicateCodexSkills(context: BuildContext): Promise<Array<{ name
 
 async function checkCodexSecretRules(
   rulePath: string | undefined,
+  projectRoot: string,
 ): Promise<{ status: "passed" | "failed" | "not_installed" | "unavailable"; detail: string }> {
   if (!rulePath) return { status: "not_installed", detail: "No se generó la política ms-secrets" }
   try {
@@ -388,6 +400,9 @@ async function checkCodexSecretRules(
     }
     throw error
   }
+
+  const executable = await resolveClientExecutable("codex", projectRoot)
+  if (!executable) return { status: "unavailable", detail: "No se encontró un binario Codex permitido fuera del proyecto" }
 
   const cases = [
     { args: ["cat", ".env"], forbidden: true },
@@ -421,19 +436,21 @@ async function checkCodexSecretRules(
   ] as const
 
   try {
+    const options = await probeOptions(executable, projectRoot)
     const results = await Promise.all(
       cases.map(async (testCase) => {
-        const { stdout } = await execFileAsync("codex", [
+        const { stdout } = await execFileAsync(executable.path, [
           "execpolicy",
           "check",
           "--rules",
           rulePath,
           "--",
           ...testCase.args,
-        ])
-        const result = JSON.parse(stdout) as { decision?: string }
+        ], options)
+        const result = JSON.parse(stdout) as { decision?: unknown }
         const isForbidden = result.decision === "forbidden"
-        return { ...testCase, decision: result.decision, passed: isForbidden === testCase.forbidden }
+        const decision = ["forbidden", "allow", "allowed", "prompt"].includes(String(result.decision)) ? String(result.decision) : "sin decisión reconocida"
+        return { ...testCase, decision, passed: isForbidden === testCase.forbidden }
       }),
     )
     const failed = results.filter((result) => !result.passed)
@@ -456,14 +473,15 @@ async function checkCodexSecretRules(
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return { status: "unavailable", detail: "No se encontró el binario `codex`" }
     }
-    return { status: "failed", detail: `Codex no pudo validar la política: ${(error as Error).message}` }
+    return { status: "failed", detail: "Codex no pudo validar la política dentro del timeout y límite de salida; no se publica la salida del proceso" }
   }
 }
 
 async function runDoctor(options: CliOptions): Promise<void> {
   const catalog = await loadCatalog(options.context.assetsRoot)
-  const artifacts = await buildArtifacts(options.targets, options.context)
-  const plan = await createPlan(artifacts, options.context)
+  const projectInspection = await inspectRuntimeProject(options.context.projectRoot)
+  const artifacts = projectInspection.status === "invalid" ? [] : await buildArtifacts(options.targets, options.context)
+  const plan = projectInspection.status === "invalid" ? null : await createPlan(artifacts, options.context)
   const managedStatus = await installationStatus(options.targets, options.context)
   const counts = Object.fromEntries(
     options.targets.map((target) => [
@@ -475,12 +493,12 @@ async function runDoctor(options: CliOptions): Promise<void> {
     options.targets.map((target) => {
       const targetStatus = managedStatus.filter((item) => item.target === target)
       const targetPlan = { create: 0, update: 0, adopt: 0, unchanged: 0, conflict: 0, cleanup: 0 }
-      for (const item of plan.items) {
+      for (const item of plan?.items ?? []) {
         if (owningTargets(item.artifact).includes(target)) targetPlan[item.action] += 1
       }
-      targetPlan.cleanup = plan.obsolete.filter((item) =>
+      targetPlan.cleanup = plan?.obsolete.filter((item) =>
         item.obsoleteTargets.includes(target),
-      ).length
+      ).length ?? 0
       return [
         target,
         {
@@ -504,7 +522,7 @@ async function runDoctor(options: CliOptions): Promise<void> {
   >
 
   const warnings: string[] = []
-  let ok = true
+  let ok = projectInspection.status !== "invalid"
   for (const target of options.targets) {
     const installation = installations[target]
     if (installation.managed === 0) {
@@ -532,7 +550,7 @@ async function runDoctor(options: CliOptions): Promise<void> {
       artifact.name === "ms-secrets",
   )
   const codexSecurity = options.targets.includes("codex")
-    ? await checkCodexSecretRules(codexRule?.destination)
+    ? await checkCodexSecretRules(codexRule?.destination, options.context.projectRoot)
     : null
   if (codexSecurity && installations.codex.managed > 0 && codexSecurity.status !== "passed") {
     ok = false
@@ -547,6 +565,14 @@ async function runDoctor(options: CliOptions): Promise<void> {
     warnings.push(`Codex: hay ${duplicateSkills.length} nombre(s) de \`skill\` duplicados`)
   }
 
+  const capabilities = [
+    ...(await Promise.all(options.targets.map((target) => diagnoseClient(target, options.context.projectRoot)))).flat(),
+    ...installationCapabilities(options.targets, plan, managedStatus),
+    projectContextDiagnostic(projectInspection),
+    ...commandCapabilities(options.targets, projectInspection, options.context),
+  ]
+  if (capabilities.some((item) => (item.id === "client.binary" && item.status === "no disponible") || (item.id === "client.compatibility" && item.status === "incompatible"))) ok = false
+
   const payload = {
     ok,
     node: process.version,
@@ -558,19 +584,26 @@ async function runDoctor(options: CliOptions): Promise<void> {
     installation: installations,
     security: { codexSecretRules: codexSecurity },
     duplicateSkills,
+    capabilities,
     warnings,
   }
   process.stdout.write(
     options.json
       ? `${JSON.stringify(payload, null, 2)}\n`
-      : `Diagnóstico ${ok ? "CORRECTO" : "CON PROBLEMAS"}: ${payload.agents} agentes, ${payload.commands} comandos, ${payload.skills} habilidades (\`skills\`). Instalación: ${options.targets.map((target) => `${targetLabels[target]} ${installations[target].status.ok}/${installations[target].managed}`).join(", ")}${warnings.length > 0 ? `. Avisos: ${warnings.join("; ")}` : ""}\n`,
+      : `Integridad local ${ok ? "CORRECTA" : "CON PROBLEMAS"}: ${payload.agents} agentes, ${payload.commands} comandos, ${payload.skills} habilidades (\`skills\`). Instalación: ${options.targets.map((target) => `${targetLabels[target]} ${installations[target].status.ok}/${installations[target].managed}`).join(", ")}${warnings.length > 0 ? `. Avisos: ${warnings.join("; ")}` : ""}\n`,
   )
+  if (!options.json) {
+    for (const capability of capabilities) process.stdout.write(`${capability.target} · ${capability.id}: ${capability.status}. ${capability.evidence}${capability.action ? ` Acción: ${capability.action}` : ""}\n`)
+  }
   if (!ok) process.exitCode = 1
 }
 
 async function buildCliPlan(options: CliOptions): Promise<InstallPlan> {
-  const artifacts = await buildArtifacts(options.targets, options.context)
-  return createPlan(artifacts, options.context, options.force)
+  const configuration = await loadKitConfiguration(options.context.homeDir)
+  const context = { ...options.context }
+  if (configuration) context.kitConfiguration = configuration
+  const artifacts = await buildArtifacts(options.targets, context)
+  return { ...await createPlan(artifacts, options.context, options.force), models: resolvedModels(options.targets, configuration) }
 }
 
 async function runPlan(options: CliOptions): Promise<InstallPlan> {
@@ -756,6 +789,8 @@ async function main(input: string[]): Promise<void> {
     return
   }
 
+  // Los subcomandos de proyecto tienen opciones independientes de la instalación.
+  if (command === "project") return runProjectCommand(args)
   const options = cliOptions(args)
   switch (command) {
     case "list":

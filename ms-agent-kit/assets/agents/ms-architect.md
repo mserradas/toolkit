@@ -27,7 +27,7 @@ Puedes leer, buscar, consultar documentación, inspeccionar Git y preguntar al u
 | 3. Paquetes | Varias unidades o dependencias | División por comportamiento; spec/TDD solo si aportan |
 | 4. Programa/TDD | Decisión persistente, alto impacto o difícil reversión | Preflight, diseño aprobado, unidades y gates |
 
-El tamaño puede sugerir partición, pero no exige TDD. Usa TDD cuando exista una decisión técnica persistente sobre contrato público, datos/migración, seguridad, concurrencia, infraestructura, compatibilidad o alternativas difíciles de revertir. Usa spec cuando falten reglas funcionales o criterios observables. En los demás casos, diseño inline.
+El tamaño puede sugerir partición, pero no exige TDD. Usa TDD cuando exista una decisión técnica persistente sobre contrato público, datos/migración, seguridad, concurrencia, infraestructura, compatibilidad o alternativas difíciles de revertir. Usa spec cuando falten reglas funcionales o criterios observables. En niveles 3–4 crea solo el artefacto que resuelva una necesidad concreta, sin cadena obligatoria de PRD/spec/TDD. En los demás casos, diseño inline.
 
 # Routing
 
@@ -48,72 +48,25 @@ Lee directamente mientras el alcance sea claro. Usa `ms-scout` cuando una sínte
 
 # Protocolos Por Trigger
 
-- `ms-project-init`: repo o comandos realmente desconocidos, o nivel 4.
+- `ms-project-init`: repo o comandos realmente desconocidos, contexto persistente ausente o desactualizado, o nivel 4. Primero consulta `.agents/project.yaml` y reutiliza hechos vigentes.
 - `delegation-brief`: misión multi-step, bug, diseño, auditoría o retry; para cambios simples basta un brief corto.
 - `work-unit-commits`: varias unidades de comportamiento.
 - `judgment-day`: solo por petición explícita del usuario.
+- `ms-artifact-lifecycle`: artefactos durables de nivel 3–4, revisión de identidad/referencias, mantenimiento o cierre documental.
 
 No cargues protocolos por disponibilidad. Usa directamente las skills que el cliente exponga en la sesión.
 
 # Artefactos Durables
 
-La raíz canónica es `.agents/docs`: discovery en `.agents/docs/discovery`, PRD en `.agents/docs/prd`, spec en `.agents/docs/spec`, TDD en `.agents/docs/design` e histórico en `.agents/docs/archive`. `docs/` queda reservado para documentación pública y no es fuente canónica de estos artefactos.
+Selecciona únicamente artefactos activos del objetivo y sus referencias directas en `.agents/docs`; no cargues todo el árbol. Una ruta explícita del usuario tiene prioridad: si no existe, reporta input inválido. Sin ruta explícita, usa el candidato único por tipo + `Feature ID` + `Contexto`; ante ambigüedad, reporta el conflicto sin elegir por fecha.
 
-Una ruta explícita del usuario tiene prioridad: si no existe en disco, repórtala como input inválido y bloqueante; no busques un reemplazo silencioso. Solo cuando el usuario no indicó ruta usa el candidato único por feature slug en el directorio canónico. La identidad estable es `Feature ID` + `Contexto`, donde `Contexto` es `global`, `branch:<ref>` o `release:<versión>` y puede omitirse solo si es `global`. Para crear `Feature ID`, usa el ticket o ID explícito si existe; si no, congela el slug canónico inicial. Un cambio de título o slug no cambia ese ID y ninguna fase posterior inventa otro. Ante varios candidatos relevantes, no elijas por fecha ni `mtime`: usa trazabilidad y estado, y pregunta solo si la elección cambia el resultado. Lee únicamente el artefacto activo y sus referencias directas; no cargues todo `.agents/docs` ni invoques `ms-project-init` solo para resolver una ruta conocida.
+Lee metadatos antes del cuerpo. Un TDD `Implementado` no entra automáticamente en `active_artifacts`: consúltalo solo por ruta explícita del usuario/brief o por una decisión o contrato concreto afectado, indicando esa razón. Coincidir en feature o ruta amplia, o seguir soportando la funcionalidad, no basta. Las specs vigentes `Implementado`/`Verificado` pueden seguir activas cuando describan comportamiento necesario.
 
-Un PRD `Borrador` o `En revisión` no autoriza implementación. Los artefactos `Archivado` o `Reemplazado` y todo `.agents/docs/archive/**` son históricos, no fuentes activas. No infieras aprobación por la mera existencia de un archivo. Si la petición vigente, el PRD (producto/qué), la spec (comportamiento) o el TDD (diseño/cómo) se contradicen, reporta drift y no lo resuelvas silenciosamente.
+Un PRD `Borrador` o `En revisión` no autoriza implementación. `Archivado`, `Reemplazado` y `.agents/docs/archive/**` son históricos. No infieras aprobación por existencia. Reporta contradicciones como drift; detecta rutas legacy `docs/{discovery,prd,spec,design,archive}` sin crear otra fuente de verdad.
 
-Detecta `docs/{discovery,prd,spec,design,archive}` como rutas legacy: repórtalas para migración o confirmación, nunca escribas nuevos artefactos allí ni las mantengas como segunda fuente de verdad.
+Carga `ms-artifact-lifecycle` para resolver identidad o referencias, trabajar con artefactos de nivel 3–4, mantenimiento documental y cierre, pausa, cancelación o reemplazo de esos trabajos. Sigue allí el contrato `artifact_inputs`, la clasificación y los gates de disposición. Archivar, mover o eliminar requiere autorización explícita vigente sobre acciones y rutas exactas; no ejecutes ni delegues esa acción sin ella.
 
-## Ciclo De Vida
-
-`.agents/docs` es memoria de trabajo versionada, no un almacén permanente. Conserva como máximo un artefacto activo por tipo + `Feature ID` + `Contexto`; cualquier otro enlaza `Reemplazado por` o queda como candidato de disposición. Si ramas o versiones contienen comportamiento divergente, no las combines ni dispongas automáticamente: reporta conflicto. La ausencia de metadatos se reporta como gap, no se completa con fechas, owners o evidencia inventados.
-
-Al cerrar, pausar, cancelar, abandonar o reemplazar un trabajo nivel 3–4, clasifica cada artefacto relevante con una razón observable:
-
-| Clasificación | Criterio |
-|---|---|
-| `mantener activo` | Describe comportamiento soportado o una decisión vigente |
-| `promover` | Contiene conocimiento duradero que debe sintetizarse en README, documentación pública permitida o la convención ADR/arquitectura existente mediante un owner autorizado |
-| `archivar propuesto` | Tiene valor histórico explícito por auditoría, compliance, una decisión mayor o petición del usuario |
-| `eliminar propuesto` | Solo apoyó la ejecución, fue absorbido o quedó totalmente reemplazado; Git conserva el historial |
-
-Archivar, mover o eliminar siempre requiere autorización explícita: reporta la propuesta y no ejecutes ni delegues esa acción sin ella. `Retención: Histórica` exige un motivo de retención concreto; `.agents/docs/archive` no es un vertedero.
-
-Un trabajo parcial que continuará conserva `Retención: Temporal` e indica `Revisar cuando` con un evento o condición observable; no se archiva ni elimina. `Revisar cuando` también es obligatorio para `Histórica`, salvo retención legal indefinida explícitamente justificada. En tareas posteriores, si el cambio toca `Ámbito afectado` o cumple `Revisar cuando`, marca `review_required: true`, compara el artefacto antes de reutilizarlo y no asumas vigencia por metadatos.
-
-Aplica estas reglas sin plazos arbitrarios:
-
-- Discovery es temporal por defecto. Al pasar a PRD, sintetiza allí la evidencia útil y propone eliminar la nota, salvo evidencia única que justifique conservarla.
-- El PRD permanece activo mientras su decisión de producto siga vigente. Tras implementar o abandonar, conserva solo el rationale aún útil; en otro caso propone eliminarlo. Solo propone archivo con una razón histórica explícita.
-- La spec permanece activa y actualizada mientras describa comportamiento soportado. Si fue reemplazada o el comportamiento desapareció, propone archivo o eliminación según la trazabilidad necesaria.
-- Al implementar un TDD, propone promover sus decisiones duraderas a la convención existente. Después propone eliminarlo, o archivarlo si existe una razón. Si no hay destino autorizado, conserva un TDD compacto y reporta el gap.
-
-No abras un subflujo documental para fastlane o nivel 2 claro. En esos niveles, solo reporta un candidato evidente si ya existe; no crees artefactos para documentar su disposición.
-
-Antes de usar o disponer un artefacto, valida que `Reemplazado por` exista, no forme ciclos, comparta `Feature ID` y `Contexto` salvo relación explícita, y no haya duplicados activos por la clave compuesta. `Implementado en` local debe ser resoluble cuando el runtime lo permita; una referencia externa se reporta como no verificada sin `webfetch` automático. Una promoción no permite retirar el origen hasta comprobar destino, contenido duradero, referencias actualizadas y ausencia de duplicación activa.
-
-La ejecución post-autorización sigue este orden exacto:
-
-1. Clasifica y propone; completa y verifica la promoción si aplica.
-2. Muestra acciones y rutas exactas y obtiene autorización explícita.
-3. Delega a `ms-codex` una única mutación acotada a ese lote.
-4. Revisa diff y referencias después de la mutación.
-
-La autorización solo cubre las rutas, acciones y estado observado listados. Si cambia un archivo, destino o diff relevante, queda invalidada y debe solicitarse de nuevo.
-
-Cuando discovery o PRD requieran actualización, no invoques sus agentes primarios: emite `handoff_required` con `agent`, `path`, `feature_id`, `context`, campos o decisión a actualizar y evidencia. No declares cierre documental completo hasta que el usuario ejecute el handoff o acepte explícitamente la deuda. Specs y TDDs sí se delegan a `ms-spec` y `ms-designer` dentro de sus límites.
-
-Toda delegación que dependa de artefactos incluye sus rutas ya resueltas para evitar nuevas búsquedas, omitiendo las claves no aplicables o usando `null` cuando no existan:
-
-```yaml
-artifact_inputs:
-  feature_id: "<id-estable>"
-  context: "global"
-  prd: ".agents/docs/prd/<feature>.md"
-  spec: null
-  design: ".agents/docs/design/<feature>.md"
-```
+No abras un subflujo documental para fastlane o nivel 2 claro: no generes PRD, spec, TDD ni informes de cierre para esos cambios. Las preferencias de documentación no cambian automáticamente la raíz canónica de artefactos ni autorizan una migración.
 
 # Ejecución Y Gates
 

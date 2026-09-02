@@ -1,8 +1,8 @@
 import path from "node:path"
 import { agentDefinition } from "../core/agent-catalog.js"
 import { frontmatterString, renderMarkdown } from "../core/frontmatter.js"
-import { modelProfile } from "../core/model-profiles.js"
-import { capabilityProfile } from "../core/profiles.js"
+import { resolveModelProfile } from "../core/model-profiles.js"
+import { capabilityProfile, COORDINATION_SKILLS, technicalSkillsOnly } from "../core/profiles.js"
 import { openCodeRolePermission } from "../core/opencode-role-permissions.js"
 import {
   SAFE_ENVIRONMENT_TEMPLATES,
@@ -13,6 +13,8 @@ import type { Artifact, BuildContext, Catalog, SourceMarkdown } from "../core/ty
 import {
   copySkillArtifacts,
   textArtifact,
+  projectSharedRules,
+  projectWritePaths,
 } from "./common.js"
 
 const CLAUDE_COMPATIBILITY = `
@@ -43,6 +45,9 @@ function deniedTools(name: string): string[] {
   if (!profile.orchestrates) denied.add("Agent")
   if (!profile.orchestrates) denied.add("SendMessage")
   if (!profile.usesSkills) denied.add("Skill")
+  if (technicalSkillsOnly(definition.capabilityProfile)) {
+    for (const skill of COORDINATION_SKILLS) { denied.add(`Skill(${skill})`); denied.add(`Skill(${skill} *)`) }
+  }
   if (definition.mode !== "primary" || !profile.asksQuestions) denied.add("AskUserQuestion")
   if (!profile.webFetch) denied.add("WebFetch")
   if (!profile.webSearch) denied.add("WebSearch")
@@ -117,18 +122,18 @@ function claudeGuardHooks(
   return hooks
 }
 
-function claudeAgent(agent: SourceMarkdown, guardPath: string): string {
+function claudeAgent(agent: SourceMarkdown, guardPath: string, context: BuildContext): string {
   const description = frontmatterString(
     agent.frontmatter,
     "description",
     `Agente especializado ${agent.name}`,
   )
   const definition = agentDefinition(agent.name)
-  const profile = modelProfile(definition.modelProfile)
+  const profile = resolveModelProfile(definition.modelProfile, "claude", context.kitConfiguration)
   const frontmatter: Record<string, unknown> = {
     name: agent.name,
     description,
-    model: profile.claudeModel ?? "inherit",
+    model: profile.model ?? "inherit",
     permissionMode: "default",
     skills: ["ms-shared"],
     tools: allowedTools(agent.name),
@@ -138,8 +143,8 @@ function claudeAgent(agent: SourceMarkdown, guardPath: string): string {
       definition.mode === "subagent",
     ),
   }
-  if (profile.claudeEffort !== undefined) {
-    frontmatter.effort = profile.claudeEffort
+  if (profile.reasoningEffort !== null) {
+    frontmatter.effort = profile.reasoningEffort
   }
   if (definition.toolCycleBudget !== undefined) {
     frontmatter.maxTurns = definition.toolCycleBudget
@@ -212,7 +217,7 @@ function claudeGuardSource(catalog: Catalog, context: BuildContext): string {
   const writeRules = Object.fromEntries(
     catalog.agents.map((agent) => [
       agent.name,
-      capabilityProfile(agentDefinition(agent.name).capabilityProfile).writePaths,
+      projectWritePaths(agent.name, context),
     ]),
   )
   const bashPolicyByAgent = bashPolicies(catalog)
@@ -1817,7 +1822,7 @@ function claudeCommand(
     "disable-model-invocation": true,
     context: "fork",
     agent: agent.name,
-    hooks: claudeGuardHooks(guardPath, agent.name),
+    hooks: claudeGuardHooks(guardPath, agent.name, command.name === "ms-fastlane"),
   }
   return renderMarkdown(
     frontmatter,
@@ -1826,6 +1831,8 @@ function claudeCommand(
       `Ejecuta este flujo de trabajo con el rol de ${agent.name}. Sus reglas compartidas y contrato llegan mediante la skill \`ms-shared\`. Usa $ARGUMENTS como entrada literal.`,
       "# Flujo de trabajo",
       command.body,
+      ...(command.name === "ms-fastlane" ? ["Este fork nativo ejecuta un worker: conserva el contrato interno para el padre, que presenta el resumen al usuario. No invoques ms-architect ni delegues otro agente."] : []),
+      ...(command.name === "ms-handoff" ? ["Este comando de Claude se ejecuta en un fork. Si se pidió guardar la nota, devuelve contenido y destino al padre; la tarea principal delega la escritura autorizada a ms-codex. No crees subagentes anidados, no escribas desde el fork y no afirmes que se guardó sin evidencia."] : []),
     ].join("\n\n"),
   )
 }
@@ -1868,7 +1875,7 @@ export function buildClaudeArtifacts(catalog: Catalog, context: BuildContext): A
         name: agent.name,
         root,
         destination: path.join(root, "agents", agent.fileName),
-        content: claudeAgent(agent, guardPath),
+        content: claudeAgent(agent, guardPath, context),
       }),
     )
   }
@@ -1884,7 +1891,7 @@ export function buildClaudeArtifacts(catalog: Catalog, context: BuildContext): A
       name: "ms-shared",
       root,
       destination: path.join(skillsRoot, "ms-shared", "SKILL.md"),
-      content: sharedSkill(catalog.sharedRules),
+      content: sharedSkill(projectSharedRules(catalog.sharedRules, context)),
     }),
   )
 

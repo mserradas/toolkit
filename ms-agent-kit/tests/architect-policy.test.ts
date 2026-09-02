@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises"
+import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 import { DEFAULT_ASSETS_ROOT } from "../src/core/catalog.js"
@@ -19,7 +19,13 @@ describe("ms-architect policy", () => {
     const source = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-architect.md"), "utf8")
     const body = parseMarkdown(source).body
 
-    expect(body.split("\n").length).toBeLessThanOrEqual(260)
+    expect(body.split("\n").length).toBeLessThanOrEqual(140)
+    expect(Buffer.byteLength(body, "utf8")).toBeLessThan(10_000)
+    expect(body).toContain("`ms-artifact-lifecycle`")
+    expect(body).not.toContain("## Ciclo De Vida")
+    expect(body).not.toContain("La ejecución post-autorización sigue este orden exacto")
+    expect(body).toContain("Archivar, mover o eliminar requiere autorización explícita vigente")
+    expect(body).toContain("No abras un subflujo documental para fastlane o nivel 2 claro")
     for (const contract of [
       "No editas archivos",
       "`ms-project-init`",
@@ -39,14 +45,14 @@ describe("ms-architect policy", () => {
   })
 
   it("resolves durable artifacts canonically before delegating", async () => {
-    const architect = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-architect.md"), "utf8")
+    const lifecycle = await readFile(path.join(DEFAULT_ASSETS_ROOT, "skills", "ms-artifact-lifecycle", "SKILL.md"), "utf8")
     const projectInit = await readFile(
       path.join(DEFAULT_ASSETS_ROOT, "skills", "ms-project-init", "SKILL.md"),
       "utf8",
     )
     const docs = await readFile(path.join(DEFAULT_ASSETS_ROOT, "docs", "agents.md"), "utf8")
 
-    for (const source of [architect, docs]) {
+    for (const source of [lifecycle, docs]) {
       for (const canonicalPath of [
         ".agents/docs/discovery",
         ".agents/docs/prd",
@@ -68,13 +74,14 @@ describe("ms-architect policy", () => {
       expect(source).toContain("`artifact_inputs`")
     }
 
-    expect(architect).toContain("Una ruta explícita del usuario tiene prioridad")
-    expect(architect).toContain("si no existe en disco, repórtala como input inválido y bloqueante")
-    expect(architect).toContain("Solo cuando el usuario no indicó ruta")
+    expect(lifecycle).toContain("Una ruta explícita del usuario tiene prioridad")
+    expect(lifecycle).toContain("si no existe en disco, repórtala como input inválido y bloqueante")
+    expect(lifecycle).toContain("Solo cuando el usuario no indicó ruta")
     expect(docs).toContain("sin sustituirla silenciosamente")
-    expect(architect).toContain("no elijas por fecha ni `mtime`")
-    expect(architect).toContain("No infieras aprobación por la mera existencia")
-    expect(architect).toContain("no cargues todo `.agents/docs`")
+    expect(lifecycle).toContain("no elijas por fecha ni `mtime`")
+    expect(lifecycle).toContain("No infieras aprobación por la mera existencia")
+    expect(lifecycle).toContain("no cargues todo `.agents/docs`")
+    const architect = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-architect.md"), "utf8")
     expect(architect).toMatch(
       /Resuelve los artefactos durables aplicables[\s\S]*Decide si basta diseño inline o hace falta spec\/TDD[\s\S]*Delega una misión autosuficiente con `artifact_inputs`/,
     )
@@ -97,7 +104,7 @@ describe("ms-architect policy", () => {
   })
 
   it("governs artifact lifecycle without automatic destructive actions", async () => {
-    const architect = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-architect.md"), "utf8")
+    const lifecycle = await readFile(path.join(DEFAULT_ASSETS_ROOT, "skills", "ms-artifact-lifecycle", "SKILL.md"), "utf8")
     const discovery = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-discovery.md"), "utf8")
     const plan = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-plan.md"), "utf8")
     const spec = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-spec.md"), "utf8")
@@ -116,13 +123,13 @@ describe("ms-architect policy", () => {
       "`archivar propuesto`",
       "`eliminar propuesto`",
     ]) {
-      expect(architect).toContain(disposition)
+      expect(lifecycle).toContain(disposition)
       expect(docs).toContain(disposition)
     }
-    expect(architect).toContain("Archivar, mover o eliminar siempre requiere autorización explícita")
-    expect(architect).toContain("no ejecutes ni delegues esa acción sin ella")
-    expect(architect).toContain("No abras un subflujo documental para fastlane o nivel 2 claro")
-    expect(architect).toContain("como máximo un artefacto activo por tipo + `Feature ID` + `Contexto`")
+    expect(lifecycle).toContain("Archivar, mover o eliminar siempre requiere autorización explícita")
+    expect(lifecycle).toContain("no ejecutes ni delegues esa acción sin ella")
+    expect(lifecycle).toContain("No abras un subflujo documental para fastlane o nivel 2 claro")
+    expect(lifecycle).toContain("como máximo un artefacto activo por tipo + `Feature ID` + `Contexto`")
 
     for (const source of [discovery, plan, spec, designer]) {
       expect(source).toContain("Última revisión")
@@ -149,6 +156,15 @@ describe("ms-architect policy", () => {
     expect(projectInit).toContain("deja esa clave en `null`")
     expect(projectInit).toContain("no elijas por fecha o `mtime`")
 
+    for (const source of [lifecycle, projectInit, status]) {
+      expect(source).toMatch(/TDD `Implementado`[\s\S]*ruta explícita del usuario\/brief o (?:una )?decisión o contrato concreto afectado/)
+      expect(source).toMatch(/specs (?:vigentes )?`Implementado`\/`Verificado`/)
+    }
+    expect(projectInit).toContain("conserva `null` salvo ruta explícita")
+    expect(status).toContain("TDDs implementados redundantes como candidatos, no como activos")
+    expect(designer).toContain("Conserva decisiones únicas con razón y consecuencia")
+    expect(designer).toContain("fuera de carga automática")
+
     for (const source of [docs, readme]) {
       expect(source).toContain("memoria de trabajo")
       expect(source).toContain("no es una fuente activa ni un vertedero")
@@ -158,7 +174,7 @@ describe("ms-architect policy", () => {
   })
 
   it("maintains artifact identity, references, drift, and scoped disposal", async () => {
-    const architect = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-architect.md"), "utf8")
+    const lifecycle = await readFile(path.join(DEFAULT_ASSETS_ROOT, "skills", "ms-artifact-lifecycle", "SKILL.md"), "utf8")
     const coder = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-codex.md"), "utf8")
     const producers = await Promise.all(
       ["ms-discovery", "ms-plan", "ms-spec", "ms-designer"].map((agent) =>
@@ -184,19 +200,19 @@ describe("ms-architect policy", () => {
       expect(source).toContain("slug canónico inicial")
       expect(source).toMatch(/cong[eé]lal[oa]|queda congelado/)
     }
-    expect(architect).toContain("tipo + `Feature ID` + `Contexto`")
-    expect(architect).toMatch(/[Uu]n cambio de título o slug no cambia ese ID/)
-    expect(architect).toContain("usa el ticket o ID explícito si existe")
-    expect(architect).toContain("congela el slug canónico inicial")
-    expect(architect).toContain("no las combines ni dispongas automáticamente")
-    expect(architect).toContain('feature_id: "<id-estable>"')
-    expect(architect).toContain('context: "global"')
-    expect(architect).toContain("pausar, cancelar, abandonar o reemplazar")
-    expect(architect).toContain("`Retención: Temporal` e indica `Revisar cuando`")
-    expect(architect).toContain("`review_required: true`")
-    expect(architect).toContain("`Reemplazado por` exista, no forme ciclos")
-    expect(architect).toContain("una referencia externa se reporta como no verificada")
-    expect(architect).toContain("Una promoción no permite retirar el origen")
+    expect(lifecycle).toContain("tipo + `Feature ID` + `Contexto`")
+    expect(lifecycle).toMatch(/[Uu]n cambio de título o slug no cambia ese ID/)
+    expect(lifecycle).toContain("usa el ticket o ID explícito si existe")
+    expect(lifecycle).toContain("congela el slug canónico inicial")
+    expect(lifecycle).toContain("no las combines ni dispongas automáticamente")
+    expect(lifecycle).toContain('feature_id: "<id-estable>"')
+    expect(lifecycle).toContain('context: "global"')
+    expect(lifecycle).toContain("pausar, cancelar, abandonar o reemplazar")
+    expect(lifecycle).toContain("`Retención: Temporal` e indica `Revisar cuando`")
+    expect(lifecycle).toContain("`review_required: true`")
+    expect(lifecycle).toContain("`Reemplazado por` exista, no forme ciclos")
+    expect(lifecycle).toContain("una referencia externa se reporta como no verificada")
+    expect(lifecycle).toContain("Una promoción no permite retirar el origen")
 
     for (const step of [
       "Clasifica y propone",
@@ -204,16 +220,16 @@ describe("ms-architect policy", () => {
       "una única mutación acotada",
       "Revisa diff y referencias",
     ]) {
-      expect(architect).toContain(step)
+      expect(lifecycle).toContain(step)
     }
-    expect(architect).toContain("queda invalidada y debe solicitarse de nuevo")
+    expect(lifecycle).toContain("queda invalidada y debe solicitarse de nuevo")
     expect(coder).toContain("Disposición Documental Autorizada")
     expect(coder).toContain("acciones y rutas exactas")
     expect(coder).toContain("detente sin mutar")
-    expect(architect).toContain("`handoff_required`")
-    expect(architect).toContain("No declares cierre documental completo")
+    expect(lifecycle).toContain("`handoff_required`")
+    expect(lifecycle).toContain("No declares cierre documental completo")
 
-    const artifactInputs = architect.match(/```yaml\nartifact_inputs:\n([\s\S]*?)\n```/)?.[1]
+    const artifactInputs = lifecycle.match(/```yaml\nartifact_inputs:\n([\s\S]*?)\n```/)?.[1]
     expect(artifactInputs).toBeDefined()
     for (const key of ["feature_id", "context", "prd", "spec", "design"]) {
       expect(artifactInputs?.match(new RegExp(`^  ${key}:`, "gm"))).toHaveLength(1)
@@ -226,7 +242,7 @@ describe("ms-architect policy", () => {
     expect(status).toContain("temporales sin `Revisar cuando`")
     expect(status).toContain("referencias rotas o cíclicas")
     expect(status).toContain("Handoffs pendientes:")
-    expect(status).toContain("nunca escanea todo `.agents/docs`")
+    expect(status).toContain("sin inventario previo ni lectura de todos los artefactos")
     for (const field of ["feature_id: null", 'context: "global"', "review_required: false", "reference_conflicts: []"]) {
       expect(projectInit).toContain(field)
     }
@@ -402,13 +418,13 @@ describe("ms-architect policy", () => {
     expect(docs).not.toContain("`find`, `tree`")
   })
 
-  it("documents the seven general skills", async () => {
-    const readme = await readFile(path.join(DEFAULT_ASSETS_ROOT, "..", "README.md"), "utf8")
-
-    expect(readme).toContain("7 `skills` generales")
-    expect(readme).not.toContain("9 `skills` generales")
+  it("documents the actual general skill catalog including lifecycle", async () => {
+    const docs = await readFile(path.join(DEFAULT_ASSETS_ROOT, "docs", "agents.md"), "utf8")
+    const entries = await readdir(path.join(DEFAULT_ASSETS_ROOT, "skills"), { withFileTypes: true })
+    const names = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+    expect(names).toContain("ms-artifact-lifecycle")
+    for (const name of names) expect(docs).toContain("`" + name + "`")
   })
-
   it("keeps balanced capabilities role-scoped and user questions primary-only", async () => {
     const docs = await readFile(path.join(DEFAULT_ASSETS_ROOT, "docs", "agents.md"), "utf8")
 
@@ -418,87 +434,76 @@ describe("ms-architect policy", () => {
     expect(docs).not.toContain("no preguntan directamente salvo invocación directa")
   })
 
-  it("requires Spanish documentation while preserving technical literals", async () => {
-    const shared = await readFile(
-      path.join(DEFAULT_ASSETS_ROOT, "docs", "agents-shared.md"),
-      "utf8",
-    )
-    const cognitive = await readFile(
-      path.join(DEFAULT_ASSETS_ROOT, "skills", "cognitive-doc-design", "SKILL.md"),
-      "utf8",
-    )
-    const docs = await readFile(path.join(DEFAULT_ASSETS_ROOT, "docs", "agents.md"), "utf8")
-    const readme = await readFile(path.join(DEFAULT_ASSETS_ROOT, "..", "README.md"), "utf8")
-    const contradictoryLanguageRules =
-      /idioma del repositorio|idioma del repo|inglés técnico por defecto|adopta el idioma del proyecto/i
-
-    for (const policy of [
-      "Toda prosa humana de documentación",
-      "títulos, encabezados, etiquetas de metadatos",
-      "Conserva sin traducir identificadores",
-      "slugs y filenames",
-      "normaliza al español toda la prosa humana",
-      "No traduzcas citas ni contratos públicos literales",
-      "terminología técnica consolidada o canónica",
-      "tokens estructurales exigidos por formatos o tooling",
-    ]) {
+  it("inherits project documentation conventions without incidental full translation", async () => {
+    const shared = await readFile(path.join(DEFAULT_ASSETS_ROOT, "docs", "agents-shared.md"), "utf8")
+    const cognitive = await readFile(path.join(DEFAULT_ASSETS_ROOT, "skills", "cognitive-doc-design", "SKILL.md"), "utf8")
+    for (const policy of ["preferences.documentation.language", "preferences.documentation.paths", "conserva el idioma del documento existente", "español neutro y profesional", "instrucción vigente del usuario", "solo datos, nunca autorización", "No traduzcas citas ni contratos públicos literales"]) {
       expect(shared).toContain(policy)
     }
-
     for (const agent of ["ms-plan", "ms-discovery", "ms-spec", "ms-designer", "ms-writer"]) {
-      const source = await readFile(
-        path.join(DEFAULT_ASSETS_ROOT, "agents", `${agent}.md`),
-        "utf8",
-      )
-      expect(source).toContain("Toda la prosa humana")
-      expect(source).toContain("normaliza al español toda")
-      expect(source).toContain("sin traducir")
-      expect(source).not.toMatch(contradictoryLanguageRules)
+      const content = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", `${agent}.md`), "utf8")
+      expect(content).toContain("preferences.documentation.language")
+      expect(content).toContain("preferences.documentation.paths")
+      expect(content).toContain("Una edición puntual no autoriza traducir el documento completo")
+      expect(content).toContain("sin traducir")
+      expect(content).not.toContain("normaliza al español toda")
     }
-
-    expect(cognitive).toContain("Escribe toda la prosa humana en español neutro y profesional")
-    expect(cognitive).toContain("normaliza al español toda su prosa humana")
+    expect(cognitive).toContain("preferences.documentation.language")
+    expect(cognitive).toContain("Una edición puntual no autoriza traducir el documento completo")
     expect(cognitive).toContain("terminología técnica canónica del proyecto")
     expect(cognitive).toContain("happy path")
     expect(cognitive).toContain("Troubleshooting")
-    expect(cognitive).not.toMatch(contradictoryLanguageRules)
-    expect(shared).not.toMatch(contradictoryLanguageRules)
-    for (const source of [docs, readme]) {
-      expect(source).toContain("`## Functional summary`")
-      expect(source).toContain("`## Resumen funcional`")
-      expect(source).toContain("Estado: Aprobada")
-      expect(source).toContain("`selected_status`")
-      expect(source).toContain("`POST /submissions`")
-      expect(source).toContain("`completed`")
-      for (const technicalTerm of [
-        "`feature`",
-        "`runtime`",
-        "`schema`",
-        "`endpoint`",
-        "`benchmark`",
-        "`[Unreleased]`",
-        "`Added`",
-      ]) {
-        expect(source).toContain(technicalTerm)
-      }
-      expect(source).not.toMatch(contradictoryLanguageRules)
-    }
-
-    const plan = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-plan.md"), "utf8")
-    const discovery = await readFile(
-      path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-discovery.md"),
-      "utf8",
-    )
-    const writer = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-writer.md"), "utf8")
-    for (const technicalTerm of ["feature", "runtime", "schemas", "endpoints", "benchmarks"]) {
-      expect(`${plan}\n${discovery}`).toContain(technicalTerm)
-    }
-    expect(plan).toContain("documentación pública en `docs/`")
-    expect(plan).toContain("PRDs previos en `.agents/docs/prd/`")
-    expect(writer).toContain("## [Unreleased]")
-    expect(writer).toContain("### Added")
+    expect(shared).not.toContain("normaliza al español toda")
   })
 
+  it("selects technical skills without granting coordination or extra permissions", async () => {
+    const shared = await readFile(path.join(DEFAULT_ASSETS_ROOT, "docs", "agents-shared.md"), "utf8")
+    const brief = await readFile(path.join(DEFAULT_ASSETS_ROOT, "skills", "delegation-brief", "SKILL.md"), "utf8")
+    for (const name of ["ms-codex", "ms-fastlane", "ms-tester"]) {
+      const role = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", `${name}.md`), "utf8")
+      expect(role).toContain("únicamente skills técnicas pertinentes")
+      expect(role).toContain("preferences.technicalSkills")
+      expect(role).toContain("skill_inputs")
+      expect(role).toContain("no cargues protocolos de orquestación ni amplíes permisos")
+      expect(role).toContain("En invocación directa como agente primario, entrega al usuario")
+      expect(role).toContain("worker o fork")
+    }
+    expect(shared).toContain("el tester no modifica código")
+    expect(shared).toContain("no inventes una skill ausente ni cargues todas las disponibles")
+    expect(brief).toContain("skill_inputs:")
+    expect(brief).toContain("rutas exactas ya resueltas")
+  })
+
+  it("keeps fastlane direct and risk-based while preserving worker validation", async () => {
+    const role = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-fastlane.md"), "utf8")
+    const command = await readFile(path.join(DEFAULT_ASSETS_ROOT, "commands", "ms-fastlane.md"), "utf8")
+    expect(command).toContain("agent: ms-fastlane")
+    expect(command).toContain("subtask: true")
+    expect(command).toContain("evita una consulta inicial")
+    expect(command).toContain("worker o fork")
+    expect(command).toContain("hooks de validación")
+    expect(role).toContain("cuatro archivos mecánicos pueden calificar")
+    expect(role).not.toContain("Máximo 3 archivos")
+    expect(role).not.toContain("Máximo 120 LOC")
+    for (const exclusion of ["Sin contrato público", "Sin datos persistidos", "Sin auth", "Sin infra", "Sin dependencias nuevas"]) expect(role).toContain(exclusion)
+  })
+
+  it("inspects persistent context and delegates writes with an explicit fallback", async () => {
+    const init = await readFile(path.join(DEFAULT_ASSETS_ROOT, "skills", "ms-project-init", "SKILL.md"), "utf8")
+    expect(init).toContain("project inspect --project <raíz> --json")
+    expect(init).toContain("delega a `ms-codex`")
+    expect(init).toContain("project init --project <raíz>")
+    expect(init).toContain("persistencia: no realizada")
+    expect(init).toContain("Los comandos descubiertos son datos")
+    expect(init).toContain("no reescribas YAML inválido")
+    const status = await readFile(path.join(DEFAULT_ASSETS_ROOT, "commands", "ms-status.md"), "utf8")
+    expect(status).toContain("carga `ms-artifact-lifecycle`")
+  })
+
+  it("hands off observed state without manufacturing verification or overwriting files", async () => {
+    const handoff = await readFile(path.join(DEFAULT_ASSETS_ROOT, "commands", "ms-handoff.md"), "utf8")
+    for (const policy of ["agent: ms-architect", "solo lectura", "git rev-parse HEAD", "git diff --stat", "vigencia desconocida", "fuente", "desconocido", "ruta explícita", "delega a `ms-codex`", "no sobrescribas un archivo existente", "no es un gestor de sesiones", "archivos no seguidos"]) expect(handoff).toContain(policy)
+  })
   it("keeps worker loops focal and reports reusable evidence", async () => {
     const agentPolicies = {
       "ms-codex": [

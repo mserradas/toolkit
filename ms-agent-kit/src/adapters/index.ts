@@ -1,4 +1,6 @@
 import { loadCatalog } from "../core/catalog.js"
+import { loadKitConfiguration, validateKitConfiguration } from "../core/kit-config.js"
+import { readProjectFile } from "../core/project-context.js"
 import { owningTargets, type Artifact, type BuildContext, type Target } from "../core/types.js"
 import { buildClaudeArtifacts } from "./claude.js"
 import { buildCodexArtifacts } from "./codex.js"
@@ -8,19 +10,31 @@ export async function buildArtifacts(
   targets: Target[],
   context: BuildContext,
 ): Promise<Artifact[]> {
+  const kitConfiguration = context.kitConfiguration ? validateKitConfiguration(context.kitConfiguration) : await loadKitConfiguration(context.homeDir)
+  const resolvedContext: BuildContext = { ...context }
+  delete resolvedContext.projectPreferences
+  if (kitConfiguration) resolvedContext.kitConfiguration = kitConfiguration
+  if (context.scope === "project") {
+    try {
+      const preferences = (await readProjectFile(context.projectRoot))?.preferences
+      if (preferences) resolvedContext.projectPreferences = preferences
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+    }
+  }
   const catalog = await loadCatalog(context.assetsRoot)
   const artifacts: Artifact[] = []
 
   for (const target of targets) {
     switch (target) {
       case "opencode":
-        artifacts.push(...buildOpenCodeArtifacts(catalog, context))
+        artifacts.push(...buildOpenCodeArtifacts(catalog, resolvedContext))
         break
       case "claude":
-        artifacts.push(...buildClaudeArtifacts(catalog, context))
+        artifacts.push(...buildClaudeArtifacts(catalog, resolvedContext))
         break
       case "codex":
-        artifacts.push(...buildCodexArtifacts(catalog, context))
+        artifacts.push(...buildCodexArtifacts(catalog, resolvedContext))
         break
     }
   }

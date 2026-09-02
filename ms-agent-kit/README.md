@@ -8,11 +8,11 @@ El instalador calcula un plan antes de escribir, conserva el estado de propiedad
 
 | Cliente | Componentes instalados | Integración principal |
 |---|---|---|
-| OpenCode | 12 agentes, 2 comandos `/ms-*` y 7 `skills` generales | Configuración, interfaz de terminal (`TUI`), Context7, statusline de subagentes y permisos por agente |
-| Claude Code | 12 subagentes, 2 habilidades invocables (`slash skills`) `/ms-*` y 7 `skills` generales | Límites de herramientas y protección compartida `PreToolUse` |
-| Codex | 11 agentes especialistas, 2 comandos como `skills` y 7 `skills` generales | Perfiles, reglas de seguridad, Context7 y `$ms-architect` como orquestador padre |
+| OpenCode | 12 agentes, 4 comandos `/ms-*` y 8 `skills` generales | Configuración, interfaz de terminal (`TUI`), Context7, statusline de subagentes y permisos por agente |
+| Claude Code | 12 agentes, 4 habilidades invocables (`slash skills`) `/ms-*` y 8 `skills` generales | Límites de herramientas y protección compartida `PreToolUse` |
+| Codex | 11 agentes especialistas, 4 comandos como `skills` y 8 `skills` generales | Perfiles, reglas de seguridad, Context7 y `$ms-architect` como orquestador padre |
 
-El catálogo actual incluye 12 agentes, 2 comandos y 7 `skills` generales. En Codex, `ms-architect` se instala como `skill` de la tarea principal para que pueda delegar directamente en los 11 especialistas.
+El catálogo actual incluye 12 agentes, 4 comandos y 8 `skills` generales. En Codex, `ms-architect` se instala como `skill` de la tarea principal para que pueda delegar directamente en los 11 especialistas.
 
 ## Ciclo de trabajo
 
@@ -24,9 +24,9 @@ Las misiones se preparan para unas 8–12 iteraciones. Si el primer presupuesto 
 
 ## Idioma de la documentación
 
-Los agentes ms-* escriben en español neutro y profesional toda la prosa humana de documentos nuevos o actualizados, aunque el repositorio use otro idioma. Esto incluye títulos, metadatos, explicaciones, requisitos, decisiones, criterios de aceptación, tablas, changelog y notas de publicación.
+La instrucción vigente del usuario prevalece sobre `preferences.documentation.language`. Con `inherit` o sin preferencia, se conserva el idioma del documento existente. Para documentos nuevos se usa la convención del repositorio y, si falta, español neutro y profesional.
 
-Los literales técnicos permanecen intactos: identificadores, rutas, comandos, APIs, métodos y status HTTP, schemas/campos, variables de entorno, librerías, valores de enum o estado, logs, errores, citas textuales, terminología técnica canónica del proyecto y tokens estructurales exigidos por formatos o tooling. Por ejemplo, `## Functional summary` se convierte en `## Resumen funcional` y se escribe «Estado: Aprobada», mientras `selected_status`, `POST /submissions`, `completed`, `feature`, `runtime`, `schema`, `endpoint`, `benchmark` y encabezados canónicos como `[Unreleased]` o `Added` permanecen literales. Al tocar un documento existente en inglés, el agente normaliza al español toda su prosa humana para evitar secciones mezcladas.
+Una edición puntual no autoriza traducir todo un documento. Los literales técnicos —identificadores, rutas, comandos, APIs, campos, variables de entorno, logs, citas y tokens exigidos por el tooling— permanecen intactos.
 
 ## Requisitos
 
@@ -79,11 +79,17 @@ ms-agent-kit status --target all --scope user
 
 | Comando | Qué confirma |
 |---|---|
-| `doctor` | Catálogo, políticas, duplicados y reglas de secretos válidos |
+| `doctor` | Integridad del catálogo y de la instalación, disponibilidad local y capacidades comprobables |
 | `plan` | Cambios previstos sin escribir archivos |
 | `status` | Archivos administrados presentes, modificados o ausentes |
 
 Añade `--json` a cualquiera de ellos para obtener una salida apta para automatización.
+
+`doctor` añade `capabilities` con `id`, `target`, `status`, `evidence` y `action`. Distingue `correcto`, `no disponible`, `incompatible` y `no comprobado`. Comprueba binarios y versiones con argumentos fijos, sin shell, con límite de tres segundos; evita ejecutar binarios del repositorio como diagnóstico implícito. Codex tiene una versión mínima comprobable; para otros clientes, observar una versión no acredita compatibilidad completa.
+
+Un archivo instalado no acredita que el cliente lo haya reconocido. El reconocimiento real de agentes/skills, autenticación de Context7 y disponibilidad remota de modelos quedan `no comprobado` cuando falta evidencia. OpenCode y Codex reciben integración Context7 del kit; Claude no recibe ese registro. Los comandos del proyecto se contrastan con las políticas estáticas disponibles, sin ejecutarlos ni probar dependencias del proyecto.
+
+El código de salida `1` indica problemas de integridad o fallos comprobados, como un cliente seleccionado ausente, versión Codex incompatible o contexto inválido. Un contexto `stale` requiere refresco y puede figurar como `incompatible` en ese diagnóstico, pero por sí solo no fuerza el código `1`. Los datos no comprobados aparecen como limitaciones y no son un PASS ni provocan por sí solos ese fallo.
 
 ## Elegir el alcance
 
@@ -105,9 +111,88 @@ ms-agent-kit install \
 
 Si se omite `--project`, el directorio actual se usa como raíz del proyecto.
 
+## Empezar en un proyecto y reutilizar su contexto
+
+Desde la raíz del repositorio:
+
+```bash
+ms-agent-kit project init
+ms-agent-kit project inspect --json
+```
+
+`init` crea `.agents/project.yaml`; repetirlo actualiza el contexto generado y conserva las preferencias y comentarios humanos. Si no cambia nada, conserva el archivo byte a byte. `inspect` solo lee y devuelve `missing`, `current` o `stale`, junto con `changedSources`; un YAML inválido produce un error explícito. Usa `--project /ruta/al/repositorio` para otra raíz o `project init --dry-run --json` para revisar sin escribir.
+
+La detección lee manifests y lockfiles de Node y Python, además de módulos inmediatos en `apps`, `packages` y `services`, con un máximo de 64 módulos. No ejecuta scripts ni instala dependencias. Un stack desconocido deja las listas correspondientes vacías; debe completarse la investigación de la tarea cuando haga falta. Un contexto `current` tampoco acredita que tests anteriores sigan vigentes.
+
+Los agentes consultan el contexto disponible. `ms-architect` carga `ms-project-init` cuando desconoce el repositorio o los comandos, o el trabajo exige el preflight formal. Si falta contexto o está desactualizado y la petición vigente autoriza inicializarlo, delega `project init`; no hace falta ejecutarlo manualmente cada sesión ni pedir de nuevo un permiso ya concedido. Es una regla del agente, no un hook obligatorio al abrir el cliente. También puedes inicializarlo desde la terminal como arriba.
+
+Este ejemplo muestra el schema completo para un proyecto todavía sin manifest reconocido; solo `preferences` se edita a mano:
+
+```yaml
+schemaVersion: 1
+preferences:
+  documentation:
+    language: inherit
+    paths: [documentation/guides]
+  technicalSkills: []
+context:
+  stack: []
+  packageManager: null
+  modules: []
+  commands:
+    test: []
+    lint: []
+    typecheck: []
+    build: []
+    format: []
+  sources: []
+```
+
+Al detectar módulos, `modules` contiene objetos como `{path: apps/web, stack: [node]}`. Cada comando incluye `command`, `cwd` y `source`; por ejemplo, `pnpm run test`, `apps/web` y `apps/web/package.json`. Cada fuente contiene `path` y un `sha256` calculado por el kit. No inventes hashes ni edites esos hechos generados: cambia las fuentes y repite `project init`.
+
+`documentation.paths` admite directorios relativos explícitos, sin globs, rutas absolutas, escapes ni directorios internos o secretos. Amplía únicamente los destinos de Markdown de `ms-writer`. Para materializar esas rutas, instala con `--scope project` después de editarlas. OpenCode y Claude limitan la escritura a `*.md` y `**/*.md`; Codex concede acceso nativo al directorio y mantiene la restricción Markdown en las instrucciones del rol. La instalación `--scope user` permanece genérica y no incorpora preferencias del repositorio incidental. Los archivos humanos `AGENTS.md` y `CLAUDE.md` no se sobrescriben.
+
+`technicalSkills` selecciona nombres o rutas relativas de skills técnicas existentes; también pueden indicarse como `skill_inputs` en el brief. `ms-codex`, `ms-fastlane` y `ms-tester` cargan solo las pertinentes mediante el catálogo nativo. La selección no instala skills ni dependencias, no habilita coordinación y no permite al tester escribir código. Los protocolos de coordinación permanecen bloqueados para esos roles.
+
+El schema es estricto: versiones, claves o tipos desconocidos, aliases YAML y archivos inseguros se rechazan conservando el contenido. Desinstalar el kit no elimina `.agents/project.yaml`.
+
+## Elegir modelos por perfil
+
+La configuración personal opcional se lee desde `~/.ms-agent-kit/config.yaml` en ambos alcances. `--home` permite otra raíz. Por ejemplo:
+
+```yaml
+schemaVersion: 1
+models:
+  strong:
+    opencode:
+      model: openai/gpt-5.6-sol
+      reasoningEffort: high
+    claude:
+      model: sonnet
+      reasoningEffort: medium
+    codex:
+      model: gpt-5.6-sol
+      reasoningEffort: high
+  balanced:
+    codex:
+      reasoningEffort: medium
+  fast:
+    claude:
+      model: haiku
+      reasoningEffort: low
+```
+
+Los perfiles disponibles son `strong`, `balanced`, `light` y `fast`. Cada override afecta solo al perfil y cliente indicados; `model` y `reasoningEffort` son opcionales. El esfuerzo admite únicamente `low`, `medium` o `high`. No guardes claves ni credenciales aquí.
+
+`ms-agent-kit plan --target all --json` añade `models` sin retirar `items` ni `statePath`. Cada entrada muestra modelo, esfuerzo y procedencia independiente: `default` del kit, `override` personal o `inherited` del cliente. `availability: unchecked` significa que no se verificó el acceso real al modelo. Sin override, Codex hereda modelo y configura esfuerzo; Claude hereda ambos salvo fastlane; OpenCode usa los defaults del kit. Un identificador inválido falla antes de instalar; el kit no sustituye silenciosamente un modelo ni elige proveedores automáticamente.
+
+Los adaptadores generan `model`/`variant` en OpenCode, `model`/`effort` en Claude y `model`/`model_reasoning_effort` en los especialistas de Codex. Las skills principales de Codex, como `$ms-fastlane` y `$ms-architect`, heredan el modelo y esfuerzo de la tarea activa; el perfil del especialista no reconfigura esas skills. Reinstala el alcance correspondiente para aplicar un cambio personal; una menor intensidad de razonamiento no prueba por sí sola un menor coste.
+
 ## Artefactos del flujo
 
 Versiona los artefactos activos que todavía explican una decisión o comportamiento vigente. `.agents/docs/` es memoria de trabajo, no un almacén permanente: al cerrar un flujo se conserva, promueve o propone retirar cada documento con una razón observable. La carpeta `docs/` queda reservada para documentación dirigida a usuarios y desarrolladores, como guías, API, changelog y notas de versión.
+
+Un TDD `Implementado` no se carga ni entra automáticamente en `active_artifacts` solo porque coincidan una feature, una ruta amplia o una funcionalidad soportada. El agente consulta primero sus metadatos y solo lee el cuerpo por una ruta explícita del usuario/brief o una decisión o contrato concreto afectado, indicando la razón. Las specs vigentes `Implementado`/`Verificado` pueden seguir activas si describen comportamiento necesario; esta exclusión no se extiende a PRDs.
 
 | Artefacto | Ruta canónica | Uso |
 |---|---|---|
@@ -124,7 +209,7 @@ Versiona los artefactos activos que todavía explican una decisión o comportami
 | Discovery | Temporal; conserva supuestos y evidencia aún no absorbida | Sintetiza lo útil en el PRD y propone eliminar la nota, salvo evidencia única |
 | PRD | Activo mientras siga vigente la decisión de producto | Conserva solo el rationale útil; propone archivo únicamente con razón histórica |
 | Spec | Activa y actualizada mientras describa comportamiento soportado | Propone archivo o eliminación según la trazabilidad necesaria |
-| TDD | Activo durante diseño e implementación | Promueve decisiones duraderas a la convención existente y propone eliminarlo; si no hay destino autorizado, lo compacta y reporta el gap |
+| TDD | Apoya una decisión concreta durante diseño e implementación | Compacta duplicados de README/spec/tests, planes ejecutados, bitácoras, logs y métricas por corrida. Conserva decisiones únicas con razón, consecuencia y enlaces; promueve conocimiento a documentación autorizada existente o mantiene una referencia mínima fuera de carga automática si falta destino |
 
 En cada combinación de tipo + `Feature ID` + `Contexto` debe existir como máximo un artefacto activo. `Feature ID` usa un ticket o ID explícito si existe; si no, usa el slug canónico inicial y queda congelado para todas las fases. `Contexto` distingue `global`, `branch:<ref>` y `release:<versión>`, y puede omitirse solo para `global`. Los demás enlazan `Reemplazado por` o se reportan como candidatos de disposición. Todo artefacto mantenido usa estos metadatos mínimos:
 
@@ -136,7 +221,7 @@ En cada combinación de tipo + `Feature ID` + `Contexto` debe existir como máxi
 - `Implementado en` y `Reemplazado por` solo cuando apliquen.
 - Motivo de retención obligatorio cuando `Retención` es `Histórica`.
 
-Al cerrar un flujo nivel 3–4, `ms-architect` informa una de cuatro clasificaciones: `mantener activo`, `promover`, `archivar propuesto` o `eliminar propuesto`, junto con razón y evidencia. Fastlane y nivel 2 claro no crean un subflujo documental. Archivar, mover o eliminar siempre requiere autorización explícita; ningún agente lo ejecuta automáticamente.
+Al cerrar un flujo nivel 3–4, `ms-architect` informa una de cuatro clasificaciones: `mantener activo`, `promover`, `archivar propuesto` o `eliminar propuesto`, junto con razón y evidencia. Un TDD no se mantiene activo solo porque la implementación siga existiendo. Fastlane y nivel 2 claro no generan PRD, spec, TDD ni informes de cierre; en niveles 3–4 se crea únicamente el artefacto necesario, sin cadena documental obligatoria. Archivar, mover o eliminar siempre requiere autorización explícita; ningún agente lo ejecuta automáticamente.
 
 ### Casos de mantenimiento
 
@@ -149,14 +234,14 @@ Al cerrar un flujo nivel 3–4, `ms-architect` informa una de cuatro clasificaci
 | Mutación autorizada | Lista acciones/rutas exactas, obtiene autorización vigente, ejecuta un solo lote y revisa diff/referencias; cualquier cambio relevante invalida la autorización |
 | PRD o discovery desactualizado | Emite `handoff_required`; el usuario ejecuta el handoff o acepta la deuda documental |
 
-Para mantenimiento explícito, usa como argumento completo `/ms-status docs` o `/ms-status maintenance`: lista solo cabeceras, metadatos y enlaces, y lee cuerpos únicamente ante conflicto. Otros argumentos, como `docs-api`, mantienen la inspección focal.
+Para mantenimiento explícito, usa como argumento completo `/ms-status docs` o `/ms-status maintenance`: lista solo cabeceras, metadatos y enlaces, y lee cuerpos únicamente ante conflicto. Reporta TDDs implementados redundantes como candidatos cuando exista evidencia, sin convertirlos en activos. Otros argumentos, como `docs-api`, mantienen la inspección focal sin inventario previo ni lectura de todos los artefactos.
 
 ### Cómo selecciona los artefactos `ms-architect`
 
 1. Si el usuario indica una ruta, `ms-architect` usa esa referencia. Si no existe, detiene el flujo y lo informa; no la sustituye silenciosamente.
 2. Sin una ruta explícita, busca un candidato único por `feature slug` dentro del directorio canónico.
 3. Si encuentra varios candidatos, usa estado y trazabilidad. No decide por fecha ni `mtime`.
-4. Lee solo el artefacto activo y sus referencias directas. No carga todo `.agents/docs/` ni ejecuta `ms-project-init` para resolver una ruta ya conocida.
+4. Lee metadatos antes del cuerpo y aplica la selección de TDDs implementados descrita arriba. Consulta solo artefactos pertinentes y sus referencias directas, sin cargar todo `.agents/docs/` ni ejecutar `ms-project-init` para resolver una ruta ya conocida.
 5. Si la petición vigente, el PRD, la spec o el TDD se contradicen, reporta el drift antes de avanzar.
 
 Un PRD con estado `Borrador` o `En revisión` no autoriza una implementación. Los artefactos con `Retención: Histórica`, estado `Archivado` o `Reemplazado`, o guardados en `.agents/docs/archive/`, no se usan como entrada activa.
@@ -196,6 +281,8 @@ Después de actualizar estas fuentes, vuelve a instalar la configuración para q
 | `ms-agent-kit install` | Aplica el plan de forma transaccional |
 | `ms-agent-kit status` | Compara la instalación con el catálogo actual |
 | `ms-agent-kit uninstall` | Elimina archivos propios y restaura copias de seguridad válidas |
+| `ms-agent-kit project init` | Crea o refresca contexto, conservando preferencias |
+| `ms-agent-kit project inspect` | Compara fuentes del contexto sin escribir |
 
 ### Opciones comunes
 
@@ -209,7 +296,7 @@ Después de actualizar estas fuentes, vuelve a instalar la configuración para q
 | `--assets <ruta>` | Usa un catálogo de recursos (`assets`) alternativo |
 | `--force` | Reemplaza conflictos elegibles; restaura solo bloques administrados inequívocos |
 | `--yes` | Evita preguntas interactivas |
-| `--dry-run` | Convierte `install` en una inspección sin escrituras |
+| `--dry-run` | Simula `install` o `project init` sin escrituras |
 | `--json` | Devuelve salida estructurada |
 
 Ejemplos habituales:
@@ -253,19 +340,34 @@ Con `--json`, los resultados correctos se escriben en `stdout`. Los errores se e
 | `130` | Operación interrumpida por `SIGINT` |
 | `143` | Operación terminada por `SIGTERM` |
 
-`install` y `uninstall` adquieren un bloqueo exclusivo dentro de `.ms-agent-kit` para cada alcance. Un segundo proceso falla sin escribir; un bloqueo bien formado de un proceso que ya no existe se recupera automáticamente. Si el bloqueo está corrupto, el kit lo conserva y solicita revisión manual en lugar de asumir su propiedad. `plan`, `status`, `doctor` y `install --dry-run` siguen siendo operaciones de lectura y no adquieren el bloqueo.
+`install`, `uninstall` y `project init` adquieren un bloqueo exclusivo dentro de `.ms-agent-kit` para cada alcance; `project init` reutiliza internamente la etiqueta de operación `install`. Un segundo proceso falla sin escribir; un bloqueo bien formado de un proceso que ya no existe se recupera automáticamente. Si el bloqueo está corrupto, el kit lo conserva y solicita revisión manual en lugar de asumir su propiedad. `plan`, `status`, `doctor`, `project inspect` y las simulaciones siguen siendo operaciones de lectura y no adquieren el bloqueo.
+
+La recuperación de un bloqueo abandonado usa el directorio exclusivo `.ms-agent-kit/operation.lock.recovery`. Bajo esa protección se vuelve a leer el dueño y se comprueba que siga siendo el proceso muerto observado. Si el marcador ya existe, el kit devuelve `OPERATION_LOCKED` sin sustituir el bloqueo principal. Un marcador abandonado requiere revisión manual: confirma que no hay una recuperación activa y revisa el bloqueo principal antes de retirar únicamente ese directorio vacío. El kit no intenta recuperar automáticamente un marcador de recuperación.
 
 Al recibir `SIGINT` o `SIGTERM`, una mutación se detiene en el siguiente límite seguro, revierte los destinos ya modificados y libera el bloqueo antes de devolver el código de salida correspondiente. La reversión no se cancela a mitad de camino.
 
+`project init` publica un único archivo de forma atómica, vuelve a comprobar su contenido antes de actualizar y limpia el temporal al cancelar antes de publicar. Una publicación ya completada deja un documento íntegro; no es la transacción multiartefacto de `install`.
+
 ## Uso por cliente
 
-Los tres clientes comparten el contrato de roles y evidencia, pero materializan modelos, presupuestos y permisos de forma distinta:
+Los tres clientes comparten el contrato de roles y evidencia, pero materializan modelos, presupuestos y permisos de forma distinta. Esta tabla muestra los defaults sin configuración personal:
 
 | Cliente | `ms-fastlane` | Presupuesto de misión | Permisos |
 |---|---|---|---|
 | OpenCode | `openai/gpt-5.6-luna`, `variant: low` | Materializado por el cliente | Perfiles `balanced`, `strict` y `trusted` con permisos granulares por rol |
 | Claude Code | Haiku, esfuerzo bajo | `toolCycleBudget` materializado | Límites de herramientas y protección compartida `PreToolUse` |
-| Codex | Modelo heredado, razonamiento bajo | Política de prompt; actualmente no hay hard turn budget | Perfiles y reglas que pueden quedar subordinados a la tarea padre o a la configuración global |
+| Codex | Especialista: modelo heredado y razonamiento bajo. `$ms-fastlane` principal: modelo y esfuerzo de la tarea activa | Política de prompt; actualmente no hay hard turn budget | Perfiles y reglas que pueden quedar subordinados a la tarea padre o a la configuración global |
+
+Para cambios claros y de bajo riesgo, usa la entrada directa; para coordinación o decisiones persistentes, activa el arquitecto. Tres archivos y 120 LOC orientan la reevaluación, sin sustituir el criterio de riesgo.
+
+| Acción | OpenCode | Claude Code | Codex |
+|---|---|---|---|
+| Cambio acotado | `/ms-fastlane <pedido>` | `/ms-fastlane <pedido>` | `$ms-fastlane <pedido>` |
+| Nota de traspaso | `/ms-handoff <objetivo>` | `/ms-handoff <objetivo>` | `$ms-handoff <objetivo>` |
+
+OpenCode usa el agente `ms-fastlane`; Claude ejecuta un fork del mismo rol y conserva sus hooks `PreToolUse` y `Stop`, con contrato interno para el padre. Codex ejecuta la skill fastlane en la tarea principal. La entrada evita una consulta inicial al arquitecto y no habilita delegación desde fastlane.
+
+`ms-handoff` entrega una nota en la conversación con objetivo, decisiones, archivos, Git observado, verificaciones y siguiente acción. Para guardarla, pide una ruta explícita dentro del proyecto: la tarea principal delega esa única escritura y no sobrescribe un destino existente ni sigue symlinks. En Claude, el fork devuelve la nota y el destino al padre, que coordina la persistencia; el fork no escribe ni crea subagentes anidados. El cliente receptor debe contrastar Git y fuentes antes de reutilizar evidencia; la nota no convierte una verificación antigua en un PASS actual.
 
 ### OpenCode
 
@@ -460,6 +562,14 @@ Revisa si `~/.codex/config.toml` define un `sandbox_mode` global. Codex puede pr
 Es el comportamiento esperado cuando el plan no contiene cambios. Usa `status` para comprobar que todo sigue actualizado.
 
 ## Desarrollo
+
+### Evaluar calidad y coste observado
+
+La [guía de evaluaciones](assets/evaluations/README.md) incluye cinco tareas manuales: bug, feature, investigación, documentación y cambio entre módulos. Cada una tiene fixture, criterios observables y una plantilla de resultados. Registra cliente, modelo, revisiones, resultado, tiempo, llamadas, reintentos, preguntas innecesarias y tokens cuando estén disponibles; un dato no observado es `null`.
+
+Las pruebas automáticas del kit y las medidas de bytes/caracteres no acreditan ahorro real. Las ejecuciones LLM comparables y repetidas siguen pendientes. Consulta la guía para separar sesiones nuevas de reutilización de contexto y conservar evidencia de resultados correctos e incorrectos.
+
+### Verificar cambios del kit
 
 ```bash
 pnpm install

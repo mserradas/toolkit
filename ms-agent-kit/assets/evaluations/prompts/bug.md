@@ -1,0 +1,1 @@
+Corrige `total` en `src/money.mjs`: una línea con cantidad cero no debe sumarse. Conserva el comportamiento para cantidades positivas, cantidad omitida (equivale a uno) y carrito vacío. No amplíes el contrato de entrada ni modifiques otros archivos. Verifica con `node verify.mjs bug` y resume el resultado. No modifiques el verificador.

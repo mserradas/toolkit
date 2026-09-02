@@ -1,3 +1,7 @@
+import type { KitConfiguration } from "./kit-config.js"
+import type { ResolvedModelProfile } from "./model-profiles.js"
+import type { ProjectPreferences } from "./project-context.js"
+
 export const TARGETS = ["opencode", "claude", "codex"] as const
 
 export type Target = (typeof TARGETS)[number]
@@ -63,6 +67,8 @@ export interface BuildContext {
   projectRoot: string
   scope: InstallScope
   permissionProfile?: PermissionProfile
+  kitConfiguration?: KitConfiguration
+  projectPreferences?: ProjectPreferences
 }
 
 export type PlanAction = "create" | "update" | "adopt" | "unchanged" | "conflict"
@@ -82,6 +88,7 @@ export interface PlanItem {
 }
 
 export interface InstallPlan {
+  models?: Record<string, Record<string, ResolvedModelProfile>>
   items: PlanItem[]
   obsolete: ObsoletePlanItem[]
   statePath: string

@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process"
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises"
+import * as files from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { AppError } from "../src/core/errors.js"
 import {
   acquireOperationLock,
@@ -13,7 +14,10 @@ import type { BuildContext } from "../src/core/types.js"
 
 const temporaryDirectories: string[] = []
 
+vi.mock("node:fs/promises", async (importOriginal) => ({ ...await importOriginal<typeof import("node:fs/promises")>() }))
+
 afterEach(async () => {
+  vi.restoreAllMocks()
   await Promise.all(
     temporaryDirectories.splice(0).map((directory) =>
       rm(directory, { recursive: true, force: true }),
@@ -137,6 +141,91 @@ describe("operation lock", () => {
       .map((result) => result.value)
     expect(acquired).toHaveLength(1)
     await acquired[0]!.release()
+  })
+
+  it("preserves a new owner when a contender resumes with an earlier stale observation", async () => {
+    const context = await testContext()
+    const lockPath = operationLockPath(context)
+    await mkdir(stateLocation(context).directory, { recursive: true })
+    await writeFile(lockPath, JSON.stringify({ pid: await deadProcessId(), operation: "install", startedAt: new Date(0).toISOString(), token: "stale-owner" }))
+    const readOriginal = files.readFile
+    let observed = 0
+    let releaseFirst!: () => void
+    let releaseSecond!: () => void
+    const bothObserved = new Promise<void>((resolve) => { releaseFirst = resolve })
+    const newOwnerAcquired = new Promise<void>((resolve) => { releaseSecond = resolve })
+    vi.spyOn(files, "readFile").mockImplementation(async (...args) => {
+      const result = await readOriginal(...args)
+      if (String(args[0]) === lockPath && String(result).includes("stale-owner") && observed < 2) {
+        observed += 1
+        if (observed === 1) await bothObserved
+        else { releaseFirst(); await newOwnerAcquired }
+      }
+      return result
+    })
+    const attempts = [acquireOperationLock(context, "install"), acquireOperationLock(context, "uninstall")]
+    const winner = await Promise.race(attempts)
+    const winnerContent = await readOriginal(lockPath, "utf8")
+    releaseSecond()
+    const results = await Promise.allSettled(attempts)
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1)
+    expect(await readOriginal(lockPath, "utf8")).toBe(winnerContent)
+    await expect(stat(`${lockPath}.recovery`)).rejects.toMatchObject({ code: "ENOENT" })
+    await winner.release()
+  })
+
+  it.each([true, false])("preserves an existing recovery marker without touching the main lock (lock exists: %s)", async (withLock) => {
+    const context = await testContext()
+    const lockPath = operationLockPath(context)
+    await mkdir(`${lockPath}.recovery`, { recursive: true })
+    const content = JSON.stringify({ pid: await deadProcessId(), operation: "install", startedAt: new Date(0).toISOString(), token: "stale-owner" })
+    if (withLock) await writeFile(lockPath, content)
+    await expect(acquireOperationLock(context, "install")).rejects.toMatchObject({ code: "OPERATION_LOCKED", details: { recoveryPath: `${lockPath}.recovery` } })
+    expect((await stat(`${lockPath}.recovery`)).isDirectory()).toBe(true)
+    if (withLock) expect(await readFile(lockPath, "utf8")).toBe(content)
+    else await expect(stat(lockPath)).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it.each(["cancel", "invalid", "live", "remove-error"])("cleans its recovery marker and preserves the main lock on %s", async (failure) => {
+    const context = await testContext()
+    const lockPath = operationLockPath(context)
+    const recoveryPath = `${lockPath}.recovery`
+    await mkdir(stateLocation(context).directory, { recursive: true })
+    const original = JSON.stringify({ pid: await deadProcessId(), operation: "install", startedAt: new Date(0).toISOString(), token: "stale-owner" })
+    await writeFile(lockPath, original)
+    const controller = new AbortController()
+    const mkdirOriginal = files.mkdir
+    let expectedContent = original
+    vi.spyOn(files, "mkdir").mockImplementation(async (...args) => {
+      const result = await mkdirOriginal(...args)
+      if (String(args[0]) === recoveryPath) {
+        if (failure === "cancel") controller.abort(new AppError("OPERATION_CANCELLED", "cancelled", 130))
+        if (failure === "invalid") expectedContent = "{invalid"
+        if (failure === "live") expectedContent = JSON.stringify({ pid: process.pid, operation: "install", startedAt: new Date().toISOString(), token: "new-live-owner" })
+        if (failure === "invalid" || failure === "live") await writeFile(lockPath, expectedContent)
+      }
+      return result
+    })
+    if (failure === "remove-error") {
+      const rmOriginal = files.rm
+      vi.spyOn(files, "rm").mockImplementation(async (...args) => {
+        if (String(args[0]) === lockPath) throw Object.assign(new Error("remove denied"), { code: "EACCES" })
+        return rmOriginal(...args)
+      })
+    }
+    await expect(acquireOperationLock(context, "install", controller.signal)).rejects.toBeDefined()
+    expect(await readFile(lockPath, "utf8")).toBe(expectedContent)
+    await expect(stat(recoveryPath)).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("rejects a recovery marker symlink", async () => {
+    const context = await testContext()
+    const lockPath = operationLockPath(context)
+    await mkdir(stateLocation(context).directory, { recursive: true })
+    await symlink(context.projectRoot, `${lockPath}.recovery`)
+    await expect(acquireOperationLock(context, "install")).rejects.toMatchObject({ code: "STATE_INVALID" })
+    expect((await stat(context.projectRoot)).isDirectory()).toBe(true)
+    await expect(stat(lockPath)).rejects.toMatchObject({ code: "ENOENT" })
   })
 
   it("does not guess ownership when lock metadata is malformed", async () => {

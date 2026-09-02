@@ -1,7 +1,7 @@
 import path from "node:path"
 import { agentDefinition } from "../core/agent-catalog.js"
 import { renderMarkdown } from "../core/frontmatter.js"
-import { modelProfile } from "../core/model-profiles.js"
+import { resolveModelProfile } from "../core/model-profiles.js"
 import {
   OPENCODE_SECRET_BASH_RULES,
   OPENCODE_SECRET_READ_RULES,
@@ -12,6 +12,8 @@ import {
   copySkillArtifacts,
   embeddedAgentBody,
   textArtifact,
+  projectSharedRules,
+  projectWritePaths,
 } from "./common.js"
 
 const OPENCODE_COMPATIBILITY = `
@@ -43,13 +45,13 @@ function appendPermissionRules(
   return { ...base, ...trailingRules }
 }
 
-function openCodeConfig(): string {
+function openCodeConfig(context: BuildContext): string {
   const defaultAgent = agentDefinition(OPENCODE_DEFAULT_AGENT)
-  const defaultModel = modelProfile(defaultAgent.modelProfile)
+  const defaultModel = resolveModelProfile(defaultAgent.modelProfile, "opencode", context.kitConfiguration)
   return `${JSON.stringify(
     {
       $schema: "https://opencode.ai/config.json",
-      model: defaultModel.openCodeModel,
+      model: defaultModel.model,
       default_agent: OPENCODE_DEFAULT_AGENT,
       permission: {
         bash: OPENCODE_SECRET_BASH_RULES,
@@ -81,6 +83,10 @@ function secureFrontmatter(
     throw new Error(`El recurso (asset) ${agentName} no debe definir \`permission\`; usa la política central`)
   }
   const currentPermission = openCodeRolePermission(agentName, context.permissionProfile ?? "balanced")
+  if (agentName === "ms-writer") currentPermission.edit = {
+    ...Object.fromEntries([["*", "deny"], ...projectWritePaths(agentName, context).map((entry) => [entry, "allow"])]),
+    ...OPENCODE_SECRET_READ_RULES,
+  }
   return {
     ...frontmatter,
     permission: {
@@ -106,7 +112,7 @@ export function buildOpenCodeArtifacts(catalog: Catalog, context: BuildContext):
       name: "opencode.json",
       root: configRoot,
       destination: path.join(configRoot, "opencode.json"),
-      content: openCodeConfig(),
+      content: openCodeConfig(context),
     }),
   )
 
@@ -128,18 +134,18 @@ export function buildOpenCodeArtifacts(catalog: Catalog, context: BuildContext):
 
   for (const agent of catalog.agents) {
     const definition = agentDefinition(agent.name)
-    const model = modelProfile(definition.modelProfile)
+    const model = resolveModelProfile(definition.modelProfile, "opencode", context.kitConfiguration)
     const frontmatter = {
       ...agent.frontmatter,
       mode: definition.mode,
-      model: model.openCodeModel,
+      model: model.model,
       variant: model.reasoningEffort,
       color: definition.openCodeColor,
       ...(definition.toolCycleBudget === undefined
         ? {}
         : { steps: definition.toolCycleBudget }),
     }
-    const body = embeddedAgentBody(catalog.sharedRules, agent.body, OPENCODE_COMPATIBILITY)
+    const body = embeddedAgentBody(projectSharedRules(catalog.sharedRules, context), agent.body, OPENCODE_COMPATIBILITY)
     artifacts.push(
       textArtifact({
         target: "opencode",

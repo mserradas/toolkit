@@ -15,8 +15,8 @@ Usa esta skill al crear o revisar documentación que otra persona debe entender,
 - Prefiere tablas, checklists, ejemplos y plantillas antes que prosa larga.
 - Haz explícita la intención de revisión: qué cambió, por qué importa y cómo verificarlo.
 - Elimina encuadres repetidos, tono motivacional y contexto genérico.
-- Escribe toda la prosa humana en español neutro y profesional, con independencia de la lengua predominante del código base. Conserva sin traducir literales técnicos, identificadores, rutas, comandos, APIs, valores de estado, logs, errores, citas textuales, terminología técnica canónica del proyecto y tokens estructurales exigidos por formatos o tooling.
-- Si modificas un documento existente en inglés, normaliza al español toda su prosa humana; no traduzcas citas ni contratos públicos literales.
+- Sigue `preferences.documentation.language` y la convención documental del proyecto: con `inherit`, conserva el idioma existente; para documentos nuevos sin convención usa español neutro y profesional. Conserva sin traducir literales técnicos, identificadores, rutas, comandos, APIs, valores de estado, logs, errores, citas textuales, terminología técnica canónica del proyecto y tokens estructurales exigidos por formatos o tooling.
+- Una edición puntual no autoriza traducir el documento completo; no traduzcas citas ni contratos públicos literales. Usa `preferences.documentation.paths` dentro del permiso efectivo del rol.
 
 ## Forma Recomendada
 

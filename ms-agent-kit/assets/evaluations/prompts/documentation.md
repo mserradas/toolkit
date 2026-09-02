@@ -1,0 +1,1 @@
+Completa únicamente `README.md`, en español, con requisitos (Node 22 o posterior y sin dependencias), el comando `node demo.mjs`, su salida JSON real y una explicación de subtotal, envío y total. Conserva la descripción existente. Ejecuta el ejemplo y `node verify.mjs documentation`. No modifiques código ni el verificador; la claridad y precisión requieren revisión humana.

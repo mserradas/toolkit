@@ -1,0 +1,37 @@
+[
+  {
+    "id": "bug",
+    "category": "bug conocido",
+    "prompt": "prompts/bug.md",
+    "allowed_changes": ["src/money.mjs"],
+    "criteria": ["La cantidad cero aporta cero", "Se conservan cantidades positivas y carrito vacío", "El verificador original pasa"]
+  },
+  {
+    "id": "feature",
+    "category": "feature acotada",
+    "prompt": "prompts/feature.md",
+    "allowed_changes": ["src/labels.mjs"],
+    "criteria": ["uniqueLabels normaliza, elimina vacíos y duplicados y conserva el orden", "No modifica su entrada", "normalizeLabel conserva su contrato"]
+  },
+  {
+    "id": "investigation",
+    "category": "investigación",
+    "prompt": "prompts/investigation.md",
+    "allowed_changes": ["FINDINGS.md"],
+    "criteria": ["Explica la precedencia de remote sobre el umbral", "Cita src/shipping.mjs y shippingFee", "Aporta las dos reproducciones y no modifica código"]
+  },
+  {
+    "id": "documentation",
+    "category": "documentación",
+    "prompt": "prompts/documentation.md",
+    "allowed_changes": ["README.md"],
+    "criteria": ["Documenta node demo.mjs, Node 22 o posterior y ausencia de dependencias", "Incluye la salida real y explica importes", "Conserva la descripción existente y no modifica código"]
+  },
+  {
+    "id": "modules",
+    "category": "cambio entre módulos",
+    "prompt": "prompts/modules.md",
+    "allowed_changes": ["src/catalog.mjs", "src/order.mjs"],
+    "criteria": ["canFulfill valida existencias y cantidades enteras positivas", "createOrder rechaza cantidades inválidas con RangeError", "Se conservan pedido válido, error por producto desconocido y catálogo sin mutaciones"]
+  }
+]

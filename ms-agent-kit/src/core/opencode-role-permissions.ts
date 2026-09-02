@@ -1,6 +1,6 @@
 import type { PermissionProfile } from "./types.js"
 import { agentDefinition } from "./agent-catalog.js"
-import { capabilityProfile } from "./profiles.js"
+import { capabilityProfile, COORDINATION_SKILLS, technicalSkillsOnly } from "./profiles.js"
 
 export type OpenCodeRolePermission = Record<string, unknown>
 
@@ -1118,5 +1118,20 @@ export function openCodeRolePermission(
 ): OpenCodeRolePermission {
   const permission = ROLE_PERMISSIONS[name]
   if (!permission) throw new Error(`No hay una política de OpenCode para el agente ${name}`)
-  return applyPermissionProfile(name, permission, profile)
+  const result = applyPermissionProfile(name, permission, profile)
+  const capabilities = capabilityProfile(agentDefinition(name).capabilityProfile)
+  if (technicalSkillsOnly(agentDefinition(name).capabilityProfile)) result.skill = { "*": "allow", ...Object.fromEntries(COORDINATION_SKILLS.map((skill) => [skill, "deny"])) }
+  if (capabilities.shell && typeof result.bash === "object" && result.bash !== null) {
+    const bash = result.bash as Record<string, unknown>
+    const canInitialize = name === "ms-codex" || name === "ms-fastlane"
+    result.bash = {
+      "*": bash["*"],
+      "ms-agent-kit project inspect": "allow",
+      "ms-agent-kit project inspect *": "allow",
+      "ms-agent-kit project init": canInitialize ? "allow" : "deny",
+      "ms-agent-kit project init *": canInitialize ? "allow" : "deny",
+      ...bash,
+    }
+  }
+  return result
 }

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, open, readFile, rm, rmdir } from "node:fs/promises"
+import { lstat, mkdir, open, readFile, rm, rmdir } from "node:fs/promises"
 import path from "node:path"
 import process from "node:process"
 import { AppError, throwIfAborted } from "./errors.js"
@@ -70,6 +70,56 @@ async function existingLock(lockPath: string): Promise<LockMetadata | null | "mi
   }
 }
 
+function recoveryBlocked(recoveryPath: string): AppError {
+  return new AppError(
+    "OPERATION_LOCKED",
+    `Hay una recuperación de lock en curso o pendiente de revisión manual: ${recoveryPath}`,
+    3,
+    { recoveryPath },
+  )
+}
+
+async function assertRecoveryAvailable(context: BuildContext, recoveryPath: string): Promise<void> {
+  await assertSafeStatePath(context, recoveryPath)
+  try {
+    await lstat(recoveryPath)
+    throw recoveryBlocked(recoveryPath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+  }
+}
+
+async function recoverStaleLock(
+  context: BuildContext,
+  lockPath: string,
+  recoveryPath: string,
+  observed: LockMetadata,
+  signal?: AbortSignal,
+): Promise<void> {
+  await assertSafeStatePath(context, recoveryPath)
+  try {
+    await mkdir(recoveryPath, { mode: 0o700 })
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") throw recoveryBlocked(recoveryPath)
+    throw error
+  }
+  try {
+    throwIfAborted(signal)
+    await assertSafeStatePath(context, lockPath)
+    const current = await existingLock(lockPath)
+    if (current === "missing") return
+    if (!current || current.token !== observed.token || current.pid !== observed.pid || processExists(current.pid)) {
+      throw new AppError("OPERATION_LOCKED", "El propietario del lock cambió durante la recuperación; se conserva el archivo", 3, { lockPath })
+    }
+    throwIfAborted(signal)
+    await assertSafeStatePath(context, lockPath)
+    await rm(lockPath, { force: true })
+  } finally {
+    await assertSafeStatePath(context, recoveryPath)
+    await rmdir(recoveryPath)
+  }
+}
+
 async function releaseOwnedLock(
   lockPath: string,
   directory: string,
@@ -101,6 +151,7 @@ export async function acquireOperationLock(
   throwIfAborted(signal)
   const directory = stateLocation(context).directory
   const lockPath = operationLockPath(context)
+  const recoveryPath = `${lockPath}.recovery`
   await assertSafeStatePath(context, lockPath)
   let createdDirectory = false
 
@@ -109,6 +160,7 @@ export async function acquireOperationLock(
     await assertSafeStatePath(context, lockPath)
     for (let attempt = 0; attempt < 3; attempt += 1) {
       throwIfAborted(signal)
+      await assertRecoveryAvailable(context, recoveryPath)
       const metadata: LockMetadata = {
         pid: process.pid,
         operation,
@@ -162,7 +214,7 @@ export async function acquireOperationLock(
           },
         )
       }
-      await rm(lockPath, { force: true })
+      await recoverStaleLock(context, lockPath, recoveryPath, owner, signal)
     }
 
     throw new AppError(

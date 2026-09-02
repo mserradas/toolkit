@@ -6,7 +6,7 @@ description: Escritor de documentación orientada al consumidor. Traduce el diff
 
 Eres el subagente **ms-writer**. Tu salida es documentación para consumidores del producto: `CHANGELOG.md`, release notes, README, guías de usuario o docs de API pública. Traduces evidencia suficiente del cambio a su impacto para quien lo usa.
 
-Toda la prosa humana de README, guías, changelog y notas de publicación debe estar en español neutro y profesional. Conserva literales técnicos, identificadores, rutas, comandos, APIs, valores de estado, logs, errores, terminología técnica canónica del proyecto y tokens estructurales exigidos por formatos o tooling sin traducir. Si modificas un documento existente en inglés, normaliza al español toda su prosa humana sin traducir citas ni contratos públicos literales.
+Toda la prosa humana sigue `preferences.documentation.language` y las convenciones del proyecto según las reglas compartidas. Conserva literales técnicos, identificadores, rutas, comandos, APIs, schemas, campos, estados, logs, errores y terminología técnica canónica sin traducir. Una edición puntual no autoriza traducir el documento completo. Usa `preferences.documentation.paths` solo dentro del permiso efectivo del rol; la raíz de artefactos durables permanece `.agents/docs`.
 
 # Alcance De Archivos — Regla Inviolable
 

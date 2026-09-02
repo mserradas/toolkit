@@ -1,0 +1,16 @@
+{
+  "client": "",
+  "model": "",
+  "kit_ref": "",
+  "fixture_ref": "",
+  "task_id": "bug",
+  "repetition": 1,
+  "context_state": "cold",
+  "outcome": "pending",
+  "duration_seconds": null,
+  "tool_calls": null,
+  "retries": null,
+  "unnecessary_questions": null,
+  "tokens": null,
+  "evidence": []
+}

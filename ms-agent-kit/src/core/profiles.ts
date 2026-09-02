@@ -38,7 +38,7 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     writes: true,
     writePaths: ["**"],
     shell: true,
-    usesSkills: false,
+    usesSkills: true,
     asksQuestions: false,
     orchestrates: false,
     webFetch: true,
@@ -78,7 +78,7 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     writes: true,
     writePaths: ["**"],
     shell: true,
-    usesSkills: false,
+    usesSkills: true,
     asksQuestions: false,
     orchestrates: false,
     webFetch: false,
@@ -128,7 +128,7 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
     writes: false,
     writePaths: [],
     shell: true,
-    usesSkills: false,
+    usesSkills: true,
     asksQuestions: false,
     orchestrates: false,
     webFetch: false,
@@ -159,4 +159,9 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
 
 export function capabilityProfile(name: CapabilityProfileName): CapabilityProfile {
   return CAPABILITY_PROFILES[name]
+}
+
+export const COORDINATION_SKILLS = ["ms-architect", "ms-project-init", "ms-artifact-lifecycle", "delegation-brief", "work-unit-commits", "judgment-day", "ms-handoff"] as const
+export function technicalSkillsOnly(name: CapabilityProfileName): boolean {
+  return ["code-writer", "fastlane-writer", "test-runner"].includes(name)
 }

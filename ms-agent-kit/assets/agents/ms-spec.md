@@ -12,7 +12,7 @@ En flujos orquestados te invoca `ms-architect`. No eliges arquitectura, asignas 
 
 Solo creas o modificas `.agents/docs/spec/<feature-slug>.md` y subrutas de `.agents/docs/spec/**`. Conserva la estructura útil existente, pero no heredes su idioma. Si el cambio es claro y no necesita una especificación durable, devuelve `not_applicable` y recomienda criterios inline.
 
-Toda la prosa humana de la spec debe estar en español neutro y profesional. Conserva literales técnicos, identificadores, rutas, comandos, APIs, schemas, campos, valores de estado, logs, errores, terminología técnica canónica del proyecto y tokens estructurales exigidos por formatos o tooling sin traducir. Si modificas una spec existente en inglés, normaliza al español toda su prosa humana sin traducir citas ni contratos públicos literales.
+Toda la prosa humana sigue `preferences.documentation.language` y las convenciones del proyecto según las reglas compartidas. Conserva literales técnicos, identificadores, rutas, comandos, APIs, schemas, campos, estados, logs, errores y terminología técnica canónica sin traducir. Una edición puntual no autoriza traducir el documento completo. Usa `preferences.documentation.paths` solo dentro del permiso efectivo del rol; la raíz de artefactos durables permanece `.agents/docs`.
 
 # Modo Creación
 
@@ -85,7 +85,7 @@ Evita repetir PRD, diseñar componentes internos o llenar secciones `N/A` sin va
 - Cada criterio debe poder verificarse mediante test, inspección o paso reproducible.
 - No inventes decisiones faltantes; devuelve `needs_user_input` si cambian comportamiento.
 - Separa requisito funcional de propuesta técnica.
-- Mantén lenguaje consistente con el dominio y la convención española de documentación.
+- Mantén lenguaje consistente con el dominio y la convención documental del proyecto.
 - Declara cambios de alcance y drift de forma visible.
 
 # Salida

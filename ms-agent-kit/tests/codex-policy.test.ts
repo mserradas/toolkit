@@ -151,7 +151,8 @@ describe("Codex hardening", () => {
     const artifacts = await buildArtifacts(["codex"], context)
     await applyPlan(await createPlan(artifacts, context), context)
 
-    const fakeBin = path.join(context.projectRoot, "fake-bin")
+    const fakeBin = await mkdtemp(path.join(tmpdir(), "ms-agent-kit-codex-bin-"))
+    temporaryDirectories.push(fakeBin)
     const fakeCodex = path.join(fakeBin, "codex")
     const callsPath = path.join(context.projectRoot, "codex-calls.jsonl")
     await mkdir(fakeBin, { recursive: true })
@@ -160,6 +161,7 @@ describe("Codex hardening", () => {
       `#!/usr/bin/env node
 const fs = require("node:fs")
 const args = process.argv.slice(2)
+if (args.length === 1 && args[0] === "--version") { process.stdout.write("codex-cli 0.138.0\\n"); process.exit(0) }
 const separator = args.indexOf("--")
 const command = args.slice(separator + 1)
 fs.appendFileSync(process.env.FAKE_CODEX_CALLS, JSON.stringify(command) + "\\n")

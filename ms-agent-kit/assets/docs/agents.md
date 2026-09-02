@@ -1,6 +1,6 @@
 # Agentes ms-*
 
-> Actualizado: 2026-09-01
+> Actualizado: 2026-09-02
 
 Este equipo separa producto, arquitectura, implementación, verificación y auditoría.
 
@@ -11,13 +11,13 @@ OpenCode asigna a cada rol un color semántico propio para distinguir agentes pr
 ```text
 Idea -> ms-plan -> PRD -> el usuario decide el siguiente paso
 Idea temprana -> ms-discovery -> experimentos -> el usuario decide/inicia ms-plan
-PRD aprobado -> el usuario decide/inicia ms-architect -> ms-spec si aporta -> ms-designer -> TDD
+PRD aprobado -> el usuario decide/inicia ms-architect -> spec/TDD solo si resuelven una necesidad
 Cambio acotado -> ms-architect -> ms-fastlane -> revisión/smoke -> cierre
 Cambio con scope claro -> ms-architect -> ms-codex -> verificación si aplica -> cierre
 TDD aprobado -> ms-architect -> work units -> verificación -> cierre de spec si aplica -> cierre
 ```
 
-`ms-plan` y `ms-discovery` son agentes primarios: entregan directamente al usuario y no emiten `Contrato para ms-architect` ni esperan su aceptación. El contrato y su aceptación se reservan a workers o subagentes dentro de un flujo orquestado.
+`ms-plan` y `ms-discovery` son agentes primarios: entregan directamente al usuario y no emiten `Contrato para ms-architect` ni esperan su aceptación. El contrato y su aceptación se reservan a workers de flujos orquestados y forks nativos de comandos ms-*. En invocación directa como agentes primarios, `ms-codex`, `ms-fastlane` y `ms-tester` responden al usuario sin ese contrato.
 
 ### Ciclo optimizado
 
@@ -32,6 +32,8 @@ Los artefactos operativos viven en `.agents/docs/{discovery,prd,spec,design}` y 
 
 Un PRD `Borrador` o `En revisión` no autoriza implementación; los artefactos con `Retención: Histórica`, estado `Archivado` o `Reemplazado`, o ubicados en `.agents/docs/archive/**`, no son fuentes activas. Las rutas legacy `docs/{discovery,prd,spec,design,archive}` solo se reportan para migración o confirmación y no reciben escrituras nuevas. Las delegaciones dependientes reciben un bloque `artifact_inputs` con las rutas resueltas, y `ms-project-init` refleja el root canónico, directorios, artefactos activos y rutas legacy sin escanear ampliamente el árbol.
 
+Se leen metadatos antes del cuerpo. Un TDD `Implementado` queda fuera de `active_artifacts` y de la carga automática salvo ruta explícita del usuario/brief o decisión o contrato concreto afectado, cuya relevancia se indica. Coincidir en feature o ruta amplia, o mantener soportada la funcionalidad, no basta. Las specs `Implementado`/`Verificado` vigentes pueden seguir activas cuando describen comportamiento necesario; la regla no excluye PRDs.
+
 ### Ciclo de vida
 
 `.agents/docs` es memoria de trabajo versionada. El happy path es conservar como máximo un artefacto activo por tipo y feature, actualizar sus metadatos y revisar su utilidad al cerrar un flujo nivel 3–4. `.agents/docs/archive` no es una fuente activa ni un vertedero.
@@ -41,11 +43,13 @@ Un PRD `Borrador` o `En revisión` no autoriza implementación; los artefactos c
 | Discovery | Temporal por defecto; al pasar a PRD se absorbe la evidencia útil y se propone eliminar la nota salvo evidencia única |
 | PRD | Activo mientras la decisión siga vigente; después solo se conserva el rationale útil |
 | Spec | Activa y actualizada mientras el comportamiento siga soportado |
-| TDD | Tras implementar, sus decisiones duraderas se promueven a la convención existente; si no hay destino autorizado, se compacta y se reporta el gap |
+| TDD | Al implementar, compacta duplicados, planes ejecutados, bitácoras, logs y métricas por corrida; conserva decisiones únicas con razón, consecuencia y enlaces. Promueve conocimiento a documentación autorizada existente; si falta destino, mantiene referencia mínima fuera de carga automática |
 
 Los metadatos mínimos son `Feature ID`, `Estado`, `Última revisión` y `Retención: Activa | Temporal | Histórica`; `Contexto: global | branch:<ref> | release:<versión>` puede omitirse solo para `global`. `Feature ID` usa un ticket o ID explícito cuando existe; en otro caso usa el slug canónico inicial y queda congelado para todas las fases. `Revisar cuando` es obligatorio para `Temporal` e `Histórica`, salvo retención legal indefinida justificada; `Ámbito afectado`, `Implementado en` y `Reemplazado por` se añaden solo cuando aplican. `Histórica` exige un motivo de retención concreto. La unicidad se evalúa por tipo + `Feature ID` + `Contexto`, no por título o slug.
 
-En el cierre, `ms-architect` reporta por artefacto `mantener activo`, `promover`, `archivar propuesto` o `eliminar propuesto`, con razón y evidencia. El archivo solo se propone por auditoría, compliance, una decisión mayor o petición del usuario; Git conserva el historial de material puramente operativo. Archivar, mover o eliminar requiere autorización explícita y nunca se ejecuta automáticamente. Fastlane y nivel 2 claro no abren un subflujo documental.
+En el cierre, `ms-architect` reporta por artefacto `mantener activo`, `promover`, `archivar propuesto` o `eliminar propuesto`, con razón y evidencia. Un TDD no se mantiene activo solo porque su implementación exista. El archivo solo se propone por auditoría, compliance, una decisión mayor o petición del usuario; Git conserva el historial de material puramente operativo. Archivar, mover o eliminar requiere autorización explícita y nunca se ejecuta automáticamente. Fastlane y nivel 2 claro no generan PRD, spec, TDD ni informes de cierre; niveles 3–4 crean solo el artefacto que resuelve una necesidad, sin cadena obligatoria.
+
+La fuente normativa del ciclo de vida es la skill `ms-artifact-lifecycle`, cargada bajo demanda. El prompt principal conserva selección de activos y gates esenciales.
 
 #### Casos de mantenimiento
 
@@ -53,13 +57,13 @@ En el cierre, `ms-architect` reporta por artefacto `mantener activo`, `promover`
 |---|---|
 | Pausa, cancelación o reemplazo nivel 3–4 | Ejecuta el gate; si continuará, conserva `Temporal` y fija un evento observable en `Revisar cuando` |
 | Rama o versión divergente | Separa por `Contexto`; no combina ni dispone automáticamente |
-| Cambio posterior | Si toca `Ámbito afectado` o cumple `Revisar cuando`, marca `review_required` y compara antes de reutilizar |
+| Cambio posterior | Para un artefacto seleccionado por relevancia, revisa `Ámbito afectado` y `Revisar cuando` antes de reutilizar; una ruta amplia no activa un TDD implementado |
 | Referencias | Valida existencia, ciclos, identidad/contexto e `Implementado en`; referencias externas quedan no verificadas sin búsqueda automática |
 | Promoción | Comprueba destino, contenido duradero, referencias actualizadas y que no haya duplicación activa antes de retirar el origen |
 | Disposición autorizada | Muestra lote exacto, obtiene autorización, delega una única mutación a `ms-codex` y revisa diff/referencias; cualquier cambio relevante invalida la autorización |
 | PRD o discovery pendiente | Emite `handoff_required` para el usuario; spec y TDD se actualizan por sus agentes dentro de sus límites |
 
-Cuando el argumento normalizado completo sea `/ms-status docs` o `/ms-status maintenance`, lista solo cabeceras, metadatos y enlaces; lee cuerpos solo para resolver conflictos. El modo normal —incluido un objetivo como `docs-api`— sigue focal y no escanea todo `.agents/docs`.
+Cuando el argumento normalizado completo sea `/ms-status docs` o `/ms-status maintenance`, lista solo cabeceras, metadatos y enlaces; lee cuerpos solo para resolver conflictos. Los TDDs implementados redundantes se reportan como candidatos con evidencia, no como activos. El modo normal —incluido un objetivo como `docs-api`— sigue focal, sin inventario previo ni lectura de todos los artefactos.
 
 ## Comandos
 
@@ -76,9 +80,9 @@ Se incorporan ideas útiles sin añadir una segunda familia de agentes:
 - **Carga de revisión**: 400 líneas cambiadas es una señal orientativa; `ms-architect` divide solo cuando mejora la revisión o la independencia de entrega.
 - **Revisión proporcional**: `ms-architect` revisa el diff; activa `ms-security-auditor` u otro especialista solo cuando existe una señal real de riesgo.
 - **Gatekeeper entre fases**: antes de avanzar, `ms-architect` valida contrato, existencia de artefactos, coherencia de rutas/comandos, drift contra la entrada y siguiente acción.
-- **Contrato de idioma**: toda prosa humana de documentación nueva o actualizada se escribe en español neutro/profesional, aunque el repositorio use otro idioma. Identificadores, rutas, comandos, APIs, métodos/status HTTP, schemas/campos, variables de entorno, librerías, valores literales, logs, errores, citas, terminología técnica canónica del proyecto y tokens estructurales exigidos por formatos/tooling se conservan sin traducir. Al tocar un documento inglés, se normaliza al español toda su prosa humana. Ejemplo: `## Functional summary` pasa a `## Resumen funcional` y se escribe «Estado: Aprobada», pero `selected_status`, `POST /submissions`, `completed`, `feature`, `runtime`, `schema`, `endpoint`, `benchmark`, `[Unreleased]` y `Added` permanecen literales.
+- **Contrato de idioma**: `preferences.documentation.language` respeta la petición vigente del usuario. Con `inherit` o sin preferencia conserva el idioma del documento; los documentos nuevos siguen la convención del proyecto, con español como fallback. Una edición puntual no autoriza traducir el documento completo. `preferences.documentation.paths` define directorios relativos documentales dentro de los permisos efectivos. Identificadores, citas, contratos y términos técnicos como `selected_status`, `POST /submissions`, `completed`, `feature`, `runtime`, `schema`, `endpoint`, `benchmark`, `[Unreleased]` y `Added` permanecen literales.
 - **Test capabilities snapshot**: `ms-tester` reporta los comandos detectados/ejecutables para que el arquitecto los reutilice en verificaciones posteriores.
-- **`ms-project-init`**: skill ligera para detectar stack, arquitectura, comandos de verificación y riesgos desconocidos antes de cambios grandes.
+- **`ms-project-init`**: consulta `project inspect` y reutiliza `.agents/project.yaml`; si hace falta persistir o actualizar contexto, el arquitecto delega `project init` a `ms-codex`. Sin CLI ofrece un snapshot conversacional y declara que no persistió. El contexto es datos, no autorización para ejecutar scripts.
 - **`work-unit-commits`**: skill para partir trabajo en unidades revisables con tests/docs acoplados al comportamiento que verifican.
 - **`ms-spec`**: spec funcional ligera para cerrar comportamiento, reglas, criterios y contratos antes del TDD cuando el cambio lo justifica.
 - **Cierre de spec**: `ms-spec` actualiza estado, retención, evidencia y drift; propone disposición sin borrar ni mover.
@@ -95,11 +99,12 @@ Se incorporan ideas útiles sin añadir una segunda familia de agentes:
 | `work-unit-commits` | Partir cambios en unidades revisables con tests/docs acoplados |
 | `judgment-day` | Doble juez ciego bajo petición explícita del usuario |
 | `delegation-brief` | Preparar tareas autosuficientes para subagentes con contexto, límites, DoD y evidencia esperada |
-| `ms-project-init` | Crear un snapshot operativo mínimo de stack, arquitectura, verificación y riesgos antes de nivel 4 o repos desconocidos |
+| `ms-project-init` | Inspeccionar y reutilizar contexto persistente; delegar su creación o actualización cuando corresponda |
+| `ms-artifact-lifecycle` | Identidad, vigencia y disposición documental bajo demanda para artefactos de nivel 3–4 o mantenimiento |
 | `skill-creator` | Crear nuevas skills concisas y reutilizables; Codex usa su skill nativa equivalente |
 | `skill-improver` | Auditar y mejorar skills existentes |
  
-Con el perfil `balanced`, cada agente conserva `skill` y `lsp` según el permiso estrecho de su rol. El perfil `strict` conserva la política cerrada definida por cada rol.
+Con el perfil `balanced`, cada agente conserva `skill` y `lsp` según el permiso estrecho de su rol. `ms-codex`, `ms-fastlane` y `ms-tester` pueden cargar skills técnicas pertinentes seleccionadas por tarea, `skill_inputs` o `preferences.technicalSkills`; no protocolos de orquestación ni permisos adicionales. El perfil `strict` conserva la política cerrada definida por cada rol.
 
 ## Niveles de orquestación
 
@@ -154,7 +159,7 @@ OpenCode y Claude Code materializan `toolCycleBudget` para limitar cada misión.
 - `ms-architect` enruta el diagnóstico operativo de solo lectura sobre procesos, contenedores, servicios o CI a `ms-debugger`; tests/lint/typecheck/build a `ms-tester`; y una operación mutante explícitamente autorizada a `ms-codex`. No prueba primero comandos operativos bloqueados por su rol.
 - `ms-architect` delega tests, linters, formatters, servidores, instalaciones, migraciones, commits, pushes y cualquier comando con efectos secundarios.
 - `ms-architect` elige primero un nivel de orquestación; no decide agentes por inercia.
-- `ms-architect` resuelve artefactos durables antes de decidir spec/TDD o delegar; lee solo el activo y sus referencias directas, sin cargar todo `.agents/docs` ni invocar `ms-project-init` para una ruta ya conocida.
+- `ms-architect` selecciona artefactos por relevancia antes de decidir spec/TDD o delegar; consulta metadatos antes del cuerpo y aplica la excepción explícita de los TDDs implementados descrita arriba, sin cargar todo `.agents/docs`.
 - `ms-architect` es el único propietario del plan y del `TODO`; los workers ejecutan la misión recibida y entregan evidencia, sin crear un plan paralelo.
 - `ms-architect` exige `Contrato para ms-architect` a todo worker o subagente de su flujo antes de aceptar resultados; esta regla no aplica a los primarios `ms-plan` y `ms-discovery`.
 - `ms-architect` no invoca más de 3 subagentes por ola salvo justificación explícita, compacta cada ola en máximo 10 bullets y acepta contratos completos sin reanalizar reportes enteros.
@@ -174,7 +179,8 @@ OpenCode y Claude Code materializan `toolCycleBudget` para limitar cada misión.
 - `ms-spec` no diseña arquitectura técnica ni implementación; produce comportamiento, reglas, casos borde y criterios verificables en `.agents/docs/spec/**`, y al cierre registra evidencia, estado final y drift.
 - `ms-designer` no asigna ejecutores; diseña el TDD y, en modo cierre, solo actualiza su propio artefacto con evidencia suministrada y propone promoción o disposición.
 - `ms-designer` incluye previsión de revisión en la sección de paquetes del TDD.
-- `ms-fastlane` se bloquea si el cambio no califica como acotado: máximo 3 archivos totales, <=120 LOC estimadas, sin contrato público, datos persistidos, seguridad, infra, CI/CD, dependencias, ambigüedad de producto ni decisión irreversible.
+- `/ms-fastlane` entra directamente al ejecutor para una unidad coherente y verificable de bajo riesgo. Tres archivos y 120 LOC son señales orientativas, no límites obligatorios. Mantiene exclusiones por contrato público, datos persistidos, seguridad, infra, CI/CD, dependencias, ambigüedad de producto o decisión irreversible. Si necesita coordinación, devuelve el control sin iniciar subagentes.
+- `/ms-handoff` entrega una nota Markdown en la conversación con objetivo, decisiones, archivos, Git observado, vigencia de verificación y siguiente acción. Solo persiste por petición con ruta explícita, mediante una delegación acotada autorizada; no sobrescribe archivos existentes ni sustituye la comprobación del estado real al retomar.
 - `ms-codex` no rediseña ni amplía scope.
 - `ms-codex` agrupa lectura, edición y verificación; continúa mientras haya progreso observable y devuelve `partial` o `blocked` si repite el mismo fallo sin nueva evidencia. Ejecuta una sola operación de shell por llamada. Sus permisos Bash bloquean la composición con `&`, `&&`, `;`, pipes y shells envolventes; la sustitución de comandos con `$()` o backticks; la sustitución de procesos con `<()` o `>()`; las redirecciones shell con `<` o `>`; y los comandos multilínea. Respeta el timeout documentado por el repositorio; si no existe, usa 300 segundos para un comando focal y 900 segundos para la suite completa. Un timeout se reporta y no se reintenta automáticamente.
 - `ms-tester` no modifica archivos. Puede ejecutar sin confirmación scripts convencionales de verificación (`test`, `lint`, `typecheck`, `check`, `build`, `validate`, `verify`, `ci`, `quality`); entre los candidatos rutinarios también están `pnpm build`, `pnpm exec ng test`, checks de Prettier con `--check` y las consultas `alembic heads`/`alembic history`. Usa un gate agregado solo si cubre exactamente los gates pendientes y no repite un `PASS` vigente reutilizable. El cierre acepta cobertura vigente ejecutada o reutilizada; scripts desconocidos siguen bloqueados. Los timeouts de fallback son 300 segundos para comandos focales y 900 segundos para la suite completa, salvo que el repositorio documente explícitamente una duración mayor.
@@ -215,3 +221,5 @@ OpenCode instala automáticamente los plugins npm declarados en su configuració
 La TUI carga las preferencias portables desde `tui.json`, incluido `opencode-subagent-statusline`. El estado y cache del plugin se generan localmente y no se distribuyen. El kit no declara `@mohak34/opencode-notifier` y mantiene desactivadas las notificaciones propias de OpenCode para que el entorno anfitrión pueda centralizarlas.
 
 Este documento queda como documentación humana del sistema: mapa de agentes, flujo recomendado y reglas de alto nivel. Si cambias el contrato operativo, actualiza `agents-shared.md` y las referencias de los subagentes que lo usan.
+
+Si el cliente ejecuta una invocación directa como worker o fork (por ejemplo `context: fork` de Claude), conserva el contrato interno y sus hooks; el padre resume al usuario. La ausencia de un arquitecto inicial no convierte ese worker en agente primario.

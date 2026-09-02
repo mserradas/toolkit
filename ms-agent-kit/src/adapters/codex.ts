@@ -1,14 +1,16 @@
 import path from "node:path"
 import { agentDefinition } from "../core/agent-catalog.js"
 import { frontmatterString, renderMarkdown } from "../core/frontmatter.js"
-import { modelProfile } from "../core/model-profiles.js"
+import { resolveModelProfile } from "../core/model-profiles.js"
 import { SECRET_DIRECT_PATHS, SECRET_PATH_PATTERNS } from "../core/permissions.js"
-import { capabilityProfile } from "../core/profiles.js"
+import { capabilityProfile, COORDINATION_SKILLS, technicalSkillsOnly } from "../core/profiles.js"
 import type { Artifact, BuildContext, Catalog, SourceMarkdown } from "../core/types.js"
 import {
   copySharedSkillArtifacts,
   embeddedAgentBody,
   textArtifact,
+  projectSharedRules,
+  projectWritePaths,
 } from "./common.js"
 
 const CODEX_COMPATIBILITY = `
@@ -143,6 +145,7 @@ function codexOperationalInstructions(
   if (!profile.usesSkills) {
     instructions.push("No cargues ni invoques skills aunque el catálogo siga visible.")
   }
+  if (technicalSkillsOnly(definition.capabilityProfile)) instructions.push(`Puedes cargar skills técnicas seleccionadas en el brief o en preferences.technicalSkills. No cargues protocolos de coordinación: ${COORDINATION_SKILLS.join(", ")}. No precargues todo el catálogo.`)
   if (definition.toolCycleBudget !== undefined) {
     instructions.push(
       `Presupuesto operativo objetivo: ${definition.toolCycleBudget} ciclos de herramienta. Al agotar el ciclo ${definition.toolCycleBudget} sin completar, detente y devuelve \`status: partial\` con el trabajo preservable y la siguiente acción; no abras otra tanda de ciclos.`,
@@ -152,16 +155,19 @@ function codexOperationalInstructions(
   return ["# Límites Operativos De Codex", ...instructions.map((item) => `- ${item}`)].join("\n")
 }
 
-function codexAgent(agent: SourceMarkdown, sharedRules: string): string {
+function codexAgent(agent: SourceMarkdown, sharedRules: string, context: BuildContext): string {
   const definition = agentDefinition(agent.name)
   const profile = capabilityProfile(definition.capabilityProfile)
-  const model = modelProfile(definition.modelProfile)
+  const model = resolveModelProfile(definition.modelProfile, "codex", context.kitConfiguration)
   const description = frontmatterString(
     agent.frontmatter,
     "description",
     `Agente especializado ${agent.name}`,
   )
-  const roleInstructions = [codexOperationalInstructions(definition, profile), agent.body]
+  const documentationLimit = agent.name === "ms-writer" && context.scope === "project" && context.projectPreferences?.documentation.paths.length
+    ? "Los permisos nativos de filesystem de Codex abarcan directorios completos. En los directorios de preferences.documentation.paths escribe únicamente archivos Markdown dentro del alcance documental autorizado; esa amplitud nativa no permite editar código ni otros archivos."
+    : ""
+  const roleInstructions = [codexOperationalInstructions(definition, profile), documentationLimit, agent.body]
     .filter(Boolean)
     .join("\n\n")
   const instructions = embeddedAgentBody(sharedRules, roleInstructions, CODEX_COMPATIBILITY)
@@ -170,14 +176,15 @@ function codexAgent(agent: SourceMarkdown, sharedRules: string): string {
     `description = ${tomlString(description)}`,
     `default_permissions = "ms-agent"`,
   ]
-  lines.push(`model_reasoning_effort = ${tomlString(model.reasoningEffort)}`)
+  if (model.model !== null) lines.push(`model = ${tomlString(model.model)}`)
+  if (model.reasoningEffort !== null) lines.push(`model_reasoning_effort = ${tomlString(model.reasoningEffort)}`)
   lines.push(`web_search = ${tomlString(profile.webSearch ? "cached" : "disabled")}`)
   lines.push(`developer_instructions = ${tomlString(instructions)}`)
   lines.push("", "[permissions.ms-agent]")
   lines.push(`description = ${tomlString(`Permisos acotados para ${agent.name}`)}`)
   lines.push(`extends = ${tomlString(profile.writePaths.includes("**") ? ":workspace" : ":read-only")}`)
   lines.push("", '[permissions.ms-agent.filesystem.":workspace_roots"]')
-  for (const writePath of codexWritePaths(profile.writePaths)) {
+  for (const writePath of codexWritePaths(projectWritePaths(agent.name, context))) {
     if (writePath !== "**") lines.push(`${tomlString(writePath)} = "write"`)
   }
   for (const secretPath of SECRET_PATH_PATTERNS) {
@@ -304,14 +311,20 @@ prefix_rule(
 `
 }
 
-function commandSkill(command: SourceMarkdown): string {
+function commandSkill(command: SourceMarkdown, catalog: Catalog, context: BuildContext): string {
   const description = frontmatterString(
     command.frontmatter,
     "description",
     `Ejecuta ${command.name}`,
   )
-  const introduction =
-    "Ejecuta este flujo de trabajo de solo lectura en la tarea padre. Usa $ARGUMENTS como entrada literal."
+  if (command.name === "ms-fastlane") {
+    const fastlane = catalog.agents.find((agent) => agent.name === "ms-fastlane")
+    if (!fastlane) throw new Error("Falta ms-fastlane en el catálogo")
+    const definition = agentDefinition(fastlane.name)
+    const limits = codexOperationalInstructions(definition, capabilityProfile(definition.capabilityProfile)).replace("No preguntes directamente al usuario aunque la herramienta siga visible; devuelve al agente padre cualquier pregunta cuya respuesta cambie el resultado.", "Si falta una decisión bloqueante, pregunta al usuario; esta es una invocación primaria directa.")
+    return codexSkill(command.name, description, embeddedAgentBody(projectSharedRules(catalog.sharedRules, context), `${limits}\n\n${fastlane.body}\n\nEjecuta directamente el cambio acotado autorizado y su verificación. No invoques ms-architect ni delegues otro worker. En esta invocación primaria entrega el resultado al usuario, sin contrato de worker obligatorio. Usa $ARGUMENTS como entrada literal.`, CODEX_COMPATIBILITY))
+  }
+  const introduction = command.name === "ms-handoff" ? "Prepara una nota de traspaso en la tarea padre; lectura por defecto y persistencia delegada solo con ruta explícita. Usa $ARGUMENTS como entrada literal." : "Ejecuta este flujo de trabajo de solo lectura en la tarea padre. Usa $ARGUMENTS como entrada literal."
   const codexBody = command.body.replaceAll(`/${command.name}`, `$${command.name}`)
   const body = [
     "# Adaptación para Codex",
@@ -335,7 +348,7 @@ export function buildCodexArtifacts(catalog: Catalog, context: BuildContext): Ar
         name: agent.name,
         root: roots.codex,
         destination: path.join(roots.codex, "agents", `${agent.name}.toml`),
-        content: codexAgent(agent, catalog.sharedRules),
+        content: codexAgent(agent, projectSharedRules(catalog.sharedRules, context), context),
       }),
     )
   }
@@ -381,7 +394,7 @@ export function buildCodexArtifacts(catalog: Catalog, context: BuildContext): Ar
       content: codexSkill(
         "ms-architect",
         "Activa el flujo orquestado ms-* en la tarea principal de Codex",
-        embeddedAgentBody(catalog.sharedRules, architect.body, CODEX_COMPATIBILITY),
+        embeddedAgentBody(projectSharedRules(catalog.sharedRules, context), architect.body, CODEX_COMPATIBILITY),
       ),
     }),
   )
@@ -397,7 +410,7 @@ export function buildCodexArtifacts(catalog: Catalog, context: BuildContext): Ar
         name: command.name,
         root: roots.skills,
         destination: path.join(roots.skills, command.name, "SKILL.md"),
-        content: commandSkill(renderedCommand),
+        content: commandSkill(renderedCommand, catalog, context),
       }),
     )
   }
