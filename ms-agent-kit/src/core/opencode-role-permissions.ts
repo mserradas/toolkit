@@ -32,7 +32,9 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "git rev-parse*": "allow",
       "opencode debug config": "allow",
       "opencode debug agent *": "allow",
-      "opencode debug skill": "allow"
+      "opencode debug skill": "allow",
+      "ms-agent-kit doctor --target opencode --scope user --json": "allow",
+      "ms-agent-kit doctor --target opencode --scope project --json": "allow"
     },
     "webfetch": "allow",
     "websearch": "deny",

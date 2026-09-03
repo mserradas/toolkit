@@ -11,20 +11,65 @@ Argumento: `$ARGUMENTS`
 ## Reglas
 
 - No edites archivos, crees artefactos, instales dependencias ni invoques subagentes.
-- No ejecutes verificaciones del proyecto. Usa solo lectura, `rg`, `jq`, git read-only y `opencode debug`.
-- Si un comando falla o requiere permisos no disponibles, registra el límite y continúa por archivos.
+- No ejecutes verificaciones del proyecto. Usa solo lectura, `ms-agent-kit doctor`, `rg`, `jq`, git read-only y `opencode debug`.
+- Presupuesto agregado de salida de herramientas: <= 16 KiB (16384 bytes) en modo normal; <= 32 KiB (32768 bytes) con `full`. Lleva la cuenta de máximos reservados incluyendo errores y lecturas de archivos, sin inventar un consumo medido. Antes de cada consulta reserva su máximo; si no cabe, detente y marca lo pendiente como `no comprobado`. `full` amplía cobertura, nunca detalle ni cuerpos.
+- Proyecta JSON dentro de la misma tubería antes de incorporarlo al chat. Nunca ejecutes debug sin filtro ni uses `head` sobre JSON crudo. Los filtros siguientes limitan bytes UTF-8, incluida la nueva línea; no aumentes sus topes. Acota también cualquier consulta adicional al presupuesto restante.
+- Si el CLI no existe, falla sin JSON válido o faltan permisos/`jq`, declara el límite y continúa con consultas focales por archivos. Una tubería sin JSON de salida queda `no comprobado`, aunque `jq` termine con código 0. No vuelques ni reintentes con salida completa. Un JSON válido con `ok: false` es evidencia de problemas, aunque el CLI termine con código 1.
+- No leas prompts de agentes ni `content` de skills en una configuración correcta. Solo ante una inconsistencia concreta lee el fragmento imprescindible, dentro del presupuesto y sin secretos. Un dato omitido, truncado o no acreditado queda `no comprobado`, nunca OK por inferencia.
 
-## Inspección
+## 1. Resumen del kit
 
-Revisa solo el contexto OpenCode:
+Empieza ejecutando esta consulta. En scope de proyecto sustituye únicamente `--scope user` por `--scope project`; no inspecciones ambos scopes sin motivo. Los totales del catálogo del kit no demuestran carga efectiva.
 
-- `~/.config/opencode/opencode.json` y `tui.json` cuando existan.
-- `~/.config/opencode/agents/ms-*.md`, `commands/ms-*.md`, `skills/*/SKILL.md` y `docs/agents*.md`.
-- En scope de proyecto, las rutas equivalentes bajo `.opencode/` y la configuración OpenCode del repositorio.
+```sh
+ms-agent-kit doctor --target opencode --scope user --json 2>/dev/null | jq -c --argjson cap 2048 '
+{ok, agents, commands, skills, installation: .installation.opencode,
+ capabilities: {total: (.capabilities | length), items: [.capabilities[] | select(.id | startswith("project.commands.static.") | not) | {id, status}][:12]},
+ warnings: {total: (.warnings | length), items: [.warnings[:3][] | .[:160]]}}
+| if (tojson | utf8bytelength) + 1 <= $cap then . else {status:"no comprobado",reason:"presupuesto de salida"} end
+' 2>/dev/null
+```
 
-Valida con `opencode debug agent` los siete agentes mínimos: `ms-architect`, `ms-codex`, `ms-fastlane`, `ms-tester`, `ms-debugger`, `ms-plan` y `ms-discovery`. Con argumento `full`, valida todos los `ms-*`. Usa `opencode debug skill` para contar las skills efectivamente visibles; no sumes instalaciones de Claude o Codex.
+Reutiliza únicamente lo acreditado: integridad administrada y estados explícitos de capacidades. Los avisos se muestran parcialmente; los comandos estáticos del proyecto quedan fuera de este resumen. No conviertas `runtime.agents-skills`, modelos ni conectividad MCP en OK por integridad de archivos.
 
-Comprueba JSON válido, carga y color de agentes, permisos por rol, denegaciones finales de secretos, reglas compartidas incorporadas una sola vez, comandos `ms-status` y `ms-doctor`, `opencode-subagent-statusline` habilitado, notificaciones propias de la TUI desactivadas, ausencia de `@mohak34/opencode-notifier` y MCP `context7` sin clave literal.
+## 2. Carga nativa resumida
+
+Para lo no acreditado por el kit, valida los siete agentes mínimos: `ms-architect`, `ms-codex`, `ms-fastlane`, `ms-tester`, `ms-debugger`, `ms-plan` y `ms-discovery`. Con `full`, cubre todos los `ms-*` del inventario de nombres. Usa una consulta por agente, cambiando solo el nombre; no cargues sus archivos completos para obtenerlo.
+
+```sh
+opencode debug agent ms-architect 2>/dev/null | jq -c --argjson cap 1536 '
+{name, mode, color, model,
+ tools: (if (.tools | type) == "object" and ([.tools[] | type == "boolean"] | all) then
+   {enabled: ([.tools[] | select(.)] | length), disabled: ([.tools[] | select(. == false)] | length),
+    core: (.tools | with_entries(select(.key | IN("read","bash","edit","write","task","skill","question","todowrite","webfetch","websearch"))))}
+   else "no comprobado" end),
+ permissions: (if (.permission | type) == "array" then
+   .permission | group_by(.permission) | map({key: .[0].permission, value:
+     ((group_by(.action) | map({key: .[0].action, value: length}) | from_entries)
+      + {default: ([.[] | select(.pattern == "*") | .action] | last), last: .[-1].action})}) | from_entries
+   else "no comprobado" end)}
+| if (tojson | utf8bytelength) + 1 <= $cap then . else {status:"no comprobado",reason:"presupuesto de salida"} end
+' 2>/dev/null
+```
+
+`tools.core` muestra disponibilidad, no autorización para cada invocación. En permisos, los recuentos por acción, el último wildcard (`default`) y la última acción (`last`) permiten detectar discrepancias, pero no acreditan equivalencia de patrones ni precedencia de todas las reglas. Comprueba por consulta focal los permisos del rol y las denegaciones finales de secretos que sigan sin acreditarse; proyecta solo `permission`, `pattern`, `action` para la herramienta afectada, con el mismo guard de bytes. Si no cabe, registra `no comprobado`.
+
+Cuenta skills efectivamente visibles con esta consulta; no sumes instalaciones de Claude o Codex. `total` cuenta todo el catálogo y `items` muestra una página de cuatro metadatos. Cambia `offset` solo si una inconsistencia requiere otra página; nunca incluyas `content`.
+
+```sh
+opencode debug skill 2>/dev/null | jq -c --argjson cap 2048 --argjson offset 0 '
+if type == "array" then
+  {total: length, offset: $offset, items: .[$offset:$offset+4] | map({name: .name[:64], description: .description[:96], location: .location[:160]})}
+else {status:"no comprobado",reason:"formato de skills inesperado"} end
+| if (tojson | utf8bytelength) + 1 <= $cap then . else {status:"no comprobado",reason:"presupuesto de salida"} end
+' 2>/dev/null
+```
+
+## 3. Comprobaciones focales
+
+Usa el presupuesto restante para lo no acreditado: JSON válido de `~/.config/opencode/opencode.json` y `tui.json`, reglas compartidas incorporadas una sola vez, comandos `ms-status` y `ms-doctor`, `opencode-subagent-statusline` habilitado, notificaciones propias de la TUI desactivadas, ausencia de `@mohak34/opencode-notifier` y MCP `context7` sin clave literal. En scope de proyecto usa las rutas equivalentes bajo `.opencode/` y su configuración.
+
+Consulta primero existencia, claves, recuentos o booleanos mediante `jq`/`rg`; no vuelques configuración, catálogos, prompts ni credenciales. Para reglas compartidas usa recuentos de sus marcadores, no el cuerpo. Lee fragmentos solo si aparece una inconsistencia. Un plugin configurado no demuestra carga de caché; un MCP configurado no demuestra conectividad. Identifica cada límite en el informe.
 
 ## Salida
 
@@ -38,6 +83,8 @@ Comandos: <tabla breve>
 Skills efectivas en OpenCode: <n>
 Plugins / cache: <resumen>
 MCP: <resumen>
+No comprobado: <datos omitidos o pendientes y motivo>
+Salida de herramientas: <máximo reservado / presupuesto; consumo real no medido>
 Riesgos: <solo riesgos reales>
 Acciones recomendadas: <acciones concretas o "ninguna">
 ```

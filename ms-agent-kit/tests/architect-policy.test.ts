@@ -1,8 +1,115 @@
+import { spawnSync } from "node:child_process"
 import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 import { DEFAULT_ASSETS_ROOT } from "../src/core/catalog.js"
 import { parseMarkdown } from "../src/core/frontmatter.js"
+import { openCodeRolePermission } from "../src/core/opencode-role-permissions.js"
+import { OPENCODE_SECRET_BASH_RULES, OPENCODE_SECRET_READ_RULES } from "../src/core/permissions.js"
+
+const jqProbe = spawnSync("jq", ["--version"], { encoding: "utf8", timeout: 10_000 })
+const jqMissing = (jqProbe.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT"
+
+async function openCodeDoctorFilters() {
+  const source = await readFile(path.join(DEFAULT_ASSETS_ROOT, "commands", "opencode", "ms-doctor.md"), "utf8")
+  const filters = [...source.matchAll(/jq -c --argjson cap (\d+)(?: --argjson offset (\d+))? '([\s\S]*?)' 2>\/dev\/null/g)]
+  expect(filters).toHaveLength(3)
+  return { source, filters }
+}
+
+function projectDoctorFixture(filter: RegExpMatchArray, fixture: unknown, offset = 0) {
+  const cap = Number(filter[1])
+  const result = spawnSync("jq", ["-c", "--argjson", "cap", String(cap), "--argjson", "offset", String(offset), filter[3]!], {
+    input: JSON.stringify(fixture), encoding: "utf8", timeout: 10_000, maxBuffer: 64 * 1024,
+  })
+  expect(result.error, "Las pruebas de filtros ejecutan jq, también requerido por /ms-doctor").toBeUndefined()
+  expect(result.status, result.stderr).toBe(0)
+  const bytes = Buffer.byteLength(result.stdout, "utf8")
+  expect(bytes).toBeLessThanOrEqual(cap)
+  expect(result.stdout).not.toMatch(/PRIVATE_PROMPT|PRIVATE_CONTENT|PRIVATE_SCHEMA/)
+  return { value: JSON.parse(result.stdout), bytes }
+}
+
+describe.skipIf(jqMissing)("OpenCode doctor output budget (requires jq)", () => {
+  it("projects the kit report before native debug and leaves omissions unverified", async () => {
+    const { source, filters } = await openCodeDoctorFilters()
+    expect(source.indexOf("ms-agent-kit doctor --target opencode --scope user --json")).toBeLessThan(source.indexOf("opencode debug agent ms-architect"))
+    expect(source).toContain("16384 bytes")
+    expect(source).toContain("32768 bytes")
+    expect(source).toContain("Antes de cada consulta reserva su máximo")
+    expect(source).toContain("`no comprobado`, nunca OK por inferencia")
+    for (const agent of ["ms-architect", "ms-codex", "ms-fastlane", "ms-tester", "ms-debugger", "ms-plan", "ms-discovery"]) {
+      expect(source).toContain(`\`${agent}\``)
+    }
+    const result = projectDoctorFixture(filters[0]!, {
+      ok: false, agents: 12, commands: 10, skills: 30,
+      installation: { opencode: { managed: 52, status: { ok: 51, modified: 1, missing: 0 } } },
+      capabilities: [
+        { id: "installation.integrity", status: "incompatible", evidence: "PRIVATE_CONTENT".repeat(20_000) },
+        { id: "runtime.agents-skills", status: "no comprobado" },
+        ...Array.from({ length: 2_000 }, (_, index) => ({ id: `project.commands.static.test.${index}`, status: "correcto", evidence: "PRIVATE_CONTENT" })),
+      ],
+      warnings: Array.from({ length: 100 }, () => "aviso".repeat(10_000)),
+      unused: "PRIVATE_CONTENT".repeat(20_000),
+    })
+    expect(result.value).toMatchObject({ ok: false, installation: { status: { modified: 1 } }, capabilities: { total: 2002 }, warnings: { total: 100 } })
+    expect(result.value.capabilities.items).toEqual([
+      { id: "installation.integrity", status: "incompatible" },
+      { id: "runtime.agents-skills", status: "no comprobado" },
+    ])
+    expect(result.value.warnings.items).toHaveLength(3)
+  })
+
+  it("summarizes seven native agents without prompts or tool schemas", async () => {
+    const { filters } = await openCodeDoctorFilters()
+    const results = ["ms-architect", "ms-codex", "ms-fastlane", "ms-tester", "ms-debugger", "ms-plan", "ms-discovery"].map((name) => {
+      const role = openCodeRolePermission(name)
+      const bash = typeof role.bash === "string" ? { "*": role.bash } : role.bash as Record<string, unknown>
+      const rules = { ...role, bash: { ...bash, ...OPENCODE_SECRET_BASH_RULES }, read: OPENCODE_SECRET_READ_RULES }
+      const permission = Object.entries(rules).flatMap(([permission, value]) =>
+        typeof value === "string"
+          ? [{ permission, pattern: "*", action: value }]
+          : Object.entries(value as Record<string, string>).map(([pattern, action]) => ({ permission, pattern, action })),
+      )
+      const result = projectDoctorFixture(filters[1]!, {
+        name, mode: "subagent", color: "#ABCDEF", model: { providerID: "openai", modelID: "test" }, permission,
+        tools: { read: true, bash: true, edit: false, task: false, ...Object.fromEntries(Array.from({ length: 1_000 }, (_, i) => [`mcp_tool_${i}`, true])) },
+        prompt: "PRIVATE_PROMPT".repeat(40_000), schema: "PRIVATE_SCHEMA".repeat(20_000),
+      })
+      expect(result.value).toMatchObject({ name, mode: "subagent", color: "#ABCDEF", model: { modelID: "test" }, tools: { enabled: 1002, disabled: 2, core: { read: true, edit: false } } })
+      expect(result.value.permissions.bash.default).toBe(bash["*"])
+      expect(result.value.permissions.bash.last).toBe("deny")
+      expect(result.value.permissions.read.deny).toBe(Object.keys(OPENCODE_SECRET_READ_RULES).length)
+      return result
+    })
+    expect(results.reduce((sum, result) => sum + result.bytes, 0) + Number(filters[0]![1]) + Number(filters[2]![1])).toBeLessThan(16384)
+    const changed = projectDoctorFixture(filters[1]!, { permission: [
+      { permission: "bash", pattern: "*", action: "deny" },
+      { permission: "bash", pattern: "*", action: "allow" },
+    ], tools: [{ id: "read", enabled: true }] })
+    expect(changed.value.permissions.bash).toEqual({ allow: 1, deny: 1, default: "allow", last: "allow" })
+    expect(changed.value.tools).toBe("no comprobado")
+  })
+
+  it("counts all skills, pages only metadata, and replaces oversized summaries", async () => {
+    const { filters } = await openCodeDoctorFilters()
+    const skills = Array.from({ length: 100 }, (_, index) => ({
+      name: `skill-${index}`, description: "é".repeat(1000), location: `/skills/${index}/SKILL.md`, content: "PRIVATE_CONTENT".repeat(10_000),
+    }))
+    const result = projectDoctorFixture(filters[2]!, skills, 4)
+    expect(result.value).toMatchObject({ total: 100, offset: 4 })
+    expect(result.value.items).toHaveLength(4)
+    expect(result.value.items[0]).toEqual({ name: "skill-4", description: "é".repeat(96), location: "/skills/4/SKILL.md" })
+    for (const item of result.value.items) expect(Object.keys(item)).toEqual(["name", "description", "location"])
+    for (const [index, fixture] of [
+      [0, { installation: { opencode: "🙂".repeat(10_000) }, capabilities: [], warnings: [] }],
+      [1, { name: "🙂".repeat(10_000) }],
+      [2, Array.from({ length: 4 }, () => ({ name: "🙂".repeat(100), description: "🙂".repeat(200), location: "🙂".repeat(300) }))],
+    ] as const) {
+      expect(projectDoctorFixture(filters[index]!, fixture).value).toEqual({ status: "no comprobado", reason: "presupuesto de salida" })
+    }
+  })
+})
 
 describe("ms-architect policy", () => {
   it("counts Codex-managed doctor artifacts using state targets", async () => {

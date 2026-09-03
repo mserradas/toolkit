@@ -329,6 +329,37 @@ describe("platform adapters", () => {
     })
   })
 
+  it("keeps doctor read-only allows exact in every emitted architect profile", async () => {
+    const commands = [
+      "ms-agent-kit doctor --target opencode --scope user --json",
+      "ms-agent-kit doctor --target opencode --scope project --json",
+    ]
+    for (const profile of ["balanced", "strict", "trusted"] as const) {
+      const buildContext = await context()
+      buildContext.permissionProfile = profile
+      const artifacts = await buildArtifacts(["opencode"], buildContext)
+      const architect = artifacts.find((artifact) => artifact.kind === "agent" && artifact.name === "ms-architect")!
+      const permission = parseMarkdown(architect.content.toString("utf8")).frontmatter.permission as Record<string, unknown>
+      const bash = permission.bash as Record<string, string>
+      const doctorRules = Object.entries(bash).filter(([command]) => command.startsWith("ms-agent-kit doctor"))
+      expect(doctorRules).toEqual(commands.map((command) => [command, "allow"]))
+      expect(doctorRules.every(([command]) => !command.includes("*"))).toBe(true)
+      const decision = (command: string) => Object.entries(bash).reduce((last, [pattern, action]) => {
+        const expression = pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")
+        return new RegExp(`^${expression}$`).test(command) ? action : last
+      }, "deny")
+      for (const command of commands) expect(decision(command)).toBe("allow")
+      for (const command of [
+        `${commands[0]} --extra`,
+        "ms-agent-kit doctor --target codex --scope user --json",
+        "ms-agent-kit doctor --target opencode --scope user",
+        "ms-agent-kit install --target opencode --scope user --json",
+        "ms-agent-kit uninstall --target opencode --scope user --json",
+      ]) expect(decision(command)).toBe("deny")
+      expect(Object.keys(bash).slice(-Object.keys(OPENCODE_SECRET_BASH_RULES).length)).toEqual(Object.keys(OPENCODE_SECRET_BASH_RULES))
+    }
+  })
+
   it("keeps OpenCode shell permissions narrow and read-only where required", () => {
     const bashPermission = (name: string) =>
       openCodeRolePermission(name, "balanced").bash as Record<string, string>

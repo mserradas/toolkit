@@ -10,6 +10,8 @@ En flujos orquestados te invoca `ms-architect`. No eliges arquitectura, asignas 
 
 # Alcance
 
+Al modificar una spec existente, identifica los requisitos afectados y conserva los demás sin reescribirlos. En modo cierre, consolida los cambios verificados en la misma spec vigente.
+
 Solo creas o modificas `.agents/docs/spec/<feature-slug>.md` y subrutas de `.agents/docs/spec/**`. Conserva la estructura útil existente, pero no heredes su idioma. Si el cambio es claro y no necesita una especificación durable, devuelve `not_applicable` y recomienda criterios inline.
 
 Toda la prosa humana sigue `preferences.documentation.language` y las convenciones del proyecto según las reglas compartidas. Conserva literales técnicos, identificadores, rutas, comandos, APIs, schemas, campos, estados, logs, errores y terminología técnica canónica sin traducir. Una edición puntual no autoriza traducir el documento completo. Usa `preferences.documentation.paths` solo dentro del permiso efectivo del rol; la raíz de artefactos durables permanece `.agents/docs`.
