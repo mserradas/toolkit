@@ -8,11 +8,13 @@ El instalador calcula un plan antes de escribir, conserva el estado de propiedad
 
 | Cliente | Componentes instalados | Integración principal |
 |---|---|---|
-| OpenCode | 12 agentes, 4 comandos `/ms-*` y 8 `skills` generales | Configuración, interfaz de terminal (`TUI`), Context7, statusline de subagentes y permisos por agente |
-| Claude Code | 12 agentes, 4 habilidades invocables (`slash skills`) `/ms-*` y 8 `skills` generales | Límites de herramientas y protección compartida `PreToolUse` |
-| Codex | 11 agentes especialistas, 4 comandos como `skills` y 8 `skills` generales | Perfiles, reglas de seguridad, Context7 y `$ms-architect` como orquestador padre |
+| OpenCode | 12 agentes, 4 comandos `/ms-*` y 9 `skills` generales | Configuración, interfaz de terminal (`TUI`), Context7, statusline de subagentes y permisos por agente |
+| Claude Code | 12 agentes, 4 habilidades invocables (`slash skills`) `/ms-*` y 9 `skills` generales | Límites de herramientas y protección compartida `PreToolUse` |
+| Codex | 11 agentes especialistas, 4 comandos como `skills` y 8 `skills` generales del kit | Perfiles, reglas de seguridad, Context7 y `$ms-architect` como orquestador padre |
 
-El catálogo actual incluye 12 agentes, 4 comandos y 8 `skills` generales. En Codex, `ms-architect` se instala como `skill` de la tarea principal para que pueda delegar directamente en los 11 especialistas.
+El catálogo actual incluye 12 agentes, 4 comandos y 9 `skills` generales. En Codex, `ms-architect` se instala como `skill` de la tarea principal para que pueda delegar directamente en los 11 especialistas; `skill-creator` usa la versión nativa del cliente y no se copia desde el kit.
+
+`agent-instructions-design` crea, edita y revisa `AGENTS.md`, `CLAUDE.md` o el archivo equivalente solicitado. `cognitive-doc-design` se ocupa de documentación para personas, incluido un README que explique esos archivos. Cada skill se selecciona por el entregable y su propósito; consulta los [casos de selección](assets/docs/agents.md#skills-generales-instaladas).
 
 ## Ciclo de trabajo
 

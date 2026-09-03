@@ -1,11 +1,13 @@
 ---
 name: skill-creator
-description: "Crea skills concisas y LLM-first. Úsala para nuevas skills de OpenCode/Codex, patrones de instrucciones para agentes, workflows reutilizables y guía IA específica del proyecto."
+description: "Crea skills reutilizables concisas y LLM-first con SKILL.md para OpenCode, Claude Code y Codex. Úsala cuando el entregable sea una skill nueva; excluye archivos AGENTS.md, CLAUDE.md o equivalentes y documentación para personas."
 ---
 
 # Skill Creator
 
 Usa esta skill para crear una skill reutilizable, no para documentación one-off.
+
+Para crear o revisar `AGENTS.md`, `CLAUDE.md` o equivalentes usa `agent-instructions-design`; para documentación dirigida a personas usa `cognitive-doc-design` y para mejorar una skill existente usa `skill-improver`. Decide por el entregable, no por menciones a agentes. Respeta una selección explícita del usuario.
 
 ## Reglas De Creación
 

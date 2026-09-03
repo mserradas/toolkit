@@ -1,6 +1,6 @@
 # Agentes ms-*
 
-> Actualizado: 2026-09-02
+> Actualizado: 2026-09-03
 
 Este equipo separa producto, arquitectura, implementación, verificación y auditoría.
 
@@ -95,7 +95,8 @@ Se incorporan ideas útiles sin añadir una segunda familia de agentes:
 
 | Skill | Uso |
 |---|---|
-| `cognitive-doc-design` | Docs, guías, READMEs, RFCs y notas de revisión con baja carga cognitiva |
+| `cognitive-doc-design` | Documentación para personas: guías, READMEs, RFCs y notas de revisión con baja carga cognitiva |
+| `agent-instructions-design` | Crear, editar y revisar `AGENTS.md`, `CLAUDE.md` o equivalentes con reglas comprobables del proyecto |
 | `work-unit-commits` | Partir cambios en unidades revisables con tests/docs acoplados |
 | `judgment-day` | Doble juez ciego bajo petición explícita del usuario |
 | `delegation-brief` | Preparar tareas autosuficientes para subagentes con contexto, límites, DoD y evidencia esperada |
@@ -103,7 +104,21 @@ Se incorporan ideas útiles sin añadir una segunda familia de agentes:
 | `ms-artifact-lifecycle` | Identidad, vigencia y disposición documental bajo demanda para artefactos de nivel 3–4 o mantenimiento |
 | `skill-creator` | Crear nuevas skills concisas y reutilizables; Codex usa su skill nativa equivalente |
 | `skill-improver` | Auditar y mejorar skills existentes |
- 
+
+La selección depende del entregable y su propósito. `agent-instructions-design` es autónoma y no carga `cognitive-doc-design` automáticamente; conserva las decisiones del usuario y respeta las diferencias de alcance y carga de cada cliente. La selección explícita del usuario prevalece.
+
+| Petición | Selección esperada |
+|---|---|
+| «Crea AGENTS.md con las convenciones de este repositorio» | `agent-instructions-design` |
+| «Revisa CLAUDE.md y señala contradicciones» | `agent-instructions-design`; revisión sin edición |
+| «Crea instructions.md como instrucciones para los agentes» | `agent-instructions-design`; conserva el destino pedido y comprueba cómo lo carga el cliente |
+| «Explica AGENTS.md en el README» | `cognitive-doc-design` |
+| «Mejora la guía de onboarding de agentes» | `cognitive-doc-design` si está dirigida a personas |
+| «Crea una skill para revisar migraciones» | `skill-creator` |
+| «Mejora los triggers de esta skill» | `skill-improver` |
+| «Corrige el bug siguiendo AGENTS.md» | Seguir las instrucciones existentes; estas skills documentales no se activan por esa mención |
+| «Actualiza AGENTS.md y documenta su uso en el README» | Cada skill trabaja sobre su propio entregable |
+
 Con el perfil `balanced`, cada agente conserva `skill` y `lsp` según el permiso estrecho de su rol. `ms-codex`, `ms-fastlane` y `ms-tester` pueden cargar skills técnicas pertinentes seleccionadas por tarea, `skill_inputs` o `preferences.technicalSkills`; no protocolos de orquestación ni permisos adicionales. El perfil `strict` conserva la política cerrada definida por cada rol.
 
 ## Niveles de orquestación

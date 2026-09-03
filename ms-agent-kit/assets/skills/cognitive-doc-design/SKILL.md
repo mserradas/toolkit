@@ -1,11 +1,15 @@
 ---
 name: cognitive-doc-design
-description: "Diseña documentación clara y de baja carga cognitiva. Úsala para READMEs, guías, RFCs, arquitectura, notas de revisión, onboarding y docs densas o difíciles de escanear."
+description: "Diseña documentación para personas clara y de baja carga cognitiva: READMEs, guías, RFCs, arquitectura, notas de revisión y onboarding. Excluye crear o revisar instrucciones para agentes (AGENTS.md, CLAUDE.md o equivalentes) y crear o mejorar SKILL.md."
 ---
 
 # Cognitive Doc Design
 
 Usa esta skill al crear o revisar documentación que otra persona debe entender, revisar o ejecutar rápido.
+
+## Contrato De Activación
+
+Selecciona por el entregable y su propósito. Para archivos de instrucciones para agentes usa `agent-instructions-design`; para crear una skill usa `skill-creator` y para mejorarla `skill-improver`. Un README o guía que explica `AGENTS.md`, `CLAUDE.md` o skills sigue dentro de `cognitive-doc-design`. En peticiones mixtas, aplica cada skill solo a su entregable, sin encadenarlas automáticamente sobre el mismo archivo. Respeta una selección explícita del usuario.
 
 ## Reglas
 
