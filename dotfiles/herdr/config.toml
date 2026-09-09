@@ -5,6 +5,7 @@ name = "terminal"
 auto_switch = false
 
 [terminal]
+default_shell = "fish"
 shell_mode = "auto"
 new_cwd = "follow"
 

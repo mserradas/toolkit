@@ -75,6 +75,8 @@ install_packages() {
         starship
         eza
         fzf
+        fd
+        bat
         atuin
         zoxide
         fnm
@@ -175,6 +177,11 @@ copy_configs() {
 }
 
 # --- INTEGRACIONES HERDR ---
+install_fish_plugins() {
+    log "Plugins Fish"
+    fish "$DOTFILES_DIR/fish/install-plugins.fish"
+}
+
 install_herdr_integrations() {
     log "Integraciones de Herdr"
 
@@ -245,6 +252,8 @@ healthcheck() {
     installed starship  && check "Starship"           "ok" || check "Starship"           "no encontrado"
     installed eza       && check "eza"                "ok" || check "eza"                "no encontrado"
     installed fzf       && check "fzf"                "ok" || check "fzf"                "no encontrado"
+    installed fd        && check "fd"                 "ok" || check "fd"                 "no encontrado"
+    installed bat       && check "bat"                "ok" || check "bat"                "no encontrado"
     installed atuin     && check "atuin"              "ok" || check "atuin"              "no encontrado"
     installed zoxide    && check "zoxide"             "ok" || check "zoxide"             "no encontrado"
     installed fnm       && check "fnm"                "ok" || check "fnm"                "no encontrado"
@@ -256,6 +265,24 @@ healthcheck() {
     check_config "Config Fish"     "$DOTFILES_DIR/fish/config.fish"        "$HOME/.config/fish/config.fish"
     check_config "Config Herdr"    "$DOTFILES_DIR/herdr/config.toml"        "$HOME/.config/herdr/config.toml"
     check_config "Config Starship" "$DOTFILES_DIR/starship/starship.toml"  "$HOME/.config/starship.toml"
+
+    if installed fish; then
+        if fish --no-config --no-execute "$HOME/.config/fish/config.fish"; then
+            check "Sintaxis Fish" "ok"
+        else
+            check "Sintaxis Fish" "configuración activa no válida"
+        fi
+        local plugin fish_plugins
+        fish_plugins="$(fish -c 'functions -q fisher; and string replace -r "@[^@]+\$" "" -- (fisher list)')" || true
+        while IFS= read -r plugin; do
+            [[ -n "$plugin" && "$plugin" != \#* ]] || continue
+            if grep -Fxq "$plugin" <<< "$fish_plugins"; then
+                check "Plugin $plugin" "ok"
+            else
+                check "Plugin $plugin" "no instalado"
+            fi
+        done < "$DOTFILES_DIR/fish/plugins.list"
+    fi
 
     if installed herdr; then
         if HERDR_CONFIG_PATH="$HOME/.config/herdr/config.toml" herdr config check &>/dev/null; then
@@ -313,6 +340,7 @@ main() {
     install_packages
     set_fish_shell
     copy_configs
+    install_fish_plugins
     install_herdr_integrations
     healthcheck
 

@@ -10,7 +10,7 @@ Instala y configura un entorno de terminal basado en Ghostty, Fish, Herdr y Star
 | Fish | Proporcionar el intérprete interactivo, abreviaciones e integración de herramientas |
 | Herdr | Administrar Spaces, tabs, divisiones, procesos persistentes, agentes y notificaciones |
 | Starship | Mostrar el indicador de comandos con estado de Git, duración y versiones de entornos |
-| Herramientas | `eza`, `fzf`, `atuin`, `zoxide`, `fnm`, `git`, `pnpm` y `terminal-notifier` |
+| Herramientas | `eza`, `fzf`, `fd`, `bat`, `atuin`, `zoxide`, `fnm`, `git`, `pnpm` y `terminal-notifier` |
 
 Ghostty inicia Herdr por su nombre en `PATH`. Si Herdr no está disponible, muestra un aviso y abre Fish para que la terminal siga siendo utilizable. Ghostty no administra tabs, divisiones ni restauración de estado: esas funciones pertenecen únicamente a Herdr.
 
@@ -52,8 +52,9 @@ Verifica toda la instalación en cualquier momento:
 | 2 | Instala aplicaciones, paquetes y fuente | Homebrew conserva lo que ya está instalado |
 | 3 | Registra Fish en `/etc/shells` y lo configura como intérprete predeterminado | Solo cambia lo necesario |
 | 4 | Valida y copia las cuatro configuraciones | Crea un backup versionado y reemplaza cada destino |
-| 5 | Instala las integraciones de Herdr para OpenCode y Codex | Solo actúa cuando ya existe la carpeta de configuración del cliente |
-| 6 | Ejecuta la comprobación de estado | Detecta binarios, fuente, archivos, sintaxis e integraciones desactualizadas |
+| 5 | Instala los plugins Fish declarados en `fish/plugins.list` | Añade solo los ausentes; conserva otros plugins y las versiones instaladas |
+| 6 | Instala las integraciones de Herdr para OpenCode y Codex | Solo actúa cuando ya existe la carpeta de configuración del cliente |
+| 7 | Ejecuta la comprobación de estado | Detecta binarios, fuente, archivos, sintaxis, plugins e integraciones desactualizadas |
 
 ### Paquetes instalados
 
@@ -62,7 +63,7 @@ Aplicaciones: Ghostty
 Fuente:       Geist Mono
 Intérprete:   fish
 Terminal:     herdr, starship
-Navegación:   eza, fzf, zoxide
+Navegación:   eza, fzf, fd, bat, zoxide
 Historial:    atuin
 Entornos:     fnm
 Utilidades:   git, pnpm, terminal-notifier
@@ -150,7 +151,17 @@ El cierre mediante `Alt+G` o `Cmd+G` pertenece al Fish del popup. Si hay una apl
 
 ### Fish
 
-La configuración inicializa Starship, Atuin, Zoxide y FNM solo en sesiones interactivas y únicamente cuando están disponibles. FZF permanece instalado como herramienta independiente. También define abreviaciones para Git, navegación, `eza`, pnpm y los clientes `claude` y `opencode`.
+La configuración inicializa Starship, Atuin y Zoxide solo en sesiones interactivas y únicamente cuando están disponibles. Atuin administra el historial (`Ctrl+R` y flecha arriba); el plugin `fzf.fish` conserva las búsquedas de archivos, Git, procesos y variables. `fd` y `bat` permiten buscar archivos y previsualizarlos. También hay abreviaciones para Git, navegación, `eza`, pnpm y los clientes `claude` y `opencode`.
+
+FNM selecciona Node: las sesiones interactivas habilitan el cambio de versión al cambiar de directorio; los scripts hijos conservan la selección heredada. Un Fish no interactivo con entorno independiente usa la versión predeterminada de FNM. Puedes elegirla con `fnm default <versión-instalada>`; los scripts que necesiten otra versión de proyecto deben seleccionarla explícitamente. La configuración no instala versiones de Node automáticamente.
+
+Los plugins compartidos son Fisher, `fzf.fish` y `done`, declarados en `fish/plugins.list`. El instalador añade los ausentes sin sustituir tu lista personal `~/.config/fish/fish_plugins`; `sync.sh` solo sincroniza las cuatro configuraciones principales. Para añadir los plugins compartidos a una instalación existente:
+
+```bash
+fish fish/install-plugins.fish
+```
+
+Herdr entrega avisos de agentes, `done` avisa de comandos largos cuando cambias de aplicación y `alert` envía avisos explícitos. `done` no distingue cambios entre paneles de Herdr.
 
 Consulta la lista completa en [`fish/config.fish`](./fish/config.fish).
 

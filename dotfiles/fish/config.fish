@@ -1,4 +1,5 @@
 # Docker Desktop
+set -gx PATH (string match -v -- "$HOME/.docker/bin" $PATH)
 fish_add_path --append --path "$HOME/.docker/bin"
 
 # homebrew
@@ -15,6 +16,21 @@ set -g fish_greeting ""
 # Disable all Claude Code compatibility in OpenCode.
 set -gx OPENCODE_DISABLE_CLAUDE_CODE 1
 
+# FNM owns Node selection. Child scripts inherit the selected version; fresh
+# non-interactive shells use FNM's default without installing interactive hooks.
+if type -q fnm
+    if status is-interactive
+        if not functions -q _fnm_autoload_hook
+            fnm env --use-on-cd --shell fish | source
+        end
+    else if not set -q FNM_MULTISHELL_PATH; or not test -d "$FNM_MULTISHELL_PATH/bin"
+        fnm env --shell fish | source
+    end
+    if set -q FNM_MULTISHELL_PATH; and test -d "$FNM_MULTISHELL_PATH/bin"
+        fish_add_path --move --path "$FNM_MULTISHELL_PATH/bin"
+    end
+end
+
 function alert
     set -l message (test -n "$argv[1]"; and echo $argv; or echo "Proceso finalizado")
     terminal-notifier \
@@ -30,15 +46,15 @@ if status is-interactive
         starship init fish | source
     end
     if type -q atuin
+        # Atuin owns history; FZF keeps file, Git, process and variable search.
+        if functions -q fzf_configure_bindings
+            fzf_configure_bindings --history=
+        end
         atuin init fish | source
     end
     if type -q zoxide
         zoxide init fish | source
     end
-    if type -q fnm
-        fnm env --use-on-cd --shell fish | source
-    end
-
     abbr --add g git
     abbr --add gs git status
     abbr --add ga git add .
