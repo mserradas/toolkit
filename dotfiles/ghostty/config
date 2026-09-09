@@ -32,7 +32,7 @@ keybind = alt+s=write_screen_file:paste
 keybind = shift+enter=text:\x1b\r
 
 # Theme
-theme = GitHub Dark
+theme = Catppuccin Mocha
 
 # Herdr
 command = /bin/sh -c 'PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; export PATH; if command -v herdr >/dev/null 2>&1; then exec herdr; fi; echo "Herdr no está instalado; iniciando Fish"; if command -v fish >/dev/null 2>&1; then exec fish -l; fi; exec "${SHELL:-/bin/sh}" -l'
