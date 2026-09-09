@@ -1,0 +1,25 @@
+enter_accept = true
+# Keep command history local to each computer.
+auto_sync = false
+
+[daemon]
+enabled = false
+autostart = false
+
+[ui]
+syntax_highlight = true
+
+# Herdr owns Ctrl+A. Right Option+A opens Atuin's prefix actions in Ghostty.
+# Vim insert mode inherits the Emacs bindings.
+[keymap.emacs]
+"ctrl-a" = "cursor-start"
+"alt-a" = "enter-prefix-mode"
+"ctrl-x" = "delete"
+
+[keymap.vim-normal]
+"ctrl-a" = "cursor-start"
+"alt-a" = "enter-prefix-mode"
+"ctrl-x" = "delete"
+
+[keymap.inspector]
+"ctrl-x" = "delete"

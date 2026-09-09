@@ -63,12 +63,14 @@ configure_paths() {
             "$DOTFILES_DIR/fish/config.fish"
             "$DOTFILES_DIR/herdr/config.toml"
             "$DOTFILES_DIR/starship/starship.toml"
+            "$DOTFILES_DIR/atuin/config.toml"
         )
         DESTINATIONS=(
             "$HOME/.config/ghostty/config"
             "$HOME/.config/fish/config.fish"
             "$HOME/.config/herdr/config.toml"
             "$HOME/.config/starship.toml"
+            "$HOME/.config/atuin/config.toml"
         )
     else
         SOURCES=(
@@ -76,12 +78,14 @@ configure_paths() {
             "$HOME/.config/fish/config.fish"
             "$HOME/.config/herdr/config.toml"
             "$HOME/.config/starship.toml"
+            "$HOME/.config/atuin/config.toml"
         )
         DESTINATIONS=(
             "$DOTFILES_DIR/ghostty/config"
             "$DOTFILES_DIR/fish/config.fish"
             "$DOTFILES_DIR/herdr/config.toml"
             "$DOTFILES_DIR/starship/starship.toml"
+            "$DOTFILES_DIR/atuin/config.toml"
         )
     fi
 }
@@ -293,7 +297,7 @@ else
 fi
 echo "----------------------------------------"
 
-log "Prevalidando las cuatro fuentes"
+log "Prevalidando las fuentes"
 prevalidate_sources
 
 if [[ "$MODE" == "sync" && "$FORCE" -eq 0 ]]; then
@@ -301,7 +305,7 @@ if [[ "$MODE" == "sync" && "$FORCE" -eq 0 ]]; then
     ensure_repo_is_clean
 fi
 
-log "Preparando las cuatro copias"
+log "Preparando las copias"
 stage_all
 
 if [[ "$MODE" == "apply" ]]; then
@@ -311,7 +315,7 @@ else
     prepare_rollbacks
 fi
 
-log "Promoviendo las cuatro copias"
+log "Promoviendo las copias"
 promote_all
 
 for destination in "${DESTINATIONS[@]}"; do

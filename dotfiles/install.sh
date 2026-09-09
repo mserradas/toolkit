@@ -19,6 +19,16 @@ error()   { echo -e "  ${RED}✗${NC} $1"; exit 1; }
 
 installed() { command -v "$1" &>/dev/null; }
 
+setup_homebrew_environment() {
+    local brew_path
+    for brew_path in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+        if [[ -x "$brew_path" ]]; then
+            eval "$("$brew_path" shellenv bash)"
+            break
+        fi
+    done
+}
+
 registered_user_shell() {
     local current_user shell_record registered_shell
 
@@ -52,9 +62,9 @@ install_homebrew() {
         /bin/bash -c "$installer"
         # Añadir al PATH según arquitectura
         if [[ -f /opt/homebrew/bin/brew ]]; then
-            eval "$(/opt/homebrew/bin/brew shellenv)"
+            eval "$(/opt/homebrew/bin/brew shellenv bash)"
         else
-            eval "$(/usr/local/bin/brew shellenv)"
+            eval "$(/usr/local/bin/brew shellenv bash)"
         fi
         success "Homebrew instalado"
     fi
@@ -148,6 +158,7 @@ copy_configs() {
     mkdir -p ~/.config/ghostty
     mkdir -p ~/.config/fish
     mkdir -p ~/.config/herdr
+    mkdir -p ~/.config/atuin
     mkdir -p ~/.config
 
     # Función para copiar con backup
@@ -174,6 +185,7 @@ copy_configs() {
     copy_with_backup "$DOTFILES_DIR/fish/config.fish"     ~/.config/fish/config.fish
     copy_with_backup "$DOTFILES_DIR/herdr/config.toml"     ~/.config/herdr/config.toml
     copy_with_backup "$DOTFILES_DIR/starship/starship.toml" ~/.config/starship.toml
+    copy_with_backup "$DOTFILES_DIR/atuin/config.toml"     ~/.config/atuin/config.toml
 }
 
 # --- INTEGRACIONES HERDR ---
@@ -205,6 +217,7 @@ healthcheck() {
     log "Healthcheck"
 
     local ok=true
+    local runtime_pending=false
 
     check() {
         local label="$1"
@@ -265,6 +278,15 @@ healthcheck() {
     check_config "Config Fish"     "$DOTFILES_DIR/fish/config.fish"        "$HOME/.config/fish/config.fish"
     check_config "Config Herdr"    "$DOTFILES_DIR/herdr/config.toml"        "$HOME/.config/herdr/config.toml"
     check_config "Config Starship" "$DOTFILES_DIR/starship/starship.toml"  "$HOME/.config/starship.toml"
+    check_config "Config Atuin"    "$DOTFILES_DIR/atuin/config.toml"       "$HOME/.config/atuin/config.toml"
+
+    if installed atuin; then
+        if [[ "$(atuin config get --resolved auto_sync 2>/dev/null)" == "false" ]]; then
+            check "Historial Atuin sin sincronización automática" "ok"
+        else
+            check "Historial Atuin sin sincronización automática" "auto_sync no está desactivado"
+        fi
+    fi
 
     if installed fish; then
         if fish -c 'command -q ghostty'; then
@@ -301,6 +323,21 @@ healthcheck() {
         if [[ -d "$HOME/.codex" ]]; then
             check_integration "codex" "Integración Herdr para Codex"
         fi
+
+        local runtime_result runtime_status
+        if ! installed python3; then
+            check "Servidor Herdr y colores" "no comprobado: falta python3 (herramientas de Xcode)"
+        elif runtime_result="$(python3 "$DOTFILES_DIR/check-runtime.py")"; then
+            check "Servidor Herdr y colores" "ok"
+        else
+            runtime_status=$?
+            if [[ "$runtime_status" -eq 2 ]]; then
+                warn "$runtime_result"
+                runtime_pending=true
+            else
+                check "Servidor Herdr y colores" "$runtime_result"
+            fi
+        fi
     fi
 
     # Shell por defecto
@@ -313,7 +350,11 @@ healthcheck() {
     fi
 
     if [[ "$ok" == true ]]; then
-        echo -e "\n${GREEN}${BOLD}✓ Todo correcto${NC}"
+        if [[ "$runtime_pending" == true ]]; then
+            echo -e "\n${YELLOW}${BOLD}! Instalación correcta; quedan comprobaciones de sesión pendientes${NC}"
+        else
+            echo -e "\n${GREEN}${BOLD}✓ Todo correcto${NC}"
+        fi
     else
         echo -e "\n${YELLOW}${BOLD}! Algunos checks fallaron — revisa los errores arriba${NC}"
         return 1
@@ -326,6 +367,7 @@ usage() {
 }
 
 main() {
+    setup_homebrew_environment
     if (( $# > 1 )) || { (( $# == 1 )) && [[ "$1" != "--check" ]]; }; then
         usage >&2
         return 1

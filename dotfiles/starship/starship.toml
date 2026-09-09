@@ -41,9 +41,6 @@ read_only = " 🔒"
 
 [directory.substitutions]
 "Documents" = "󰈙 "
-"Downloads" = " "
-"Music" = " "
-"Pictures" = " "
 
 [cmd_duration]
 format = " ⏱ took [ $duration]($style) "
@@ -130,4 +127,3 @@ format = '[$symbol$version]($style)'
 symbol = "🅒 "
 style = "bold green"
 format = '[$symbol$environment]($style)'
-

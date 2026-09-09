@@ -32,3 +32,12 @@ coverage/
 
 # Local AI runtime state
 .atl/
+
+# Atuin local history, credentials and runtime state
+/dotfiles/atuin/*.db*
+/dotfiles/atuin/*.sqlite*
+/dotfiles/atuin/key
+/dotfiles/atuin/session
+/dotfiles/atuin/host_id
+/dotfiles/atuin/atuin-daemon.pid
+/dotfiles/atuin/logs/

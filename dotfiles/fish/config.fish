@@ -11,7 +11,7 @@ end
 if not set -q HOMEBREW_PREFIX
     for brew_path in /opt/homebrew/bin/brew /usr/local/bin/brew
         if test -x "$brew_path"
-            eval ($brew_path shellenv)
+            eval ($brew_path shellenv fish)
             break
         end
     end
@@ -72,7 +72,7 @@ if status is-interactive
     abbr --add .. cd ..
     abbr --add ... cd ../..
     abbr --add .... cd ../../..
-    abbr --add ~ cd ~
+    abbr --add '~' 'cd ~'
     abbr --add - cd -
 
     abbr --add l 'eza --icons -F -H --group-directories-first --git'

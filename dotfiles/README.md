@@ -1,6 +1,6 @@
 # Dotfiles — entorno de terminal para macOS
 
-Instala y configura un entorno de terminal basado en Ghostty, Fish, Herdr y Starship. El proceso es repetible y crea copias de seguridad versionadas antes de reemplazar configuraciones existentes.
+Instala y configura un entorno de terminal basado en Ghostty, Fish, Herdr, Starship y Atuin. El proceso es repetible y crea copias de seguridad versionadas antes de reemplazar configuraciones existentes.
 
 ## Responsabilidades
 
@@ -9,8 +9,9 @@ Instala y configura un entorno de terminal basado en Ghostty, Fish, Herdr y Star
 | Ghostty | Representar el terminal, aplicar fuente y tema, y reenviar atajos de macOS |
 | Fish | Proporcionar el intérprete interactivo, abreviaciones e integración de herramientas |
 | Herdr | Administrar Spaces, tabs, divisiones, procesos persistentes, agentes y notificaciones |
+| Atuin | Buscar en el historial y aplicar sus colores y atajos |
 | Starship | Mostrar el indicador de comandos con estado de Git, duración y versiones de entornos |
-| Herramientas | `eza`, `fzf`, `fd`, `bat`, `atuin`, `zoxide`, `fnm`, `git`, `pnpm` y `terminal-notifier` |
+| Herramientas | `eza`, `fzf`, `fd`, `bat`, `zoxide`, `fnm`, `git`, `pnpm` y `terminal-notifier` |
 
 Ghostty inicia Herdr por su nombre en `PATH`. Si Herdr no está disponible, muestra un aviso y abre Fish para que la terminal siga siendo utilizable. Ghostty no administra tabs, divisiones ni restauración de estado: esas funciones pertenecen únicamente a Herdr.
 
@@ -19,7 +20,7 @@ Ghostty inicia Herdr por su nombre en `PATH`. Si Herdr no está disponible, mues
 - macOS en Apple Silicon o Intel.
 - Conexión a Internet.
 - Una cuenta con permisos para usar `sudo` y cambiar el intérprete con `chsh`.
-- Herramientas de línea de comandos de Xcode para `git`. macOS ofrece instalarlas cuando se ejecuta por primera vez.
+- Herramientas de línea de comandos de Xcode para `git` y `python3` (comprobación del servidor). macOS ofrece instalarlas cuando se ejecuta por primera vez.
 
 El instalador añade Homebrew si no está disponible y detecta sus ubicaciones habituales en ambas arquitecturas.
 
@@ -44,6 +45,8 @@ Verifica toda la instalación en cualquier momento:
 ./install.sh --check
 ```
 
+La comprobación del servidor usa `python3`. Ejecuta `--check` directamente en Fish dentro de Ghostty/Herdr para comprobar también los colores del panel actual. Fuera de Herdr, o si el servidor está detenido, informa de las comprobaciones pendientes.
+
 ## Qué hace el instalador
 
 | Orden | Acción | Comportamiento al repetirla |
@@ -51,10 +54,10 @@ Verifica toda la instalación en cualquier momento:
 | 1 | Instala Homebrew | Se omite si ya existe |
 | 2 | Instala aplicaciones, paquetes y fuente | Homebrew conserva lo que ya está instalado |
 | 3 | Registra Fish en `/etc/shells` y lo configura como intérprete predeterminado | Solo cambia lo necesario |
-| 4 | Valida y copia las cuatro configuraciones | Crea un backup versionado y reemplaza cada destino |
+| 4 | Valida y copia las cinco configuraciones | Crea un backup versionado y reemplaza cada destino |
 | 5 | Instala los plugins Fish declarados en `fish/plugins.list` | Añade solo los ausentes; conserva otros plugins y las versiones instaladas |
 | 6 | Instala las integraciones de Herdr para OpenCode y Codex | Solo actúa cuando ya existe la carpeta de configuración del cliente |
-| 7 | Ejecuta la comprobación de estado | Detecta binarios, fuente, archivos, sintaxis, plugins e integraciones desactualizadas |
+| 7 | Ejecuta la comprobación de estado | Detecta binarios, fuente, archivos, sintaxis, plugins, integraciones, la versión activa de Herdr y colores desactivados en el panel actual |
 
 ### Paquetes instalados
 
@@ -77,6 +80,7 @@ Utilidades:   git, pnpm, terminal-notifier
 | `fish/config.fish` | `~/.config/fish/config.fish` | `~/.config/fish/config.fish.backup.<fecha>` |
 | `herdr/config.toml` | `~/.config/herdr/config.toml` | `~/.config/herdr/config.toml.backup.<fecha>` |
 | `starship/starship.toml` | `~/.config/starship.toml` | `~/.config/starship.toml.backup.<fecha>` |
+| `atuin/config.toml` | `~/.config/atuin/config.toml` | `~/.config/atuin/config.toml.backup.<fecha>` |
 
 Los backups usan el formato `.backup.YYYYMMDD-HHMMSS`. Si dos ejecuciones coinciden en el mismo segundo, se añade un sufijo numérico; las versiones anteriores se conservan.
 
@@ -90,9 +94,9 @@ cd dotfiles
 git diff -- .
 ```
 
-`sync.sh` copia hacia el repositorio las configuraciones actuales de Ghostty, Fish, Herdr y Starship. Antes de escribir, valida las cuatro fuentes y prepara todas las copias. Si una operación falla, restaura lo que ya hubiera cambiado.
+`sync.sh` copia hacia el repositorio las configuraciones actuales de Ghostty, Fish, Herdr, Starship y Atuin. Antes de escribir, valida las cinco fuentes y prepara todas las copias. Si una operación falla, restaura lo que ya hubiera cambiado.
 
-Sin argumentos, la sincronización se detiene si cualquiera de los cuatro archivos del repositorio ya tiene cambios locales. Para reemplazarlos deliberadamente:
+Sin argumentos, la sincronización se detiene si cualquiera de los cinco archivos del repositorio ya tiene cambios locales. Para reemplazarlos deliberadamente:
 
 ```bash
 ./sync.sh --force
@@ -115,7 +119,7 @@ Puedes añadir opciones que no deban viajar con el repositorio. Estos archivos s
 | Fish | `~/.config/fish/local.fish` |
 | Ghostty | `~/.config/ghostty/local` |
 
-Son apropiados para rutas, alias, variables o preferencias exclusivas de un equipo. Su contenido debe ser silencioso e idempotente. No guardes secretos en texto plano salvo que controles expresamente sus permisos y ciclo de vida.
+Son apropiados para rutas, alias, variables o preferencias exclusivas de un equipo. Su contenido debe ser silencioso e idempotente. Guarda credenciales en el llavero del sistema o en el almacén de autenticación de cada herramienta; evita exportarlas como variables universales de Fish.
 
 ## Atajos principales
 
@@ -155,7 +159,7 @@ La configuración inicializa Starship, Atuin y Zoxide solo en sesiones interacti
 
 FNM selecciona Node: las sesiones interactivas habilitan el cambio de versión al cambiar de directorio; los scripts hijos conservan la selección heredada. Un Fish no interactivo con entorno independiente usa la versión predeterminada de FNM. Puedes elegirla con `fnm default <versión-instalada>`; los scripts que necesiten otra versión de proyecto deben seleccionarla explícitamente. La configuración no instala versiones de Node automáticamente.
 
-Los plugins compartidos son Fisher, `fzf.fish` y `done`, declarados en `fish/plugins.list`. El instalador añade los ausentes sin sustituir tu lista personal `~/.config/fish/fish_plugins`; `sync.sh` solo sincroniza las cuatro configuraciones principales. Para añadir los plugins compartidos a una instalación existente:
+Los plugins compartidos son Fisher, `fzf.fish` y `done`, declarados en `fish/plugins.list`. El instalador añade los ausentes sin sustituir tu lista personal `~/.config/fish/fish_plugins`; `sync.sh` solo sincroniza las cinco configuraciones principales. Para añadir los plugins compartidos a una instalación existente:
 
 ```bash
 fish fish/install-plugins.fish
@@ -164,6 +168,16 @@ fish fish/install-plugins.fish
 Herdr entrega avisos de agentes, `done` avisa de comandos largos cuando cambias de aplicación y `alert` envía avisos explícitos. `done` no distingue cambios entre paneles de Herdr.
 
 Consulta la lista completa en [`fish/config.fish`](./fish/config.fish).
+
+### Atuin
+
+`Ctrl+R` y flecha arriba abren el historial. Dentro del buscador, `Ctrl+X` borra la entrada seleccionada y `Option derecho+A` abre las acciones con prefijo de Atuin; `Ctrl+A` permanece reservado para Herdr. Los modos Emacs, Vim insert y Vim normal permiten borrar con `Ctrl+X`, al igual que el inspector.
+
+La configuración mantiene el resaltado de sintaxis y desactiva la sincronización automática de Atuin con `auto_sync = false`: cada ordenador conserva su historial local. `sync.sh` copia únicamente `config.toml`; las bases de datos, las sesiones y las claves de cifrado quedan fuera del repositorio. Atuin lee los cambios al abrir el buscador.
+
+Las rutas de datos de Atuin se resuelven con sus valores predeterminados en cada equipo; no se guarda ninguna ruta personal en esta configuración. En un ordenador que ya estuviera conectado a una cuenta de Atuin, ejecuta `atuin logout` para desvincularlo y evitar también una sincronización manual accidental. El archivo compartido no elimina entradas que ya se hubieran descargado anteriormente.
+
+Si ese equipo ya ejecutaba un daemon de Atuin, detén la instancia anterior tras aplicar la configuración con `atuin daemon stop`. Si estaba registrado como servicio de Homebrew, usa también `brew services stop atuin`. La configuración compartida desactiva el daemon y su inicio automático.
 
 ## Integraciones de agentes
 
@@ -195,9 +209,15 @@ Revisa la versión elegida y cópiala sobre el archivo activo:
 cp ~/.config/herdr/config.toml.backup.YYYYMMDD-HHMMSS ~/.config/herdr/config.toml
 ```
 
-Aplica el mismo patrón a Ghostty, Fish o Starship. Después recarga Herdr con `Ctrl+A`, `Shift+R` o reinicia el servidor de manera controlada si fuera necesario. Los paquetes instalados con Homebrew se eliminan por separado mediante `brew uninstall` o `brew uninstall --cask`.
+Aplica el mismo patrón a Ghostty, Fish, Starship o Atuin. Después recarga Herdr con `Ctrl+A`, `Shift+R` o reinicia el servidor de manera controlada si fuera necesario. Los paquetes instalados con Homebrew se eliminan por separado mediante `brew uninstall` o `brew uninstall --cask`.
 
 ## Solución de problemas
+
+### Atuin pierde los colores o Herdr sigue usando una versión anterior
+
+Ejecuta `./install.sh --check` directamente desde Fish dentro de Ghostty/Herdr. La comprobación contrasta el cliente con el servidor activo y consulta únicamente `NO_COLOR` y `TERM` del entorno heredado de ese panel. No lee el entorno de otros procesos ni verifica otros paneles.
+
+Cerrar Ghostty solo desconecta el cliente: el servidor y los paneles pueden seguir vivos. Si el diagnóstico requiere un reinicio, termina primero el trabajo de los paneles y reinicia Herdr desde una sesión de terminal con los colores habilitados. No exportes `NO_COLOR` globalmente para toda la sesión.
 
 ### Ghostty abre Fish sin Herdr
 
@@ -233,6 +253,6 @@ Comprueba que Ghostty usa `Geist Mono` y que la fuente aparece en `~/Library/Fon
 
 - Los scripts detectan Homebrew en Apple Silicon e Intel.
 - Ghostty y el popup de Herdr resuelven sus ejecutables mediante `PATH`; no guardan rutas ligadas a un usuario o arquitectura.
-- El proyecto instala una configuración personal y reemplaza exactamente los cuatro archivos declarados.
+- El proyecto instala una configuración personal y reemplaza exactamente los cinco archivos declarados.
 - No gestiona secretos ni credenciales.
-- No elimina automáticamente paquetes o configuraciones ajenas a esos cuatro archivos.
+- No elimina automáticamente paquetes o configuraciones ajenas a esos cinco archivos.
