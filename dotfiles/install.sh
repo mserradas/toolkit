@@ -267,6 +267,11 @@ healthcheck() {
     check_config "Config Starship" "$DOTFILES_DIR/starship/starship.toml"  "$HOME/.config/starship.toml"
 
     if installed fish; then
+        if fish -c 'command -q ghostty'; then
+            check "CLI Ghostty en Fish" "ok"
+        else
+            check "CLI Ghostty en Fish" "no encontrado en PATH"
+        fi
         if fish --no-config --no-execute "$HOME/.config/fish/config.fish"; then
             check "Sintaxis Fish" "ok"
         else

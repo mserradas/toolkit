@@ -2,6 +2,11 @@
 set -gx PATH (string match -v -- "$HOME/.docker/bin" $PATH)
 fish_add_path --append --path "$HOME/.docker/bin"
 
+# Ghostty ships its CLI inside the macOS application bundle.
+if test -x /Applications/Ghostty.app/Contents/MacOS/ghostty
+    fish_add_path --append --path /Applications/Ghostty.app/Contents/MacOS
+end
+
 # homebrew
 if not set -q HOMEBREW_PREFIX
     for brew_path in /opt/homebrew/bin/brew /usr/local/bin/brew
