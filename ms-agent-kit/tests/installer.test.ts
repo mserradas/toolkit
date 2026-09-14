@@ -972,7 +972,8 @@ describe("Codex Context7 adapter integration and legacy migration", () => {
     expect(installed.subarray(original.length).toString("utf8")).toBe(
       '\r\n# >>> ms-agent-kit managed-block:codex-context7 >>>\n' +
         '[mcp_servers.context7]\nurl = "https://mcp.context7.com/mcp"\n' +
-        'env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }\n' +
+        'env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }\n\n' +
+        '[mcp_servers.playwright]\ncommand = "npx"\nargs = ["-y", "@playwright/mcp@latest"]\n' +
         '# <<< ms-agent-kit managed-block:codex-context7 <<<\n',
     )
     expect((await stat(context7.destination)).mode & 0o777).toBe(0o640)
@@ -991,12 +992,13 @@ describe("Codex Context7 adapter integration and legacy migration", () => {
     await writeFile(satisfiedArtifact.destination, external)
 
     const satisfiedPlan = await createPlan([satisfiedArtifact], satisfiedContext)
-    expect(satisfiedPlan.items[0]).toEqual(
-      expect.objectContaining({ action: "unchanged", satisfiedExternally: true }),
-    )
+    expect(satisfiedPlan.items[0]?.action).toBe("update")
+    expect(satisfiedPlan.items[0]?.artifact.content.toString()).not.toContain("mcp_servers.context7")
     await applyPlan(satisfiedPlan, satisfiedContext)
+    expect(await readFile(satisfiedArtifact.destination, "utf8")).toContain(external)
+    expect((await createPlan([satisfiedArtifact], satisfiedContext)).items[0]?.action).toBe("unchanged")
+    await uninstallTargets(["codex"], satisfiedContext)
     expect(await readFile(satisfiedArtifact.destination, "utf8")).toBe(external)
-    expect((await installedState(satisfiedContext)).files).toEqual([])
 
     const conflictContext = await testContext()
     const conflictArtifact = (await buildArtifacts(["codex"], conflictContext)).find(
@@ -1101,5 +1103,72 @@ describe("Codex Context7 adapter integration and legacy migration", () => {
       legacy.destination,
       sentinel.destination,
     ])
+  })
+})
+
+describe("Playwright MCP lifecycle", () => {
+  const playwright = '[mcp_servers.playwright]\ncommand = "npx"\nargs = ["-y", "@playwright/mcp@latest"]\n'
+  async function artifact(context: BuildContext) {
+    return (await buildArtifacts(["codex"], context)).find((item) => item.name === "context7" && item.kind === "configuration")!
+  }
+
+  it("upgrades a managed Context7-only block and uninstalls preserving external bytes", async () => {
+    const context = await testContext()
+    const old = managedArtifact(context)
+    const original = 'model = "custom"\r\n'
+    await mkdir(old.root, { recursive: true })
+    await writeFile(old.destination, original)
+    await applyPlan(await createPlan([old], context), context)
+    const next = await artifact(context)
+    const plan = await createPlan([next], context)
+    expect(plan.items[0]?.action).toBe("update")
+    await applyPlan(plan, context)
+    expect(await readFile(next.destination, "utf8")).toContain(playwright)
+    expect((await createPlan([next], context)).items[0]?.action).toBe("unchanged")
+    await uninstallTargets(["codex"], context)
+    expect(await readFile(next.destination, "utf8")).toBe(original)
+  })
+
+  it.each([false, true])("preserves external Playwright (external Context7: %s)", async (both) => {
+    const context = await testContext()
+    const next = await artifact(context)
+    const external = playwright + (both ? managedArtifact(context).content.toString() : "")
+    await mkdir(next.root, { recursive: true })
+    await writeFile(next.destination, external)
+    const plan = await createPlan([next], context)
+    expect(plan.items[0]?.action).toBe(both ? "unchanged" : "update")
+    expect(plan.items[0]?.satisfiedExternally).toBe(both ? true : undefined)
+    await applyPlan(plan, context)
+    const installed = await readFile(next.destination, "utf8")
+    expect(installed.match(/\[mcp_servers.playwright\]/g)).toHaveLength(1)
+    expect((await createPlan([next], context)).items[0]?.action).toBe("unchanged")
+    await uninstallTargets(["codex"], context)
+    expect(await readFile(next.destination, "utf8")).toBe(external)
+  })
+
+  it("protects an external duplicate next to the managed MCP block", async () => {
+    const context = await testContext()
+    const next = await artifact(context)
+    await applyPlan(await createPlan([next], context), context)
+    const installed = await readFile(next.destination, "utf8")
+    await writeFile(next.destination, installed + playwright)
+    expect((await createPlan([next], context, true)).items[0]?.action).toBe("conflict")
+  })
+
+  it.each([
+    playwright.replace('"npx"', '"custom-command"'),
+    playwright + 'enabled = false\n',
+    playwright.replace('@playwright/mcp@latest', '@playwright/mcp@other'),
+    'mcp_servers.playwright = { command = "npx" }\n',
+    '["mcp_servers".playwright]\ncommand = "npx"\n',
+  ])("protects conflicting external Playwright even with force: %s", async (external) => {
+    const context = await testContext()
+    const next = await artifact(context)
+    await mkdir(next.root, { recursive: true })
+    await writeFile(next.destination, external)
+    const plan = await createPlan([next], context, true)
+    expect(plan.items[0]?.action).toBe("conflict")
+    await expect(applyPlan(plan, context)).rejects.toThrow(/conflicto/)
+    expect(await readFile(next.destination, "utf8")).toBe(external)
   })
 })

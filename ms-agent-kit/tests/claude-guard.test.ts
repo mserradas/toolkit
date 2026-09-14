@@ -1459,7 +1459,7 @@ describe("Claude permission guard", () => {
     })
     const partial = await runGuard(guardPath, projectRoot, "ms-scout", {
       hook_event_name: "SubagentStop",
-      last_assistant_message: "Contrato para ms-architect\n```yaml\nstatus: partial\n```",
+      last_assistant_message: 'Contrato para ms-architect\n```yaml\nstatus: partial\nsummary: "Inspección parcial"\nevidence: ["archivo:12"]\nblockers: ["falta un archivo"]\nrisks: []\nquestions: []\nnext_action: "Inspeccionar archivo pendiente"\n```',
     })
 
     expect(missing.code).toBe(2)
@@ -1467,6 +1467,21 @@ describe("Claude permission guard", () => {
     expect(missing.stdout).toBe("")
     expect(partial.code).toBe(0)
     expect(partial.stdout).toBe("")
+  })
+
+  it("uses shared semantic validation for both terminal hook events", async () => {
+    const { guardPath, projectRoot } = await setupGuard()
+    const contract = { status: "completed", summary: "Verificación", evidence: ["test:12"], blockers: [], risks: [], questions: [], next_action: null, verification: [{ gate: "tests", owner: "ms-tester", required: true, command: "pnpm test", result: "FAIL", evidence: ["exit 1"], workspace: "sin cambios" }] }
+    for (const hook_event_name of ["Stop", "SubagentStop"]) {
+      const failed = await runGuard(guardPath, projectRoot, "ms-tester", { hook_event_name, last_assistant_message: `Contrato para ms-architect\n\`\`\`json\n${JSON.stringify(contract)}\n\`\`\`` })
+      expect(failed.code).toBe(2)
+      expect(failed.stderr).toContain("gates obligatorios")
+      const passed = { ...contract, verification: contract.verification.map((gate) => ({ ...gate, result: "PASS" })) }
+      expect((await runGuard(guardPath, projectRoot, "ms-tester", { hook_event_name, last_assistant_message: `Contrato para ms-architect\n\`\`\`json\n${JSON.stringify(passed)}\n\`\`\`` })).code).toBe(0)
+    }
+    const malformed = await runGuard(guardPath, projectRoot, "ms-tester", { hook_event_name: "Stop", last_assistant_message: "Contrato para ms-architect\n```yaml\nstatus: partial\n```" })
+    expect(malformed.code).toBe(2)
+    expect(malformed.stderr).toContain("summary")
   })
 
   it("materializes the Claude web and question capability matrix", async () => {

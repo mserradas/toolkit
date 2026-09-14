@@ -2,6 +2,7 @@ import { hashContent, readExistingFile, type ExistingFile } from "./files.js"
 import {
   chooseLeadingSeparator,
   inspectExternalCodexContext7,
+  inspectExternalCodexMcp,
   inspectManagedBlock,
   ownedRange,
   renderManagedBlock,
@@ -32,6 +33,9 @@ function validateArtifact(artifact: Artifact): void {
     throw new Error(`Definición de bloque administrado inválida: ${artifact.destination}`)
   }
   validateBlockId(artifact.blockId)
+  if (artifact.satisfaction === "codex-mcp" && !artifact.mcpServers?.length) {
+    throw new Error("Falta el catálogo de servidores MCP del bloque")
+  }
 }
 
 function validateOwnedFile(file: OwnedFile): void {
@@ -63,6 +67,12 @@ function externalSatisfaction(
   content: Buffer,
   excludedRange?: { markerStart: number; markerEnd: number },
 ): "absent" | "satisfied" | "conflict" {
+  if (artifact.satisfaction === "codex-mcp") {
+    const statuses = artifact.mcpServers!.map((server) => inspectExternalCodexMcp(content, server.name, excludedRange))
+    if (statuses.includes("conflict")) return "conflict"
+    if (statuses.every((status) => status === "satisfied")) return "satisfied"
+    return statuses.every((status) => status === "absent") ? "absent" : "conflict"
+  }
   return artifact.satisfaction === "codex-context7"
     ? inspectExternalCodexContext7(content, excludedRange)
     : "absent"
@@ -167,7 +177,7 @@ function managedPlanItem(
     return {
       ...common,
       action: "conflict",
-      reason: "una tabla externa de Context7 está protegida y no es equivalente",
+      reason: "una tabla externa de MCP está protegida y no es equivalente",
     }
   }
 
@@ -268,8 +278,9 @@ export async function createPlan(
     }
   }
 
-  for (const artifact of artifacts) {
-    const desiredHash = hashContent(artifact.content)
+  for (const sourceArtifact of artifacts) {
+    let artifact = sourceArtifact
+    let desiredHash = hashContent(artifact.content)
     let current: ExistingFile | null
     try {
       await assertNoSymlinkEscape(artifact.root, artifact.destination)
@@ -283,6 +294,18 @@ export async function createPlan(
         ...(artifact.strategy ? { strategy: artifact.strategy, blockId: artifact.blockId } : {}),
       })
       continue
+    }
+    if (artifact.satisfaction === "codex-mcp") {
+      const content = current?.content ?? Buffer.alloc(0)
+      const inspection = inspectManagedBlock(content, artifact.blockId!)
+      const range = inspection.status === "complete" ? inspection.range : undefined
+      const ownedContent = range ? content.subarray(range.markerStart, range.markerEnd) : Buffer.alloc(0)
+      const mcpServers = artifact.mcpServers!.filter((server) =>
+        inspectExternalCodexMcp(content, server.name, range) !== "satisfied" ||
+        inspectExternalCodexMcp(ownedContent, server.name) !== "absent",
+      )
+      artifact = { ...artifact, mcpServers, content: Buffer.from(mcpServers.map((server) => server.content).join("\n")) }
+      desiredHash = hashContent(artifact.content)
     }
     const previous = owned.get(artifact.destination)
 

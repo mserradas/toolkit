@@ -117,6 +117,13 @@ describe("diagnóstico runtime seguro", () => {
     expect(projectContextDiagnostic(current).status).toBe("correcto")
     const commands = commandCapabilities(["opencode", "claude", "codex"], current, context(root))
     expect(commands.some((item) => item.id.startsWith("project.commands.static.") && item.evidence.includes("npm run test"))).toBe(true)
+    for (const target of ["opencode", "claude", "codex"]) {
+      for (const role of ["ms-codex", "ms-fastlane", "ms-tester"]) {
+        const preflight = commands.find((item) => item.target === target && item.id.endsWith(`.${role}`))
+        expect(preflight?.status).toBe(target === "opencode" ? "correcto" : "no comprobado")
+        expect(preflight?.operation).toMatchObject({ command: "npm run test", target, role, decision: target === "opencode" ? "allow" : "unknown", effects: { status: "unknown", writes: null }, runtime: "unknown" })
+      }
+    }
     expect(commands.filter((item) => item.id.endsWith(".runtime")).every((item) => item.status === "no comprobado")).toBe(true)
     await writeFile(path.join(root, "package.json"), JSON.stringify({ scripts: { test: "node changed.mjs" } }))
     expect(projectContextDiagnostic(await inspectRuntimeProject(root)).status).toBe("incompatible")
@@ -134,6 +141,24 @@ describe("diagnóstico runtime seguro", () => {
     expect(staticCommandDecision("some-unknown-command", "ms-codex", context(root))).toBe("ask")
   })
 
+  it("doctor usa el snapshot personal para mostrar grants exactos sin ejecutar el comando", async () => {
+    const root = await realpath(await directory())
+    const buildContext = context(root)
+    await writeFile(path.join(root, "package.json"), JSON.stringify({ scripts: { test: "node test.mjs" } }))
+    const initialized = await initializeProjectContext(root)
+    initialized.project.context.commands.test = [{ command: "./scripts/verify.sh", cwd: ".", source: "package.json" }]
+    await writeFile(initialized.path, JSON.stringify(initialized.project))
+    await mkdir(path.join(buildContext.homeDir, ".ms-agent-kit"), { recursive: true })
+    await writeFile(path.join(buildContext.homeDir, ".ms-agent-kit/config.yaml"), JSON.stringify({ schemaVersion: 1, models: {}, verification: { projects: [{ root, commands: ["./scripts/verify.sh"], outputPaths: ["coverage"] }] } }))
+    // El script no existe: el diagnóstico nunca lo ejecuta ni atribuye disponibilidad real.
+    const result = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "doctor", "--target", "opencode", "--scope", "project", "--project", root, "--home", buildContext.homeDir, "--json"], { encoding: "utf8", env: { ...process.env, PATH: "" }, timeout: 300_000 })
+    expect(result.error).toBeUndefined()
+    expect([0, 1]).toContain(result.status)
+    const payload = JSON.parse(result.stdout)
+    const preflight = payload.capabilities.find((item: { id: string }) => item.id.startsWith("project.commands.static.test.") && item.id.endsWith(".ms-tester"))
+    expect(preflight).toMatchObject({ status: "correcto", operation: { command: "./scripts/verify.sh", decision: "allow", runtime: "unknown", effects: { status: "unknown", writes: null }, projectAuthorization: { command: true, outputPaths: ["coverage"], source: path.join(buildContext.homeDir, ".ms-agent-kit/config.yaml#verification.projects") } } })
+  })
+
   it("exige artefacto instalado para Context7 y no infiere reconocimiento ni acceso remoto", async () => {
     const root = await directory()
     const destination = path.join(root, "config.toml")
@@ -145,6 +170,11 @@ describe("diagnóstico runtime seguro", () => {
     expect(diagnostics.find((item) => item.id === "context7.installation" && item.target === "codex")?.status).toBe("correcto")
     expect(diagnostics.find((item) => item.id === "context7.installation" && item.target === "claude")?.status).toBe("no disponible")
     expect(diagnostics.filter((item) => ["runtime.agents-skills", "context7.runtime", "models.availability"].includes(item.id)).every((item) => item.status === "no comprobado")).toBe(true)
+    plan.items[0]!.artifact.mcpServers = [{ name: "playwright", content: "config" }]
+    const partial = installationCapabilities(targets, plan, [{ target: "codex", path: destination, status: "ok" }])
+    expect(partial.find((item) => item.id === "context7.installation" && item.target === "codex")?.status).toBe("no disponible")
+    expect(partial.find((item) => item.id === "playwright.installation" && item.target === "codex")?.status).toBe("correcto")
+    expect(partial.find((item) => item.id === "playwright.runtime" && item.target === "codex")?.status).toBe("no comprobado")
     plan.items[0]!.satisfiedExternally = true
     expect(installationCapabilities(targets, plan, [{ target: "codex", path: destination, status: "ok" }]).find((item) => item.id === "context7.installation" && item.target === "codex")?.status).toBe("no disponible")
     expect(installationCapabilities(targets, null, []).find((item) => item.id === "installation.integrity")?.status).toBe("no comprobado")

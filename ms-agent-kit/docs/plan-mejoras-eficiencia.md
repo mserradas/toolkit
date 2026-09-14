@@ -25,7 +25,7 @@ No se identificó un bloqueo crítico que requiera P0. El esfuerzo es relativo: 
 | EF-03 | P1 | Los ejecutores y el tester no pueden cargar skills técnicas. | Permitir una selección de skills pertinentes por rol o misión. | Medio |
 | EF-04 | P1 | El arquitecto carga mucho detalle documental incluso para tareas simples. | Extraer procedimientos avanzados a referencias bajo demanda. | Bajo |
 | EF-05 | P2 | El recorrido habitual requiere delegación y fastlane usa límites rígidos de tamaño. | Facilitar ejecución directa acotada y evaluar admisión por claridad y riesgo. | Medio |
-| EF-06 | P2 | La selección de modelos es poco configurable y difiere entre clientes. | Exponer overrides sobre los perfiles existentes y mostrar el resultado por cliente. | Medio |
+| EF-06 | P2 | La selección de modelos es poco configurable y difiere entre clientes. | Exponer overrides independientes por agente y mostrar el resultado por cliente. | Medio |
 | EF-07 | P2 | Un catálogo instalado no garantiza que el cliente pueda usar las capacidades esperadas. | Ampliar `doctor` con comprobaciones de disponibilidad y compatibilidad. | Medio |
 | EF-08 | P1 | Las pruebas actuales no miden eficiencia real de los agentes. | Crear una evaluación pequeña y repetible antes de comparar cambios. | Medio |
 | EF-09 | P3 | Cambiar de cliente puede perder objetivo, decisiones y siguiente acción. | Generar una nota de traspaso explícita y breve. | Bajo |
@@ -88,13 +88,13 @@ El gate integrado del cambio completo terminó correctamente: 274/274 tests en 1
 
 **Comprobación.** Un cambio mecánico en cuatro archivos puede completarse con verificación focal sin una delegación adicional por tamaño. Un cambio pequeño de autorización sigue requiriendo el recorrido correspondiente a su riesgo.
 
-### EF-06 — Perfiles de modelos configurables
+### EF-06 — Modelos configurables por agente
 
-**Mitigación implementada.** `~/.ms-agent-kit/config.yaml` permite overrides de `strong`, `balanced`, `light` y `fast`. El plan muestra modelo, esfuerzo y procedencia por cliente; conserva defaults y no modifica el modelo activo de las skills principales de Codex.
+**Mitigación implementada.** `~/.ms-agent-kit/config.yaml` permite overrides independientes de modelo y esfuerzo por agente y cliente mediante `models[agente][cliente]`. El plan muestra modelo, esfuerzo y procedencia por cliente y agente; conserva defaults y no modifica el modelo activo de las skills principales de Codex.
 
 **Límite.** No introducir selección automática entre proveedores. Cuando no pueda comprobarse la disponibilidad de un modelo, reportarla como no verificada; no sustituirlo silenciosamente. No guardar credenciales.
 
-**Comprobación.** Cambiar un perfil modifica únicamente los agentes asociados. Los modelos heredados quedan identificados como tales y las restricciones de cada cliente aparecen en el resultado.
+**Comprobación.** Cambiar un override modifica únicamente el agente y cliente indicados. Los modelos heredados quedan identificados como tales y las restricciones de cada cliente aparecen en el resultado.
 
 ### EF-07 — Diagnóstico de capacidades utilizables
 
@@ -142,7 +142,7 @@ El primer gate de integración posterior obtuvo 265 tests PASS y un fallo en la 
 - Convenciones e idioma: [reglas compartidas](../assets/docs/agents-shared.md).
 - Acceso a skills y rutas de escritura: [perfiles de capacidades](../src/core/profiles.ts).
 - Peso del proceso y ejecución: [ms-architect](../assets/agents/ms-architect.md) y [ms-fastlane](../assets/agents/ms-fastlane.md). Antes de la extracción, la sección documental ocupaba aproximadamente el 50 % del texto fuente del arquitecto; no es una medición de tokens consumidos.
-- Selección de modelos: [perfiles de modelos](../src/core/model-profiles.ts).
+- Selección de modelos: [resolución de modelos por agente](../src/core/agent-models.ts).
 - Diagnóstico y compatibilidad: [CLI](../src/cli.ts) y [adaptadores](../src/adapters/).
 - Cobertura actual: [pruebas de política](../tests/architect-policy.test.ts) y [pruebas de adaptadores](../tests/adapters.test.ts), que también preservan la retirada del antiguo CLI de sesiones.
 

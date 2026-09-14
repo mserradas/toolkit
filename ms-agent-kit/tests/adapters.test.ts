@@ -8,9 +8,8 @@ import { buildArtifacts } from "../src/adapters/index.js"
 import { AGENT_DEFINITIONS, agentDefinition } from "../src/core/agent-catalog.js"
 import { DEFAULT_ASSETS_ROOT, loadCatalog } from "../src/core/catalog.js"
 import { parseMarkdown } from "../src/core/frontmatter.js"
-import { modelProfile } from "../src/core/model-profiles.js"
 import { openCodeRolePermission } from "../src/core/opencode-role-permissions.js"
-import { capabilityProfile } from "../src/core/profiles.js"
+import { capabilityProfile, gitInspectionCommands } from "../src/core/profiles.js"
 import {
   OPENCODE_SECRET_BASH_RULES,
   OPENCODE_SECRET_READ_RULES,
@@ -170,7 +169,7 @@ describe("platform adapters", () => {
     expect(new Set(skills.map((artifact) => artifact.name))).toHaveLength(catalog.skills.length)
     for (const agent of agents) {
       const definition = agentDefinition(agent.name)
-      const profile = modelProfile(definition.modelProfile)
+      const model = definition.models.opencode
       const document = parseMarkdown(agent.content.toString("utf8"))
       const expectedFrontmatter = [
         "color",
@@ -186,10 +185,10 @@ describe("platform adapters", () => {
       expect(permission.doom_loop).toBe("deny")
       expect(document.frontmatter.color).toBe(definition.openCodeColor)
       expect(document.frontmatter.color).toMatch(/^#[0-9A-F]{6}$/)
-      expect(document.frontmatter.model).toBe(profile.openCodeModel)
-      expect(document.frontmatter.variant).toBe(profile.reasoningEffort)
+      expect(document.frontmatter.model).toBe(model.model)
+      expect(document.frontmatter.variant).toBe(model.reasoningEffort)
       if (definition.mode === "subagent") {
-        expect(document.frontmatter.steps).toBe(definition.toolCycleBudget)
+        expect(document.frontmatter.steps).toBe(agent.name === "ms-codex" ? 32 : definition.toolCycleBudget)
       }
       const rolePermission = openCodeRolePermission(agent.name)
       expect(permission.skill).toEqual(rolePermission.skill)
@@ -410,8 +409,10 @@ describe("platform adapters", () => {
     for (const name of ["ms-designer", "ms-spec"]) {
       expect(bashPermission(name)).toEqual({
         "*": "deny",
-        "git status": "allow",
-        "git diff": "allow",
+        ...Object.fromEntries(gitInspectionCommands(capabilityProfile(agentDefinition(name).capabilityProfile)).map((command) => [command, "allow"])),
+        "pwd": "allow",
+        "ls -d .": "allow",
+        "command -v ms-agent-kit": "allow",
       })
     }
 
@@ -499,6 +500,7 @@ describe("platform adapters", () => {
       "*>*",
       "*<*",
       "*\n*",
+      "*\r*",
     ]
     for (const blockedComposition of terminalCompositionRules) {
       expect(coderCommands.indexOf(blockedComposition)).toBeGreaterThan(lastCoderAllowOrAsk)
@@ -613,6 +615,7 @@ describe("platform adapters", () => {
       model: "openai/gpt-5.6-sol",
       default_agent: "ms-architect",
       mcp: {
+        playwright: { type: "local", command: ["npx", "-y", "@playwright/mcp@latest"], enabled: true },
         context7: {
           headers: { CONTEXT7_API_KEY: "{env:CONTEXT7_API_KEY}" },
         },
@@ -644,9 +647,9 @@ describe("platform adapters", () => {
       ),
     ).toBeDefined()
     expect(JSON.parse(tui!.content.toString("utf8"))).toMatchObject({
-      plugin: ["opencode-subagent-statusline@1.2.0"],
       attention: { enabled: true, notifications: false, sound: false },
     })
+    expect(tui!.content.toString("utf8")).not.toContain("opencode-subagent-statusline")
     expect(opencode!.content.toString("utf8")).not.toMatch(/sk-[A-Za-z0-9]/)
   })
 
@@ -671,12 +674,12 @@ describe("platform adapters", () => {
     ]
     for (const agent of agents) {
       const definition = agentDefinition(agent.name)
-      const profile = modelProfile(definition.modelProfile)
+      const model = definition.models.claude
       const capability = capabilityProfile(definition.capabilityProfile)
       const frontmatter = parseMarkdown(agent.content.toString("utf8")).frontmatter
-      expect(frontmatter.model).toBe(profile.claudeModel ?? "inherit")
+      expect(frontmatter.model).toBe(model.model ?? "inherit")
       expect(frontmatter.maxTurns).toBe(definition.toolCycleBudget)
-      expect(frontmatter.effort).toBe(profile.claudeEffort)
+      expect(frontmatter.effort).toBe(model.reasoningEffort ?? undefined)
       const expectedTools = ["Read", "Grep", "Glob"]
       if (capability.shell) expectedTools.push("Bash")
       if (capability.writes) expectedTools.push("Write", "Edit", "NotebookEdit")
@@ -753,7 +756,8 @@ describe("platform adapters", () => {
       (artifact) => artifact.name === "ms-designer" && artifact.kind === "agent",
     )
     const designerDocument = parseMarkdown(designer!.content.toString("utf8"))
-    expect(designerDocument.frontmatter.disallowedTools).toEqual(expect.arrayContaining(["Bash", "Agent"]))
+    expect(designerDocument.frontmatter.disallowedTools).toEqual(expect.arrayContaining(["Agent"]))
+    expect(designerDocument.frontmatter.disallowedTools).not.toContain("Bash")
     expect(JSON.stringify(designerDocument.frontmatter.hooks)).toContain("ms-agent-guard.mjs")
 
     const expectedWorkflowAgents = new Map([
@@ -929,12 +933,13 @@ describe("platform adapters", () => {
       root: path.join(buildContext.projectRoot, ".codex"),
       strategy: "managed-block",
       blockId: "codex-context7",
-      satisfaction: "codex-context7",
+      satisfaction: "codex-mcp",
       mode: 0o644,
     })
     expect(context7?.content.toString("utf8")).toBe(
       '[mcp_servers.context7]\nurl = "https://mcp.context7.com/mcp"\n' +
-        'env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }\n',
+        'env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }\n\n' +
+        '[mcp_servers.playwright]\ncommand = "npx"\nargs = ["-y", "@playwright/mcp@latest"]\n',
     )
     expect(context7?.content.toString("utf8").match(/CONTEXT7_API_KEY/g)).toHaveLength(2)
     expect(context7?.content.toString("utf8")).not.toMatch(/authorization|bearer|sk-[A-Za-z0-9]/i)
@@ -987,7 +992,7 @@ describe("platform adapters", () => {
       root: path.join(buildContext.homeDir, ".codex"),
       strategy: "managed-block",
       blockId: "codex-context7",
-      satisfaction: "codex-context7",
+      satisfaction: "codex-mcp",
     })
     expect(artifacts.some((artifact) => artifact.destination.endsWith("openai.yaml"))).toBe(false)
   })

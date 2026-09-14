@@ -15,11 +15,5 @@
     "enabled": true,
     "notifications": false,
     "sound": false
-  },
-  "plugin": [
-    "opencode-subagent-statusline@1.2.0"
-  ],
-  "plugin_enabled": {
-    "opencode-subagent-statusline": true
   }
 }

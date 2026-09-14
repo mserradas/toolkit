@@ -8,10 +8,12 @@ import process from "node:process"
 import { parseArgs, promisify } from "node:util"
 import { buildArtifacts } from "./adapters/index.js"
 import { runProjectCommand } from "./cli/project.js"
+import { runResultCommand } from "./cli/result.js"
 import { DEFAULT_ASSETS_ROOT, loadCatalog } from "./core/catalog.js"
 import { AppError, normalizeAppError, throwIfAborted } from "./core/errors.js"
 import { loadKitConfiguration } from "./core/kit-config.js"
-import { resolvedModels } from "./core/model-profiles.js"
+import { resolvedModels } from "./core/agent-models.js"
+import { modelConfigurationDiagnostics } from "./core/model-diagnostics.js"
 import { parseMarkdown } from "./core/frontmatter.js"
 import { applyPlan, installationStatus, uninstallTargets } from "./core/installer.js"
 import { withOperationLock, type MutableOperation } from "./core/operation-lock.js"
@@ -55,6 +57,7 @@ Uso:
   ms-agent-kit status [opciones]
   ms-agent-kit uninstall [opciones]
   ms-agent-kit project init|inspect [--project <ruta>] [--json] [--dry-run]
+  ms-agent-kit result validate --file <respuesta.md> [--json]
 
 Opciones:
   --target <valor>    Cliente objetivo: \`opencode\`, \`claude\`, \`codex\` o \`all\`. Puede repetirse.
@@ -254,8 +257,8 @@ function printPlan(plan: InstallPlan, asJson: boolean): void {
 
   const summary = planSummary(plan)
   if (plan.models) {
-    for (const [target, profiles] of Object.entries(plan.models)) {
-      process.stdout.write(`Modelos ${target}: ${Object.entries(profiles).map(([name, model]) => `${name}=${model.model ?? "heredado"} (${model.modelSource}; esfuerzo ${model.reasoningEffort ?? "heredado"}, ${model.reasoningEffortSource})`).join("; ")}. Disponibilidad no comprobada.\n`)
+    for (const [target, agents] of Object.entries(plan.models)) {
+      process.stdout.write(`Modelos ${target}: ${Object.entries(agents).map(([name, model]) => `${name}=${model.model ?? "heredado"} (${model.modelSource}; esfuerzo ${model.reasoningEffort ?? "heredado"}, ${model.reasoningEffortSource})`).join("; ")}. Disponibilidad no comprobada.\n`)
     }
   }
   process.stdout.write(
@@ -480,9 +483,13 @@ async function checkCodexSecretRules(
 async function runDoctor(options: CliOptions): Promise<void> {
   const catalog = await loadCatalog(options.context.assetsRoot)
   const projectInspection = await inspectRuntimeProject(options.context.projectRoot)
-  const artifacts = projectInspection.status === "invalid" ? [] : await buildArtifacts(options.targets, options.context)
+  const configuration = await loadKitConfiguration(options.context.homeDir)
+  // Un único snapshot, también si el archivo personal no existe.
+  const context: BuildContext = { ...options.context, kitConfiguration: configuration ?? { schemaVersion: 1, models: {} } }
+  const artifacts = projectInspection.status === "invalid" ? [] : await buildArtifacts(options.targets, context)
   const plan = projectInspection.status === "invalid" ? null : await createPlan(artifacts, options.context)
   const managedStatus = await installationStatus(options.targets, options.context)
+  const modelConfiguration = modelConfigurationDiagnostics(options.targets, plan, managedStatus, options.context.homeDir, configuration)
   const counts = Object.fromEntries(
     options.targets.map((target) => [
       target,
@@ -569,7 +576,7 @@ async function runDoctor(options: CliOptions): Promise<void> {
     ...(await Promise.all(options.targets.map((target) => diagnoseClient(target, options.context.projectRoot)))).flat(),
     ...installationCapabilities(options.targets, plan, managedStatus),
     projectContextDiagnostic(projectInspection),
-    ...commandCapabilities(options.targets, projectInspection, options.context),
+    ...commandCapabilities(options.targets, projectInspection, context),
   ]
   if (capabilities.some((item) => (item.id === "client.binary" && item.status === "no disponible") || (item.id === "client.compatibility" && item.status === "incompatible"))) ok = false
 
@@ -584,6 +591,7 @@ async function runDoctor(options: CliOptions): Promise<void> {
     installation: installations,
     security: { codexSecretRules: codexSecurity },
     duplicateSkills,
+    modelConfiguration,
     capabilities,
     warnings,
   }
@@ -593,6 +601,7 @@ async function runDoctor(options: CliOptions): Promise<void> {
       : `Integridad local ${ok ? "CORRECTA" : "CON PROBLEMAS"}: ${payload.agents} agentes, ${payload.commands} comandos, ${payload.skills} habilidades (\`skills\`). Instalación: ${options.targets.map((target) => `${targetLabels[target]} ${installations[target].status.ok}/${installations[target].managed}`).join(", ")}${warnings.length > 0 ? `. Avisos: ${warnings.join("; ")}` : ""}\n`,
   )
   if (!options.json) {
+    for (const model of modelConfiguration) process.stdout.write(`${model.target} · ${model.role}: declarado modelo=${model.declared.model ?? "heredado"}, esfuerzo=${model.declared.reasoningEffort ?? "heredado"} (${model.declared.modelSource}; ${model.declared.reasoningEffortSource}); instalado=${model.installed.status} (${model.installed.source ?? "sin fuente"}); efectivo=${model.effective.status}. ${model.installed.detail}\n`)
     for (const capability of capabilities) process.stdout.write(`${capability.target} · ${capability.id}: ${capability.status}. ${capability.evidence}${capability.action ? ` Acción: ${capability.action}` : ""}\n`)
   }
   if (!ok) process.exitCode = 1
@@ -769,6 +778,7 @@ async function runMutableOperation(
 }
 
 async function main(input: string[]): Promise<void> {
+  if (input[0] === "result") return runResultCommand(input.slice(1))
   if (input.length === 0) {
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       process.stdout.write(HELP)

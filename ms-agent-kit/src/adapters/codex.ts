@@ -1,9 +1,10 @@
 import path from "node:path"
+import { verificationForRole } from "../core/verification-policy.js"
 import { agentDefinition } from "../core/agent-catalog.js"
 import { frontmatterString, renderMarkdown } from "../core/frontmatter.js"
-import { resolveModelProfile } from "../core/model-profiles.js"
+import { resolveAgentModel } from "../core/agent-models.js"
 import { SECRET_DIRECT_PATHS, SECRET_PATH_PATTERNS } from "../core/permissions.js"
-import { capabilityProfile, COORDINATION_SKILLS, technicalSkillsOnly } from "../core/profiles.js"
+import { capabilityProfile, COORDINATION_SKILLS, documentaryInspectionCommands, technicalSkillsOnly } from "../core/profiles.js"
 import type { Artifact, BuildContext, Catalog, SourceMarkdown } from "../core/types.js"
 import {
   copySharedSkillArtifacts,
@@ -11,6 +12,7 @@ import {
   textArtifact,
   projectSharedRules,
   projectWritePaths,
+  projectVerificationInstructions,
 } from "./common.js"
 
 const CODEX_COMPATIBILITY = `
@@ -31,6 +33,11 @@ const CODEX_SKILL_EXCLUSIONS = new Set(["skill-creator"])
 const CODEX_CONTEXT7_CONFIG = `[mcp_servers.context7]
 url = "https://mcp.context7.com/mcp"
 env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }
+`
+
+const CODEX_PLAYWRIGHT_CONFIG = `[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest"]
 `
 
 const CODEX_SECRET_ARGUMENTS = SECRET_DIRECT_PATHS.flatMap((secretPath) => [
@@ -142,6 +149,9 @@ function codexOperationalInstructions(
   if (!profile.shell) {
     instructions.push("No uses Bash ni shell aunque la herramienta siga visible.")
   }
+  if (profile.gitInspectionPaths) {
+    instructions.push(`Shell limitado a estos comandos exactos desde la raíz del proyecto: ${documentaryInspectionCommands(profile).map((command) => `\`${command}\``).join("; ")}. Ejecuta una consulta por llamada, sin \`&&\`. No añadas argumentos, rutas ajenas, flags mutantes, wrappers ni composición. No inspecciones secretos. Esta restricción se aplica por instrucciones; no constituye una lista de permisos nativa de Codex ni demuestra el sandbox efectivo.`)
+  }
   if (!profile.usesSkills) {
     instructions.push("No cargues ni invoques skills aunque el catálogo siga visible.")
   }
@@ -158,7 +168,7 @@ function codexOperationalInstructions(
 function codexAgent(agent: SourceMarkdown, sharedRules: string, context: BuildContext): string {
   const definition = agentDefinition(agent.name)
   const profile = capabilityProfile(definition.capabilityProfile)
-  const model = resolveModelProfile(definition.modelProfile, "codex", context.kitConfiguration)
+  const model = resolveAgentModel(agent.name, "codex", context.kitConfiguration)
   const description = frontmatterString(
     agent.frontmatter,
     "description",
@@ -167,7 +177,7 @@ function codexAgent(agent: SourceMarkdown, sharedRules: string, context: BuildCo
   const documentationLimit = agent.name === "ms-writer" && context.scope === "project" && context.projectPreferences?.documentation.paths.length
     ? "Los permisos nativos de filesystem de Codex abarcan directorios completos. En los directorios de preferences.documentation.paths escribe únicamente archivos Markdown dentro del alcance documental autorizado; esa amplitud nativa no permite editar código ni otros archivos."
     : ""
-  const roleInstructions = [codexOperationalInstructions(definition, profile), documentationLimit, agent.body]
+  const roleInstructions = [codexOperationalInstructions(definition, profile), documentationLimit, projectVerificationInstructions(agent.name, context), agent.body]
     .filter(Boolean)
     .join("\n\n")
   const instructions = embeddedAgentBody(sharedRules, roleInstructions, CODEX_COMPATIBILITY)
@@ -184,7 +194,8 @@ function codexAgent(agent: SourceMarkdown, sharedRules: string, context: BuildCo
   lines.push(`description = ${tomlString(`Permisos acotados para ${agent.name}`)}`)
   lines.push(`extends = ${tomlString(profile.writePaths.includes("**") ? ":workspace" : ":read-only")}`)
   lines.push("", '[permissions.ms-agent.filesystem.":workspace_roots"]')
-  for (const writePath of codexWritePaths(projectWritePaths(agent.name, context))) {
+  const outputs = agent.name === "ms-tester" ? verificationForRole(agent.name, context).outputPaths : []
+  for (const writePath of [...codexWritePaths(projectWritePaths(agent.name, context)), ...outputs]) {
     if (writePath !== "**") lines.push(`${tomlString(writePath)} = "write"`)
   }
   for (const secretPath of SECRET_PATH_PATTERNS) {
@@ -322,7 +333,7 @@ function commandSkill(command: SourceMarkdown, catalog: Catalog, context: BuildC
     if (!fastlane) throw new Error("Falta ms-fastlane en el catálogo")
     const definition = agentDefinition(fastlane.name)
     const limits = codexOperationalInstructions(definition, capabilityProfile(definition.capabilityProfile)).replace("No preguntes directamente al usuario aunque la herramienta siga visible; devuelve al agente padre cualquier pregunta cuya respuesta cambie el resultado.", "Si falta una decisión bloqueante, pregunta al usuario; esta es una invocación primaria directa.")
-    return codexSkill(command.name, description, embeddedAgentBody(projectSharedRules(catalog.sharedRules, context), `${limits}\n\n${fastlane.body}\n\nEjecuta directamente el cambio acotado autorizado y su verificación. No invoques ms-architect ni delegues otro worker. En esta invocación primaria entrega el resultado al usuario, sin contrato de worker obligatorio. Usa $ARGUMENTS como entrada literal.`, CODEX_COMPATIBILITY))
+    return codexSkill(command.name, description, embeddedAgentBody(projectSharedRules(catalog.sharedRules, context), `${limits}\n\n${projectVerificationInstructions(fastlane.name, context)}\n\n${fastlane.body}\n\nEjecuta directamente el cambio acotado autorizado y su verificación. No invoques ms-architect ni delegues otro worker. En esta invocación primaria entrega el resultado al usuario, sin contrato de worker obligatorio. Usa $ARGUMENTS como entrada literal.`, CODEX_COMPATIBILITY))
   }
   const introduction = command.name === "ms-handoff" ? "Prepara una nota de traspaso en la tarea padre; lectura por defecto y persistencia delegada solo con ruta explícita. Usa $ARGUMENTS como entrada literal." : "Ejecuta este flujo de trabajo de solo lectura en la tarea padre. Usa $ARGUMENTS como entrada literal."
   const codexBody = command.body.replaceAll(`/${command.name}`, `$${command.name}`)
@@ -366,11 +377,16 @@ export function buildCodexArtifacts(catalog: Catalog, context: BuildContext): Ar
         name: "context7",
         root: roots.codex,
         destination: path.join(roots.codex, "config.toml"),
-        content: CODEX_CONTEXT7_CONFIG,
+        content: CODEX_CONTEXT7_CONFIG + "\n" + CODEX_PLAYWRIGHT_CONFIG,
       }),
       strategy: "managed-block",
+      // Preserve the block identity so existing Context7 installations upgrade in place.
       blockId: "codex-context7",
-      satisfaction: "codex-context7",
+      satisfaction: "codex-mcp",
+      mcpServers: [
+        { name: "context7", content: CODEX_CONTEXT7_CONFIG },
+        { name: "playwright", content: CODEX_PLAYWRIGHT_CONFIG },
+      ],
     },
     textArtifact({
       target: "codex",

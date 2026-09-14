@@ -16,6 +16,8 @@ export interface CapabilityProfile {
   writes: boolean
   writePaths: readonly string[]
   shell: boolean
+  /** Closed Git inspection capability; never grants general shell access. */
+  gitInspectionPaths?: readonly string[]
   usesSkills: boolean
   asksQuestions: boolean
   orchestrates: boolean
@@ -57,7 +59,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
   "design-writer": {
     writes: true,
     writePaths: [".agents/docs/design/*.md", ".agents/docs/design/**/*.md"],
-    shell: false,
+    shell: true,
+    gitInspectionPaths: [".agents/docs/design"],
     usesSkills: true,
     asksQuestions: false,
     orchestrates: false,
@@ -117,7 +120,8 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
   "spec-writer": {
     writes: true,
     writePaths: [".agents/docs/spec/*.md", ".agents/docs/spec/**/*.md"],
-    shell: false,
+    shell: true,
+    gitInspectionPaths: [".agents/docs/spec"],
     usesSkills: true,
     asksQuestions: false,
     orchestrates: false,
@@ -159,6 +163,18 @@ const CAPABILITY_PROFILES: Record<CapabilityProfileName, CapabilityProfile> = {
 
 export function capabilityProfile(name: CapabilityProfileName): CapabilityProfile {
   return CAPABILITY_PROFILES[name]
+}
+
+export function gitInspectionCommands(profile: CapabilityProfile): string[] {
+  if (!profile.gitInspectionPaths?.length) return []
+  return ["git status --short", ...profile.gitInspectionPaths.flatMap((directory) =>
+    [" --stat", " --name-only"].map((option) => `git --no-pager diff --no-ext-diff --no-textconv${option} -- ${directory}`),
+  )]
+}
+
+export function documentaryInspectionCommands(profile: CapabilityProfile): string[] {
+  if (!profile.gitInspectionPaths?.length) return []
+  return [...gitInspectionCommands(profile), "pwd", "ls -d .", "command -v ms-agent-kit"]
 }
 
 export const COORDINATION_SKILLS = ["ms-architect", "ms-project-init", "ms-artifact-lifecycle", "delegation-brief", "work-unit-commits", "judgment-day", "ms-handoff"] as const

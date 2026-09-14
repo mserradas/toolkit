@@ -5,8 +5,8 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
 import { AppError } from "./errors.js"
-import { openCodeRolePermission } from "./opencode-role-permissions.js"
-import { OPENCODE_SECRET_BASH_RULES } from "./permissions.js"
+import { commandPreflight, type CommandPreflight } from "./command-preflight.js"
+export { staticCommandDecision } from "./command-preflight.js"
 import { inspectProjectContext } from "./project-context.js"
 import { owningTargets, type BuildContext, type InstallPlan, type Target } from "./types.js"
 
@@ -17,6 +17,7 @@ export interface CapabilityDiagnostic {
   status: CapabilityStatus
   evidence: string
   action: string | null
+  operation?: CommandPreflight
 }
 
 export interface ResolvedExecutable { path: string; safePath: string }
@@ -131,24 +132,6 @@ export function projectContextDiagnostic(inspection: RuntimeProjectInspection): 
   }
 }
 
-function matches(pattern: string, command: string): boolean {
-  const expression = pattern.split("*").map((piece) => piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")
-  return new RegExp(`^${expression}$`).test(command)
-}
-
-export function staticCommandDecision(command: string, role: "ms-codex" | "ms-tester", context: BuildContext): "allow" | "deny" | "ask" | "unknown" {
-  if (!/^[a-zA-Z0-9_./:@= -]+$/.test(command)) return "unknown"
-  const bash = openCodeRolePermission(role, context.permissionProfile ?? "balanced").bash
-  if (!bash || typeof bash !== "object" || Array.isArray(bash)) return "unknown"
-  const rules: Record<string, unknown> = { ...bash, ...OPENCODE_SECRET_BASH_RULES }
-  let decision: "allow" | "deny" | "ask" | "unknown" = "unknown"
-  for (const [pattern, value] of Object.entries(rules)) {
-    if (!matches(pattern, command)) continue
-    decision = value === "allow" || value === "deny" || value === "ask" ? value : "unknown"
-  }
-  return decision
-}
-
 export function installationCapabilities(targets: Target[], plan: InstallPlan | null, managed: Array<{ target: Target; path: string; status: "ok" | "modified" | "missing" }>): CapabilityDiagnostic[] {
   const results: CapabilityDiagnostic[] = []
   for (const target of targets) {
@@ -156,7 +139,19 @@ export function installationCapabilities(targets: Target[], plan: InstallPlan | 
     results.push(diagnostic("installation.integrity", target, !plan ? "no comprobado" : status.length === 0 ? "no disponible" : status.some((entry) => entry.status !== "ok") ? "incompatible" : "correcto", !plan ? "No se pudo construir el plan con el contexto inválido; los archivos administrados se inspeccionan aparte." : `${status.filter((entry) => entry.status === "ok").length}/${status.length} artefactos administrados conservan su contenido.`, !plan || status.length === 0 || status.some((entry) => entry.status !== "ok") ? "Revisa el plan y los conflictos antes de instalar." : null))
     results.push(diagnostic("runtime.agents-skills", target, "no comprobado", "La integridad de archivos no demuestra que el runtime reconozca agentes y skills.", "Comprueba el catálogo desde el cliente; doctor no inicia sesiones de modelos."))
     const config = plan?.items.find((item) => owningTargets(item.artifact).includes(target) && item.artifact.kind === "configuration" && item.artifact.name === (target === "codex" ? "context7" : "opencode.json"))
-    const installed = config && !config.satisfiedExternally && config.action === "unchanged" && status.some((entry) => entry.path === config.artifact.destination && entry.status === "ok")
+    const managedConfig = config && !config.satisfiedExternally && config.action === "unchanged" && status.some((entry) => entry.path === config.artifact.destination && entry.status === "ok")
+    const installed = managedConfig && (!config.artifact.mcpServers || config.artifact.mcpServers.some((server) => server.name === "context7"))
+    let hasPlaywright = false
+    if (config && target === "opencode") {
+      try {
+        hasPlaywright = JSON.parse(config.artifact.content.toString()).mcp?.playwright?.enabled === true
+      } catch { /* An invalid configuration does not prove MCP installation. */ }
+    } else {
+      hasPlaywright = config?.artifact.mcpServers?.some((server) => server.name === "playwright") ?? false
+    }
+    const playwrightInstalled = managedConfig && hasPlaywright
+    results.push(diagnostic("playwright.installation", target, target === "claude" ? "no disponible" : !plan ? "no comprobado" : playwrightInstalled ? "correcto" : "no disponible", target === "claude" ? "El kit no configura Playwright para Claude." : playwrightInstalled ? "La configuración administrada de Playwright está instalada y coincide con el plan." : "No se verificó configuración administrada de Playwright instalada y vigente.", playwrightInstalled ? null : "Revisa el registro MCP de Playwright en este cliente."))
+    results.push(diagnostic("playwright.runtime", target, "no comprobado", "No se inicia npx ni se comprueba el navegador o la conexión MCP.", "Valida Playwright desde el cliente cuando lo necesites."))
     results.push(diagnostic("context7.installation", target, target === "claude" ? "no disponible" : !plan ? "no comprobado" : installed ? "correcto" : "no disponible", target === "claude" ? "El kit no configura Context7 para Claude." : installed ? "El artefacto administrado de Context7 está instalado y coincide con el plan." : config?.satisfiedExternally ? "El plan detecta configuración externa; no acredita instalación administrada por el kit." : "No se verificó un artefacto administrado de Context7 instalado y vigente.", installed ? null : "Revisa la configuración documental de este cliente."))
     results.push(diagnostic("context7.runtime", target, "no comprobado", "Configuración externa, credenciales, autenticación y conectividad no comprobadas; no se leen claves ni se accede a la red.", "Valida Context7 desde el cliente cuando lo necesites."))
     results.push(diagnostic("models.availability", target, "no comprobado", "La configuración local no demuestra disponibilidad ni acceso a modelos remotos.", "Comprueba el modelo seleccionado en el cliente; doctor no realiza llamadas a modelos."))
@@ -168,12 +163,12 @@ export function commandCapabilities(targets: Target[], inspection: RuntimeProjec
   const results: CapabilityDiagnostic[] = []
   for (const target of targets) {
     results.push(diagnostic("project.commands.runtime", target, "no comprobado", "No se ejecutan comandos descubiertos. Los permisos efectivos del runtime, el guard de Claude y el sandbox de Codex no se verifican.", "Revisa definición, directorio y permisos del comando antes de ejecutarlo."))
-    if (target !== "opencode" || inspection.status !== "current" || !inspection.project) continue
+    if (inspection.status !== "current" || !inspection.project) continue
     for (const [kind, commands] of Object.entries(inspection.project.context.commands)) {
       for (const [index, command] of commands.entries()) {
-        for (const role of ["ms-codex", "ms-tester"] as const) {
-          const decision = staticCommandDecision(command.command, role, context)
-          results.push(diagnostic(`project.commands.static.${kind}.${index}.${role}`, target, decision === "allow" ? "correcto" : decision === "deny" ? "incompatible" : "no comprobado", `Solo política estática ${role}: ${decision}; ${command.command}, cwd=${command.cwd}, fuente=${command.source}. No comprueba scripts internos ni overrides instalados.`, decision === "allow" ? null : "Revisa la regla del rol y el comando; no amplíes permisos automáticamente."))
+        for (const role of ["ms-codex", "ms-fastlane", "ms-tester"] as const) {
+          const operation = commandPreflight(command, target, role, context)
+          results.push({ ...diagnostic(`project.commands.static.${kind}.${index}.${role}`, target, operation.decision === "allow" ? "correcto" : operation.decision === "deny" ? "incompatible" : "no comprobado", `Preflight ${role}: ${operation.decision}; política=${operation.policy.decision}; ${command.command}, cwd=${command.cwd}, fuente=${command.source}; efectos=${operation.effects.status}. ${operation.reasons.join(" ")}`, operation.decision === "allow" ? null : "Revisa regla, efectos y servicios del comando; no amplíes permisos ni reintentes denegaciones automáticamente."), operation })
         }
       }
     }

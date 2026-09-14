@@ -12,5 +12,10 @@
   "retries": null,
   "unnecessary_questions": null,
   "tokens": null,
+  "delegations": null,
+  "policy_denials": null,
+  "budget_exhaustions": null,
+  "duplicate_verifications": null,
+  "rework": null,
   "evidence": []
 }

@@ -1,9 +1,11 @@
 import path from "node:path"
+import { validateResultContract } from "../core/result-contract.js"
 import { agentDefinition } from "../core/agent-catalog.js"
 import { frontmatterString, renderMarkdown } from "../core/frontmatter.js"
-import { resolveModelProfile } from "../core/model-profiles.js"
-import { capabilityProfile, COORDINATION_SKILLS, technicalSkillsOnly } from "../core/profiles.js"
+import { resolveAgentModel } from "../core/agent-models.js"
+import { capabilityProfile, COORDINATION_SKILLS, documentaryInspectionCommands, technicalSkillsOnly } from "../core/profiles.js"
 import { openCodeRolePermission } from "../core/opencode-role-permissions.js"
+import { verificationForRole, withVerificationCommands } from "../core/verification-policy.js"
 import {
   SAFE_ENVIRONMENT_TEMPLATES,
   SECRET_BASENAME_PATTERNS,
@@ -15,6 +17,7 @@ import {
   textArtifact,
   projectSharedRules,
   projectWritePaths,
+  projectVerificationInstructions,
 } from "./common.js"
 
 const CLAUDE_COMPATIBILITY = `
@@ -129,7 +132,7 @@ function claudeAgent(agent: SourceMarkdown, guardPath: string, context: BuildCon
     `Agente especializado ${agent.name}`,
   )
   const definition = agentDefinition(agent.name)
-  const profile = resolveModelProfile(definition.modelProfile, "claude", context.kitConfiguration)
+  const profile = resolveAgentModel(agent.name, "claude", context.kitConfiguration)
   const frontmatter: Record<string, unknown> = {
     name: agent.name,
     description,
@@ -154,7 +157,7 @@ function claudeAgent(agent: SourceMarkdown, guardPath: string, context: BuildCon
 
   return renderMarkdown(
     frontmatter,
-    `# Compatibilidad Claude Code\n\n${CLAUDE_COMPATIBILITY.trim()}\n\n${agent.body}`,
+    `# Compatibilidad Claude Code\n\n${CLAUDE_COMPATIBILITY.trim()}\n\n${projectVerificationInstructions(agent.name, context)}\n\n${agent.body}`,
   )
 }
 
@@ -171,12 +174,12 @@ function closedBashPolicy(): BashPolicy {
   return { fallback: "deny", allow: [], ask: [], deny: [] }
 }
 
-function bashPolicies(catalog: Catalog): Record<string, BashPolicy> {
+function bashPolicies(catalog: Catalog, context: BuildContext): Record<string, BashPolicy> {
   const structurallyInspectedPatterns = new Set(["sh -c *", "*$(*", "*;*"])
   const decisions = new Set<BashDecision>(["allow", "ask", "deny"])
   return Object.fromEntries(
     catalog.agents.map((agent) => {
-      const bash = openCodeRolePermission(agent.name).bash
+      const bash = withVerificationCommands(openCodeRolePermission(agent.name, context.permissionProfile ?? "balanced"), agent.name, context).bash
       if (bash === "deny") return [agent.name, closedBashPolicy()]
       if (
         typeof bash !== "object" ||
@@ -220,15 +223,26 @@ function claudeGuardSource(catalog: Catalog, context: BuildContext): string {
       projectWritePaths(agent.name, context),
     ]),
   )
-  const bashPolicyByAgent = bashPolicies(catalog)
+  const bashPolicyByAgent = bashPolicies(catalog, context)
+  const verificationByAgent = Object.fromEntries(catalog.agents.flatMap((agent) => {
+    const grant = verificationForRole(agent.name, context)
+    return grant.commands.length ? [[agent.name, { ...grant, root: path.resolve(context.projectRoot) }]] : []
+  }))
   const materializedAgents = catalog.agents.map((agent) => agent.name)
+  const documentaryInspectionByAgent = Object.fromEntries(catalog.agents.flatMap((agent) => {
+    const profile = capabilityProfile(agentDefinition(agent.name).capabilityProfile)
+    return profile.gitInspectionPaths ? [[agent.name, documentaryInspectionCommands(profile)]] : []
+  }))
   return String.raw`#!/usr/bin/env node
-import { realpathSync } from "node:fs"
+import { lstatSync, realpathSync } from "node:fs"
 import path from "node:path"
 
 const WRITE_RULES = ${JSON.stringify(writeRules, null, 2)}
 const BASH_POLICIES = ${JSON.stringify(bashPolicyByAgent, null, 2)}
 const MATERIALIZED_AGENTS = new Set(${JSON.stringify(materializedAgents, null, 2)})
+const PROJECT_VERIFICATION = ${JSON.stringify(verificationByAgent, null, 2)}
+const DOCUMENTARY_INSPECTION_COMMANDS = ${JSON.stringify(documentaryInspectionByAgent, null, 2)}
+const INSPECTION_PROJECT_ROOT = ${JSON.stringify(context.scope === "project" ? path.resolve(context.projectRoot) : null)}
 const SENSITIVE_PATH_SEGMENTS = ${JSON.stringify(SENSITIVE_PATH_SEGMENTS, null, 2)}
 const USER_CLAUDE_SETTINGS = ${JSON.stringify(path.resolve(context.homeDir, ".claude/settings.json"))}
 const SECRET_BASENAME_PATTERNS = ${JSON.stringify(SECRET_BASENAME_PATTERNS, null, 2)}
@@ -1552,6 +1566,7 @@ function decideBashCommand(agent, command) {
   const denyCandidates = denyPolicyCandidates(command)
   if (!denyCandidates) return "deny"
   if (matchesPolicyRules(policy.deny, denyCandidates)) return "deny"
+  if (PROJECT_VERIFICATION[agent]?.commands.includes(command) && !unsafeShellSyntax(command) && !unsafeReadOnlyArguments(words)) return "allow"
   if (matchesPolicyRules(policy.ask, denyCandidates)) return "ask"
   const unsafeAutomaticAllow =
     unsafeShellSyntax(command) || unsafeReadOnlyArguments(words)
@@ -1724,13 +1739,34 @@ function allowedWrite(agent, value) {
   return (WRITE_RULES[agent] || []).some((pattern) => pattern === "**" || globRegex(pattern).test(relative))
 }
 
- function assertTerminalContract(message) {
-  const text = String(message || "")
-  if (!text.includes("Contrato para ms-architect")) {
-    throw new Error("Cierre bloqueado: falta Contrato para ms-architect")
+const assertTerminalContract = ${validateResultContract.toString()}
+
+function assertVerificationContext(agent, command, payload, toolInput) {
+  const grant = PROJECT_VERIFICATION[agent]
+  if (!grant?.commands.includes(command.trim())) return
+  if (command !== command.trim()) throw new Error("Bloqueado por la política ms-*: la autorización requiere el comando exacto, sin espacios adicionales")
+  const directories = [process.cwd(), payload.cwd ?? process.cwd(), toolInput.cwd ?? process.cwd(), toolInput.workdir ?? process.cwd()]
+  if (canonicalPath(grant.root) !== grant.root || directories.some((directory) => typeof directory !== "string" || !path.isAbsolute(directory) || canonicalPath(directory) !== grant.root)) {
+    throw new Error("Bloqueado por la política ms-*: autorización de verificación fuera de su raíz")
   }
-  const status = /^status:\s*(completed|partial|blocked|needs_user_input|failed|not_applicable)\s*$/m.exec(text)?.[1]
-  if (!status) throw new Error("Cierre bloqueado: el contrato no declara un estado terminal válido")
+  const references = command.split(" ").filter((word) => word.startsWith("./") || /\.ya?ml$/.test(word))
+  if (command.startsWith("make ")) references.push("Makefile", "makefile", "GNUmakefile")
+  if (/^(?:npm|pnpm|yarn|bun) /.test(command)) references.push("package.json")
+  const destinations = [...grant.outputPaths.map((relative) => ({ relative, directory: true })), ...references.map((relative) => ({ relative, directory: false }))]
+  for (const { relative, directory } of destinations) {
+    let current = grant.root
+    const parts = relative.replace(/^\.\//, "").split("/")
+    for (const [index, part] of parts.entries()) {
+      current = path.join(current, part)
+      try {
+        const info = lstatSync(current)
+        if (info.isSymbolicLink() || realpathSync(current) !== current || ((directory || index < parts.length - 1) ? !info.isDirectory() : !info.isFile())) throw new Error("Destino de verificación no permitido")
+      } catch (error) {
+        if (error.code === "ENOENT") break
+        throw new Error("Bloqueado por la política ms-*: destino de verificación cambiado o inseguro")
+      }
+    }
+  }
 }
 
 let input = ""
@@ -1771,6 +1807,15 @@ try {
 
   if (tool === "Bash") {
     const command = String(toolInput.command || "")
+    assertVerificationContext(expectedAgent, command, payload, toolInput)
+    const inspectionCommands = DOCUMENTARY_INSPECTION_COMMANDS[expectedAgent]
+    if (inspectionCommands) {
+      const root = canonicalPath(INSPECTION_PROJECT_ROOT || process.cwd())
+      const commandCwd = payload.cwd === undefined ? process.cwd() : payload.cwd
+      if (typeof commandCwd !== "string" || !path.isAbsolute(commandCwd) || canonicalPath(commandCwd) !== root || canonicalPath(process.cwd()) !== root || !inspectionCommands.includes(command)) {
+        throw new Error("Bloqueado por la política ms-*: inspección acotada fuera de los comandos exactos o de la raíz del proyecto")
+      }
+    }
     if (invokesEnvironmentDump(command)) {
       console.error("Bloqueado por la política ms-*: comando con secretos o variables de entorno")
       process.exit(2)

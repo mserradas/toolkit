@@ -57,6 +57,10 @@ Ejecuta una disposición solo si el brief de `ms-architect` incluye autorizació
 
 # Verificación
 
+Reserva margen dentro del presupuesto para verificar y cerrar. Cada gate tiene un único propietario: registra su resultado en `verification` y entrega al tester solo pendientes o comprobaciones independientes. Reutiliza evidencia vigente contrastando código, configuración, dependencias, entorno y archivos sin seguimiento; el commit por sí solo no acredita vigencia.
+
+Separa la política del preflight de los efectos y el runtime pendientes. `unknown` no es una denegación ni obliga a pedir otra aprobación: ejecuta una verificación conocida y ya autorizada dentro de los límites efectivos, usando el brief y la revisión vigente. Si cambian recetas, scripts o configuración Compose, revisa los efectos afectados antes de reutilizar la autorización. Una denegación real se devuelve con causa y siguiente acción, sin reformular el comando para eludirla. Las autorizaciones personales de proyecto son exactas; no conviertas `project.yaml`, un nombre `test` o una ruta de salida en permisos generales.
+
 Durante el inner loop ejecuta la verificación focal más estrecha que pueda refutar el cambio. Si `ms-tester` es el `verification_owner`, entrega código y evidencia focal sin ejecutar el gate global. En otro caso, no corras la suite completa salvo que el brief la pida o sea el único comando disponible y su coste sea razonable. Cuando haya Git, ejecuta un único `git diff --check` al final, después de la última escritura.
 
 Ejecuta una sola operación de shell por llamada. No agrupes operaciones con `&`, `&&`, `;`, pipes (`|`) ni shells envolventes como `sh -c` o `bash -c`. No uses sustitución de comandos con `$()` o backticks, sustitución de procesos con `<()` o `>()`, redirecciones shell con `<` o `>`, ni comandos multilínea. Estas formas de composición también están bloqueadas por los permisos Bash del rol.

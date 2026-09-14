@@ -315,8 +315,9 @@ function parseTomlKeyPath(
   return null
 }
 
-export function inspectExternalCodexContext7(
+export function inspectExternalCodexMcp(
   content: Buffer,
+  server: "context7" | "playwright",
   excludedRange?: ManagedBlockRange,
 ): ExternalSatisfaction {
   let text: string
@@ -327,12 +328,13 @@ export function inspectExternalCodexContext7(
   }
 
   const lines = text.split(/\r?\n/)
-  let inContext7 = false
+  let inServer = false
   let tables = 0
   let url: string | null = null
   let headers: Map<string, string> | null = null
   let urlCount = 0
   let headersCount = 0
+  const values = new Map<string, string>()
   let currentTable: Array<string | null> = []
 
   for (const line of lines) {
@@ -343,20 +345,20 @@ export function inspectExternalCodexContext7(
       const parsed = parseTomlKeyPath(source, "end")
       if (!parsed) {
         if (
-          (name.includes("mcp_servers") && name.includes("context7")) ||
-          (source.includes("\\") && /mcp|context7/i.test(source))
+          (name.includes("mcp_servers") && name.includes(server)) ||
+          (source.includes("\\") && new RegExp(`mcp|${server}`, "i").test(source))
         ) {
           return "conflict"
         }
         currentTable = []
-        inContext7 = false
+        inServer = false
         continue
       }
       const [root, child] = parsed.segments
-      const targetsContext7 =
+      const targetsServer =
         (root === "mcp_servers" || root === null) &&
-        (child === "context7" || child === null)
-      if (targetsContext7 && parsed.segments.length >= 2) {
+        (child === server || child === null)
+      if (targetsServer && parsed.segments.length >= 2) {
         if (
           parsed.segments.length !== 2 ||
           parsed.quoted ||
@@ -367,51 +369,53 @@ export function inspectExternalCodexContext7(
         }
       }
       if (
-        name !== "mcp_servers.context7" &&
+        name !== `mcp_servers.${server}` &&
         name.includes("mcp_servers") &&
-        name.includes("context7")
+        name.includes(server)
       ) {
         return "conflict"
       }
       currentTable = parsed.segments
-      inContext7 = name === "mcp_servers.context7" && !parsed.quoted
-      if (inContext7) tables += 1
+      inServer = name === `mcp_servers.${server}` && !parsed.quoted
+      if (inServer) tables += 1
       continue
     }
-    if (/^\s*\[/.test(line) && line.includes("mcp_servers") && line.includes("context7")) {
+    if (/^\s*\[/.test(line) && line.includes("mcp_servers") && line.includes(server)) {
       return "conflict"
     }
     const parsedAssignment = parseTomlKeyPath(line, "assignment")
-    if (!inContext7 && parsedAssignment) {
+    if (!inServer && parsedAssignment) {
       const assignmentKey = parsedAssignment.segments
       const [root, child] = assignmentKey
       if (
         currentTable.length === 0 &&
         ((root === "mcp_servers" &&
-          (assignmentKey.length === 1 || child === "context7" || child === null)) ||
+          (assignmentKey.length === 1 || child === server || child === null)) ||
           (root === null &&
-            (child === "context7" ||
+            (child === server ||
               child === null ||
-              line.includes("context7") ||
+              line.includes(server) ||
               (assignmentKey.length === 1 &&
                 /=\s*\{/.test(line) &&
-                /mcp|context7/i.test(line)))))
+                new RegExp(`mcp|${server}`, "i").test(line)))))
       ) {
         return "conflict"
       }
       if (
         (currentTable[0] === "mcp_servers" || currentTable[0] === null) &&
-        (root === "context7" || root === null)
+        (root === server || root === null)
       ) {
         return "conflict"
       }
     }
-    if (!inContext7 || /^\s*(?:#.*)?$/.test(line)) continue
+    if (!inServer || /^\s*(?:#.*)?$/.test(line)) continue
 
     const assignment = line.match(/^\s*([A-Za-z0-9_-]+)\s*=\s*(.*?)\s*(?:#.*)?$/)
     if (!assignment) return "conflict"
     const key = assignment[1]!
     const value = assignment[2]!
+    if (values.has(key)) return "conflict"
+    values.set(key, value)
     if (key === "url") {
       urlCount += 1
       url = simpleTomlString(value)
@@ -424,9 +428,27 @@ export function inspectExternalCodexContext7(
   }
 
   if (tables === 0) return "absent"
+  if (server === "playwright") {
+    if (tables !== 1 || simpleTomlString(values.get("command") ?? "") !== "npx") return "conflict"
+    const args = values.get("args")?.match(/^\[([\s\S]*)\]$/)
+    const parsedArgs = args?.[1]?.split(",").map((value) => simpleTomlString(value.trim()))
+    if (!parsedArgs || !(
+      (parsedArgs.length === 2 && parsedArgs[0] === "-y" && parsedArgs[1] === "@playwright/mcp@latest") ||
+      (parsedArgs.length === 1 && parsedArgs[0] === "@playwright/mcp@latest")
+    )) return "conflict"
+    for (const [key, value] of values) {
+      if (key === "command" || key === "args" || (key === "enabled" && value === "true")) continue
+      return "conflict"
+    }
+    return "satisfied"
+  }
   if (tables !== 1 || urlCount !== 1 || headersCount !== 1) return "conflict"
   return url === "https://mcp.context7.com/mcp" &&
     headers?.get("CONTEXT7_API_KEY") === "CONTEXT7_API_KEY"
     ? "satisfied"
     : "conflict"
+}
+
+export function inspectExternalCodexContext7(content: Buffer, excludedRange?: ManagedBlockRange): ExternalSatisfaction {
+  return inspectExternalCodexMcp(content, "context7", excludedRange)
 }

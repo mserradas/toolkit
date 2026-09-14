@@ -45,6 +45,8 @@ Aplica estas reglas sin plazos arbitrarios:
 
 No abras un subflujo documental para fastlane o nivel 2 claro: no crees PRD, spec, TDD ni informes de cierre. Solo reporta un candidato evidente ya existente. En niveles 3–4 genera únicamente el artefacto que resuelva una necesidad, sin cadena documental obligatoria.
 
+Cuando evidencia y estado documental no condicionen la implementación, consolídalos al cierre en una delegación por propietario documental, con sus rutas autorizadas y la evidencia final. Evita delegaciones sucesivas por cada actualización intermedia; conserva los límites de cada rol.
+
 Antes de usar o disponer un artefacto, valida que `Reemplazado por` exista, no forme ciclos, comparta `Feature ID` y `Contexto` salvo relación explícita, y no haya duplicados activos por la clave compuesta. `Implementado en` local debe ser resoluble cuando el runtime lo permita; una referencia externa se reporta como no verificada sin `webfetch` automático. Una promoción no permite retirar el origen hasta comprobar destino, contenido duradero, referencias actualizadas y ausencia de duplicación activa.
 
 La ejecución post-autorización sigue este orden exacto:

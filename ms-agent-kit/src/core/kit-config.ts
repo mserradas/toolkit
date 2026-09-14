@@ -3,14 +3,17 @@ import { lstat, open } from "node:fs/promises"
 import path from "node:path"
 import YAML from "yaml"
 import { AppError } from "./errors.js"
-import type { ModelProfileName, ReasoningEffort } from "./model-profiles.js"
+import { AGENT_DEFINITIONS, type AgentName } from "./agent-catalog.js"
+import type { ReasoningEffort } from "./agent-models.js"
 import { assertNoEmbeddedSecrets } from "./security.js"
 import { TARGETS, type Target } from "./types.js"
+import { validateVerificationConfiguration, type VerificationConfiguration } from "./verification-policy.js"
 
 export interface ModelOverride { model?: string; reasoningEffort?: ReasoningEffort }
 export interface KitConfiguration {
   schemaVersion: 1
-  models: Partial<Record<ModelProfileName, Partial<Record<Target, ModelOverride>>>>
+  models: Partial<Record<AgentName, Partial<Record<Target, ModelOverride>>>>
+  verification?: VerificationConfiguration
 }
 
 function invalid(message: string): never {
@@ -24,11 +27,14 @@ function object(value: unknown, allowed: string[]): Record<string, unknown> {
 }
 
 export function validateKitConfiguration(value: unknown): KitConfiguration {
-  const root = object(value, ["schemaVersion", "models"])
+  const root = object(value, ["schemaVersion", "models", "verification"])
   if (root.schemaVersion !== 1) invalid("schemaVersion no soportada")
-  const models = object(root.models, ["strong", "balanced", "light", "fast"])
+  if (root.models && typeof root.models === "object" && Object.keys(root.models).some((key) => ["strong", "balanced", "light", "fast"].includes(key))) {
+    invalid("models ya no admite perfiles strong/balanced/light/fast; usa nombres de agentes ms-* como ms-codex")
+  }
+  const models = object(root.models, Object.keys(AGENT_DEFINITIONS))
   const result: KitConfiguration = { schemaVersion: 1, models: {} }
-  for (const [profile, clients] of Object.entries(models)) {
+  for (const [agent, clients] of Object.entries(models)) {
     const validatedClients: Partial<Record<Target, ModelOverride>> = {}
     for (const [client, candidate] of Object.entries(object(clients, [...TARGETS]))) {
       const override = object(candidate, ["model", "reasoningEffort"])
@@ -44,8 +50,9 @@ export function validateKitConfiguration(value: unknown): KitConfiguration {
       }
       validatedClients[client as Target] = validated
     }
-    result.models[profile as ModelProfileName] = validatedClients
+    result.models[agent as AgentName] = validatedClients
   }
+  if (Object.hasOwn(root, "verification")) result.verification = validateVerificationConfiguration(root.verification)
   return result
 }
 
@@ -56,9 +63,11 @@ export async function loadKitConfiguration(homeDir: string): Promise<KitConfigur
   let handle
   try {
     for (const candidate of [root, path.dirname(location), location]) {
-      if ((await lstat(candidate)).isSymbolicLink()) invalid("symlinks no permitidos")
+      const info = await lstat(candidate)
+      if (info.isSymbolicLink()) invalid("symlinks no permitidos")
+      if (candidate === location && !info.isFile()) invalid("tipo no admitido")
     }
-    handle = await open(location, constants.O_RDONLY | constants.O_NOFOLLOW)
+    handle = await open(location, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
     const info = await handle.stat()
     if (!info.isFile() || info.size > maxBytes) invalid("tamaño o tipo no admitido")
     const content = Buffer.alloc(maxBytes + 1)

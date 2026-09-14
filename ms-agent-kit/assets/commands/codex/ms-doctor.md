@@ -29,6 +29,10 @@ Sin argumento `full`, valida estos siete roles mínimos:
 
 Con argumento `full`, valida la skill principal y los 11 agentes TOML `ms-*`.
 
+## Modelos y presupuesto
+
+Consulta `ms-agent-kit doctor --target codex --scope user --json` (usa `--scope project` en ese alcance) con una proyección en la misma llamada de solo la fila de `modelConfiguration` del rol afectado: `role`, `materialization`, `declared`, `installed` y `effective`, incluidas sus fuentes; limita la salida a 2048 bytes y marca `no comprobado` si no cabe. No vuelques prompts, configuración completa ni secretos. El valor declarado incorpora overrides personales; el instalado requiere hashes administrados coincidentes y no acredita el efectivo de una sesión. `ms-architect` es una skill que hereda el modelo y el esfuerzo de la tarea principal: el `high` declarado para ese agente no queda impuesto por la skill. Sin observación real de sesión, el efectivo sigue `no comprobado`. El presupuesto de Codex es una instrucción; no lo equipares a `steps` ni `maxTurns` ni afirmes enforcement nativo. No cambies modelo o esfuerzo ni inicies sesiones para diagnosticar.
+
 ## Permisos Efectivos
 
 No clasifiques un agente usando solo `extends`. Resuelve el perfil indicado por `default_permissions` así:
@@ -49,7 +53,7 @@ No clasifiques un agente usando solo `extends`. Resuelve el perfil indicado por 
 
 Marca incompatibilidad solo si falta una concesión requerida, una denegación la bloquea o Codex rechaza el perfil. No recomiendes cambiar estos agentes a `:workspace` cuando los overrides acotados están completos.
 
-Para `ms-tester`, `:read-only` es intencional: puede ejecutar verificaciones que no escriben. Indica una limitación condicional, no una incompatibilidad, si un comando concreto del proyecto necesita generar cachés o artefactos; no ejecutes ese comando durante doctor ni amplíes permisos por conjetura.
+Para `ms-tester`, `:read-only` es intencional: las autorizaciones personales `verification.projects` solo añaden overrides de salidas convencionales en scope de proyecto y raíz exacta. Contrasta las salidas requeridas con esos overrides sin conceder `:workspace` ni edición de código. Indica una limitación condicional, no una incompatibilidad, si no se conocen las necesidades de cachés/artefactos. `unknown` en efectos o runtime no constituye por sí solo una denegación ni exige otra aprobación para una verificación ya autorizada. No ejecutes comandos del proyecto durante doctor ni amplíes permisos por conjetura.
 
 ## Conteos Y Checks
 

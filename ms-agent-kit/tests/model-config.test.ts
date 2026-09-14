@@ -9,7 +9,8 @@ import { buildArtifacts } from "../src/adapters/index.js"
 import { DEFAULT_ASSETS_ROOT } from "../src/core/catalog.js"
 import { parseMarkdown } from "../src/core/frontmatter.js"
 import { loadKitConfiguration, validateKitConfiguration } from "../src/core/kit-config.js"
-import { modelProfile, resolveModelProfile } from "../src/core/model-profiles.js"
+import { resolveAgentModel, resolvedModels } from "../src/core/agent-models.js"
+import { AGENT_DEFINITIONS } from "../src/core/agent-catalog.js"
 import { initializeProjectContext } from "../src/core/project-context.js"
 import { openCodeRolePermission } from "../src/core/opencode-role-permissions.js"
 import type { Artifact, BuildContext } from "../src/core/types.js"
@@ -43,22 +44,40 @@ function guard(guardPath: string, agent: string, cwd: string, payload: unknown):
 }
 
 describe("configuración de modelos y preferencias por cliente", () => {
-  it("resuelve overrides por perfil y cliente sin mutar defaults", () => {
-    const before = modelProfile("strong")
-    const config = validateKitConfiguration({ schemaVersion: 1, models: { strong: { codex: { model: "custom-model", reasoningEffort: "low" } } } })
-    expect(resolveModelProfile("strong", "codex", config)).toMatchObject({ model: "custom-model", reasoningEffort: "low", modelSource: "override", reasoningEffortSource: "override", availability: "unchecked" })
-    expect(resolveModelProfile("light", "codex", config)).toMatchObject({ model: null, modelSource: "inherited", reasoningEffort: "low", reasoningEffortSource: "default" })
-    expect(resolveModelProfile("strong", "opencode", config).model).toBe(before.openCodeModel)
-    modelProfile("strong").reasoningEffort = "low"
-    expect(modelProfile("strong")).toEqual(before)
-    for (const model of ["bad\nmodel", "bad model", `sk-${"a".repeat(30)}`]) expect(() => validateKitConfiguration({ schemaVersion: 1, models: { strong: { codex: { model } } } })).toThrow()
+  it("aísla el override por agente y cliente sin mutar defaults", () => {
+    const before = resolvedModels(["opencode", "claude", "codex"])
+    const config = validateKitConfiguration({ schemaVersion: 1, models: { "ms-codex": { opencode: { model: "openai/gpt-6-astra", reasoningEffort: "high" } } } })
+    for (const target of ["opencode", "claude", "codex"] as const) {
+      for (const name of Object.keys(AGENT_DEFINITIONS)) {
+        if (name === "ms-codex" && target === "opencode") {
+          expect(resolveAgentModel(name, target, config)).toMatchObject({ model: "openai/gpt-6-astra", reasoningEffort: "high", modelSource: "override", reasoningEffortSource: "override", availability: "unchecked" })
+        } else expect(resolveAgentModel(name, target, config)).toEqual(before[target]![name])
+      }
+    }
+    resolveAgentModel("ms-codex", "opencode").reasoningEffort = "low"
+    expect(resolvedModels(["opencode", "claude", "codex"], validateKitConfiguration({ schemaVersion: 1, models: {} }))).toEqual(before)
+    for (const model of ["bad\nmodel", "bad model", `sk-${"a".repeat(30)}`]) expect(() => validateKitConfiguration({ schemaVersion: 1, models: { "ms-codex": { codex: { model } } } })).toThrow()
+  })
+
+  it("resuelve modelo y esfuerzo de forma independiente y conserva la herencia", () => {
+    const config = validateKitConfiguration({ schemaVersion: 1, models: {
+      "ms-codex": { claude: { model: "sonnet" }, codex: { reasoningEffort: "low" } },
+      "ms-writer": { opencode: { model: "provider/writer" } },
+    } })
+    expect(resolveAgentModel("ms-codex", "claude", config)).toMatchObject({ model: "sonnet", modelSource: "override", reasoningEffort: null, reasoningEffortSource: "inherited" })
+    expect(resolveAgentModel("ms-codex", "codex", config)).toMatchObject({ model: null, modelSource: "inherited", reasoningEffort: "low", reasoningEffortSource: "override" })
+    expect(resolveAgentModel("ms-writer", "opencode", config)).toMatchObject({ model: "provider/writer", reasoningEffort: "medium", reasoningEffortSource: "default" })
+  })
+
+  it.each(["strong", "balanced", "light", "fast"])("rechaza explícitamente el perfil antiguo %s", (legacy) => {
+    expect(() => validateKitConfiguration({ schemaVersion: 1, models: { "ms-codex": {}, [legacy]: {} } })).toThrow("usa nombres de agentes ms-*")
   })
 
   it.each([["low"], { value: "low" }, 1, null])("rechaza esfuerzo que no es string: %j", (reasoningEffort) => {
-    expect(() => validateKitConfiguration({ schemaVersion: 1, models: { strong: { codex: { reasoningEffort } } } })).toThrow("reasoningEffort no admitido")
+    expect(() => validateKitConfiguration({ schemaVersion: 1, models: { "ms-codex": { codex: { reasoningEffort } } } })).toThrow("reasoningEffort no admitido")
   })
 
-  it.each(["schemaVersion: 2\nmodels: {}", "schemaVersion: 1\nmodels: {other: {}}", "schemaVersion: 1\nmodels: {strong: {other: {}}}", "schemaVersion: 1\nmodels: {strong: {codex: {unknown: true}}}", "schemaVersion: 1\nmodels: {strong: {codex: {model: ''}}}", "schemaVersion: 1\nmodels: {strong: {codex: {reasoningEffort: max}}}", "a: &a []\nb: *a", "[bad", "#".repeat(65537)])("rechaza configuración inválida", async (content) => {
+  it.each(["schemaVersion: 2\nmodels: {}", "schemaVersion: 1\nmodels: {other: {}}", "schemaVersion: 1\nmodels: {ms-codex: {other: {}}}", "schemaVersion: 1\nmodels: {ms-codex: {codex: {unknown: true}}}", "schemaVersion: 1\nmodels: {ms-codex: {codex: {model: ''}}}", "schemaVersion: 1\nmodels: {ms-codex: {codex: {reasoningEffort: max}}}", "a: &a []\nb: *a", "[bad", "#".repeat(65537)])("rechaza configuración inválida", async (content) => {
     const context = await fixture()
     await configuration(context, content)
     await expect(loadKitConfiguration(context.homeDir)).rejects.toBeDefined()
@@ -77,7 +96,7 @@ describe("configuración de modelos y preferencias por cliente", () => {
 
   it("materializa campos nativos en los tres clientes y --home en JSON de plan", async () => {
     const context = await fixture()
-    await configuration(context, YAML.stringify({ schemaVersion: 1, models: { strong: { opencode: { model: "provider/model", reasoningEffort: "low" }, claude: { model: "sonnet", reasoningEffort: "medium" }, codex: { model: "custom-codex", reasoningEffort: "low" } } } }))
+    await configuration(context, YAML.stringify({ schemaVersion: 1, models: { "ms-codex": { opencode: { model: "provider/model", reasoningEffort: "low" }, claude: { model: "sonnet", reasoningEffort: "medium" }, codex: { model: "custom-codex", reasoningEffort: "low" } } } }))
     const artifacts = await buildArtifacts(["opencode", "claude", "codex"], context)
     expect(parseMarkdown(artifact(artifacts, "opencode", "agent", "ms-codex").content.toString()).frontmatter).toMatchObject({ model: "provider/model", variant: "low" })
     expect(parseMarkdown(artifact(artifacts, "claude", "agent", "ms-codex").content.toString()).frontmatter).toMatchObject({ model: "sonnet", effort: "medium" })
@@ -85,7 +104,9 @@ describe("configuración de modelos y preferencias por cliente", () => {
     expect(artifact(artifacts, "codex", "agent", "ms-codex").content.toString()).toContain('model_reasoning_effort = "low"')
     expect(artifact(artifacts, "codex", "agent", "ms-fastlane").content.toString()).not.toContain('\nmodel = ')
     const result = await run(process.execPath, ["--import", "tsx", path.resolve("src/cli.ts"), "plan", "--home", context.homeDir, "--project", context.projectRoot, "--target", "codex", "--json"], { timeout: 300_000 })
-    expect(JSON.parse(result.stdout)).toMatchObject({ statePath: expect.any(String), items: expect.any(Array), models: { codex: { strong: { model: "custom-codex", modelSource: "override" } } } })
+    const plan = JSON.parse(result.stdout)
+    expect(Object.keys(plan.models.codex).sort()).toEqual(Object.keys(AGENT_DEFINITIONS).sort())
+    expect(plan).toMatchObject({ statePath: expect.any(String), items: expect.any(Array), models: { codex: { "ms-codex": { model: "custom-codex", modelSource: "override" } } } })
   })
 
   it("materializa rutas documentales solo para writer y scope project, con guard efectivo", async () => {

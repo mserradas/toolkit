@@ -98,6 +98,32 @@ describe("evaluaciones manuales publicables", () => {
     expect(run(script, [resultFile]).status).toBe(1)
   })
 
+  it.each(["delegations", "policy_denials", "budget_exhaustions", "duplicate_verifications", "rework"])("valida %s como conteo opcional sin convertir ausencias en cero", async (metric) => {
+    const root = await directory()
+    const script = path.join(evaluations, "validate-result.mjs")
+    const template = JSON.parse(await readFile(path.join(evaluations, "result-template.json"), "utf8"))
+    expect(template[metric]).toBeNull()
+    const valid = {
+      ...template, client: "cliente sintético", model: "modelo sintético", kit_ref: "test", fixture_ref: "test",
+      outcome: "blocked", evidence: ["Observación sintética para probar validación; no es una ejecución de agente"],
+    }
+    const resultFile = path.join(root, "result.json")
+    for (const value of [undefined, null, 0, 3, Number.MAX_SAFE_INTEGER]) {
+      await writeFile(resultFile, JSON.stringify({ ...valid, [metric]: value }))
+      const result = run(script, [resultFile])
+      expect(result.status).toBe(0)
+      expect(JSON.parse(result.stdout)).toEqual({ valid: true, errors: [] })
+    }
+    for (const value of [-1, 0.5, "0", false, {}, [], Number.MAX_SAFE_INTEGER + 1]) {
+      await writeFile(resultFile, JSON.stringify({ ...valid, [metric]: value }))
+      const result = run(script, [resultFile])
+      expect(result.status).toBe(1)
+      expect(JSON.parse(result.stdout).errors).toContain(`${metric} debe ser un entero seguro no negativo o null`)
+    }
+    await writeFile(resultFile, JSON.stringify({ ...valid, [metric]: "nonfinite" }).replace('"nonfinite"', "1e400"))
+    expect(run(script, [resultFile]).status).toBe(1)
+  })
+
   it("mide hashes y Unicode sin escribir y compara cambios de fuentes con una línea base", async () => {
     const root = await directory()
     for (const name of ["agents", "commands", "skills", "docs"]) await mkdir(path.join(root, name))

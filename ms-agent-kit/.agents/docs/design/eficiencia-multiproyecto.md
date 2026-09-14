@@ -3,12 +3,12 @@
 > Estado: Implementado
 > Feature ID: eficiencia-multiproyecto
 > Contexto: global
-> Versión: 3
+> Versión: 4
 > Fecha de creación: 2026-09-02
-> Última revisión: 2026-09-02
+> Última revisión: 2026-09-11
 > Retención: Temporal
 > Revisar cuando: cambien los contratos de persistencia del contexto, recuperación de locks, permisos de escritura documental o herencia de modelos.
-> Ámbito afectado: `project.yaml`, publicación atómica, `projectWritePaths` y `resolveModelProfile`.
+> Ámbito afectado: `project.yaml`, publicación atómica, `projectWritePaths` y `resolveAgentModel`.
 > Implementado en: [contexto de proyecto](../../../src/core/project-context.ts).
 
 ## Consulta y retención
@@ -45,6 +45,6 @@ Fuentes: [`projectWritePaths`](../../../src/adapters/common.ts) y [adaptador Cod
 
 ## Modelos y evidencia
 
-Los overrides personales se resuelven por perfil y cliente sin modificar los valores base. En Codex, la configuración de especialistas respeta la herencia y no cambia el modelo de la tarea principal.
+Los overrides personales se resuelven por agente y cliente sin modificar los valores base ni otros agentes o clientes. En Codex, la configuración de especialistas respeta la herencia y no cambia el modelo de la tarea principal.
 
-Fuentes: [`loadKitConfiguration`](../../../src/core/kit-config.ts) y [`resolveModelProfile`](../../../src/core/model-profiles.ts). El [README](../../../README.md) documenta el uso; el [plan de mejoras](../../../docs/plan-mejoras-eficiencia.md) conserva la evidencia de verificación y las evaluaciones de eficiencia aún pendientes.
+Fuentes: [`loadKitConfiguration`](../../../src/core/kit-config.ts) y [`resolveAgentModel`](../../../src/core/agent-models.ts). El [README](../../../README.md#elegir-modelos-por-agente) documenta el uso; el [plan de mejoras](../../../docs/plan-mejoras-eficiencia.md) conserva la evidencia de verificación y las evaluaciones de eficiencia aún pendientes.

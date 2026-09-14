@@ -1,5 +1,5 @@
 import type { KitConfiguration } from "./kit-config.js"
-import type { ResolvedModelProfile } from "./model-profiles.js"
+import type { ResolvedAgentModel } from "./agent-models.js"
 import type { ProjectPreferences } from "./project-context.js"
 
 export const TARGETS = ["opencode", "claude", "codex"] as const
@@ -29,7 +29,8 @@ export interface Artifact {
   mode: number
   strategy?: ManagementStrategy
   blockId?: string
-  satisfaction?: "codex-context7"
+  satisfaction?: "codex-context7" | "codex-mcp"
+  mcpServers?: Array<{ name: "context7" | "playwright"; content: string }>
 }
 
 export interface SourceFile {
@@ -88,7 +89,7 @@ export interface PlanItem {
 }
 
 export interface InstallPlan {
-  models?: Record<string, Record<string, ResolvedModelProfile>>
+  models?: Record<string, Record<string, ResolvedAgentModel>>
   items: PlanItem[]
   obsolete: ObsoletePlanItem[]
   statePath: string

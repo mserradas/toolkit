@@ -47,6 +47,20 @@ function policyArtifact(artifacts: Artifact[]): Artifact {
 }
 
 describe("Codex hardening", () => {
+  it("limits documentary shell by explicit instructions without claiming native enforcement", async () => {
+    const artifacts = await buildArtifacts(["codex"], await testContext())
+    for (const [role, directory] of [["ms-designer", "design"], ["ms-spec", "spec"]]) {
+      const content = artifacts.find((artifact) => artifact.kind === "agent" && artifact.name === role)?.content.toString("utf8") ?? ""
+      expect(content).toContain("Shell limitado a estos comandos exactos desde la raíz del proyecto")
+      expect(content).toContain(`git --no-pager diff --no-ext-diff --no-textconv --name-only -- .agents/docs/${directory}`)
+      expect(content).not.toContain(`git --no-pager diff --no-ext-diff --no-textconv --check -- .agents/docs/${directory}`)
+      expect(content).toContain("no constituye una lista de permisos nativa de Codex")
+      for (const command of ["`pwd`", "`ls -d .`", "`command -v ms-agent-kit`"]) expect(content).toContain(command)
+      expect(content).toContain("Ejecuta una consulta por llamada, sin `&&`")
+      expect(content).not.toContain("No uses Bash ni shell aunque la herramienta siga visible.")
+    }
+  })
+
   it("generates native web search settings without exposing ms-shared as a skill", async () => {
     const artifacts = await buildArtifacts(["codex"], await testContext())
     const agents = artifacts.filter((artifact) => artifact.kind === "agent")

@@ -32,13 +32,15 @@ ms-agent-kit doctor --target opencode --scope user --json 2>/dev/null | jq -c --
 
 Reutiliza únicamente lo acreditado: integridad administrada y estados explícitos de capacidades. Los avisos se muestran parcialmente; los comandos estáticos del proyecto quedan fuera de este resumen. No conviertas `runtime.agents-skills`, modelos ni conectividad MCP en OK por integridad de archivos.
 
+Para una discrepancia de modelo, consulta solo la fila de `modelConfiguration` del rol afectado con el mismo comando doctor y una proyección distinta: `target`, `role`, `profile`, `materialization`, `declared`, `installed` y `effective`. Reutiliza esa fila en consultas posteriores. Reserva como máximo 2048 bytes con el mismo guard; si no cabe, marca `no comprobado`. Conserva las fuentes: declarado incorpora overrides personales, instalado solo se acredita con hashes administrados coincidentes y efectivo requiere observación real de sesión. No ejecutes una sesión para probarlo ni atribuyas la variante instalada a la sesión actual.
+
 ## 2. Carga nativa resumida
 
 Para lo no acreditado por el kit, valida los siete agentes mínimos: `ms-architect`, `ms-codex`, `ms-fastlane`, `ms-tester`, `ms-debugger`, `ms-plan` y `ms-discovery`. Con `full`, cubre todos los `ms-*` del inventario de nombres. Usa una consulta por agente, cambiando solo el nombre; no cargues sus archivos completos para obtenerlo.
 
 ```sh
 opencode debug agent ms-architect 2>/dev/null | jq -c --argjson cap 1536 '
-{name, mode, color, model,
+{name, mode, color, model, variant: (.variant // "no comprobado"), steps: (.steps // "no comprobado"),
  tools: (if (.tools | type) == "object" and ([.tools[] | type == "boolean"] | all) then
    {enabled: ([.tools[] | select(.)] | length), disabled: ([.tools[] | select(. == false)] | length),
     core: (.tools | with_entries(select(.key | IN("read","bash","edit","write","task","skill","question","todowrite","webfetch","websearch"))))}
@@ -67,7 +69,7 @@ else {status:"no comprobado",reason:"formato de skills inesperado"} end
 
 ## 3. Comprobaciones focales
 
-Usa el presupuesto restante para lo no acreditado: JSON válido de `~/.config/opencode/opencode.json` y `tui.json`, reglas compartidas incorporadas una sola vez, comandos `ms-status` y `ms-doctor`, `opencode-subagent-statusline` habilitado, notificaciones propias de la TUI desactivadas, ausencia de `@mohak34/opencode-notifier` y MCP `context7` sin clave literal. En scope de proyecto usa las rutas equivalentes bajo `.opencode/` y su configuración.
+Usa el presupuesto restante para lo no acreditado: JSON válido de `~/.config/opencode/opencode.json` y `tui.json`, reglas compartidas incorporadas una sola vez, comandos `ms-status` y `ms-doctor`, notificaciones propias de la TUI desactivadas, ausencia de `@mohak34/opencode-notifier` y MCP `context7` sin clave literal. En scope de proyecto usa las rutas equivalentes bajo `.opencode/` y su configuración.
 
 Consulta primero existencia, claves, recuentos o booleanos mediante `jq`/`rg`; no vuelques configuración, catálogos, prompts ni credenciales. Para reglas compartidas usa recuentos de sus marcadores, no el cuerpo. Lee fragmentos solo si aparece una inconsistencia. Un plugin configurado no demuestra carga de caché; un MCP configurado no demuestra conectividad. Identifica cada límite en el informe.
 

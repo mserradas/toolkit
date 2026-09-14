@@ -1,6 +1,6 @@
 import type { PermissionProfile } from "./types.js"
 import { agentDefinition } from "./agent-catalog.js"
-import { capabilityProfile, COORDINATION_SKILLS, technicalSkillsOnly } from "./profiles.js"
+import { capabilityProfile, COORDINATION_SKILLS, documentaryInspectionCommands, technicalSkillsOnly } from "./profiles.js"
 
 export type OpenCodeRolePermission = Record<string, unknown>
 
@@ -34,7 +34,17 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       "opencode debug agent *": "allow",
       "opencode debug skill": "allow",
       "ms-agent-kit doctor --target opencode --scope user --json": "allow",
-      "ms-agent-kit doctor --target opencode --scope project --json": "allow"
+      "ms-agent-kit doctor --target opencode --scope project --json": "allow",
+      "ms-agent-kit result validate --file *.md": "allow",
+      "ms-agent-kit result validate --file *.md --json": "allow",
+      "ms-agent-kit result validate*;*": "deny",
+      "ms-agent-kit result validate*&*": "deny",
+      "ms-agent-kit result validate*|*": "deny",
+      "ms-agent-kit result validate*`*": "deny",
+      "ms-agent-kit result validate*$(*": "deny",
+      "ms-agent-kit result validate*>*": "deny",
+      "ms-agent-kit result validate*<*": "deny",
+      "ms-agent-kit result validate*\n*": "deny"
     },
     "webfetch": "allow",
     "websearch": "deny",
@@ -439,9 +449,7 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       ".agents/docs/design/**/*.md": "allow"
     },
     "bash": {
-      "*": "deny",
-      "git status": "allow",
-      "git diff": "allow"
+      "*": "deny"
     },
     "webfetch": "allow",
     "websearch": "deny",
@@ -740,9 +748,7 @@ const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
       ".agents/docs/spec/**/*.md": "allow"
     },
     "bash": {
-      "*": "deny",
-      "git status": "allow",
-      "git diff": "allow"
+      "*": "deny"
     },
     "webfetch": "allow",
     "websearch": "deny",
@@ -1078,6 +1084,57 @@ const BALANCED_WEBSEARCH_AGENTS = new Set([
   "ms-writer",
 ])
 
+// Entry points locales equivalentes a los runners ya permitidos; nunca Node arbitrario.
+const LOCAL_VERIFICATION_RUNNERS = [
+  "node_modules/vitest/vitest.mjs run",
+  "node_modules/typescript/bin/tsc",
+  "node_modules/eslint/bin/eslint.js",
+  "node_modules/jest/bin/jest.js",
+] as const
+
+function balancedRoutineBash(name: string, value: unknown): unknown {
+  if (!["ms-codex", "ms-fastlane", "ms-tester"].includes(name) || !value || typeof value !== "object" || Array.isArray(value)) return value
+  const original = value as Record<string, unknown>
+  const commands: string[] = LOCAL_VERIFICATION_RUNNERS.flatMap((runner) => [`node ${runner}`, `node ./${runner}`])
+  const additions = Object.fromEntries(commands.flatMap((command) => name === "ms-tester" && command.includes("typescript/bin/tsc")
+    ? [[`${command} --noEmit`, "allow"], [`${command} * --noEmit`, "allow"]]
+    : [[command, "allow"], [`${command} *`, "allow"]]))
+  if (name === "ms-fastlane") {
+    for (const command of ["rg", "cat", "head", "tail", "wc", "file", "stat"]) {
+      additions[command] = "allow"
+      additions[`${command} *`] = "allow"
+    }
+    for (const command of ["npm run build", "pnpm build", "pnpm run build", "pnpm build:staging", "pnpm run build:staging", "yarn build", "yarn run build", "bun run build"]) additions[command] = "allow"
+  }
+  // Inserta permisos antes de las protecciones existentes: un allow nuevo no las eclipsa.
+  const result: Record<string, unknown> = { "*": original["*"], ...additions, ...original }
+  for (const pattern of ["*&*", "*;*", "*|*", "*`*", "*$(*", "*<*", "*>*", "*\n*", "*\r*"]) result[pattern] = "deny"
+  if (name === "ms-tester") {
+    const guardedRunners = [...commands, ...["pnpm exec", "npx --no-install"].flatMap((prefix) => ["vitest run", "jest", "eslint"].map((runner) => `${prefix} ${runner}`))]
+    for (const command of commands.filter((command) => command.includes("typescript/bin/tsc"))) {
+      result[`${command} *--noEmit false*`] = "deny"
+      result[`${command} *--noEmit=false*`] = "deny"
+    }
+    for (const command of guardedRunners.filter((command) => command.includes("vitest") || command.includes("jest"))) {
+      result[`${command} -u*`] = "deny"
+      result[`${command} * -u*`] = "deny"
+      for (const flag of ["--update", "--updateSnapshot", "--outputFile", "--output-file", "--coverage.reportsDirectory", "--coverageDirectory"]) {
+        for (const position of [`${command} ${flag}`, `${command} * ${flag}`]) {
+          for (const suffix of ["", " *", "=*", ...(flag === "--outputFile" ? [".*"] : [])]) result[position + suffix] = "deny"
+        }
+      }
+    }
+    for (const command of guardedRunners.filter((command) => command.includes("eslint"))) {
+      result[`${command} -o*`] = "deny"
+      result[`${command} * -o*`] = "deny"
+      for (const position of [`${command} --output-file`, `${command} * --output-file`]) {
+        for (const suffix of ["", " *", "=*"]) result[position + suffix] = "deny"
+      }
+    }
+  }
+  return result
+}
+
 function trustedBash(value: unknown): unknown {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return value
   return Object.fromEntries(
@@ -1103,6 +1160,7 @@ function applyPermissionProfile(
 
   const balanced: OpenCodeRolePermission = {
     ...rolePermission,
+    bash: balancedRoutineBash(name, rolePermission.bash),
     websearch: BALANCED_WEBSEARCH_AGENTS.has(name) ? "allow" : rolePermission.websearch,
   }
   if (profile === "balanced") return balanced
@@ -1122,12 +1180,17 @@ export function openCodeRolePermission(
   if (!permission) throw new Error(`No hay una política de OpenCode para el agente ${name}`)
   const result = applyPermissionProfile(name, permission, profile)
   const capabilities = capabilityProfile(agentDefinition(name).capabilityProfile)
+  if (capabilities.gitInspectionPaths) {
+    result.bash = { "*": "deny", ...Object.fromEntries(documentaryInspectionCommands(capabilities).map((command) => [command, "allow"])) }
+    return result
+  }
   if (technicalSkillsOnly(agentDefinition(name).capabilityProfile)) result.skill = { "*": "allow", ...Object.fromEntries(COORDINATION_SKILLS.map((skill) => [skill, "deny"])) }
   if (capabilities.shell && typeof result.bash === "object" && result.bash !== null) {
     const bash = result.bash as Record<string, unknown>
     const canInitialize = name === "ms-codex" || name === "ms-fastlane"
     result.bash = {
       "*": bash["*"],
+      "command -v ms-agent-kit": "allow",
       "ms-agent-kit project inspect": "allow",
       "ms-agent-kit project inspect *": "allow",
       "ms-agent-kit project init": canInitialize ? "allow" : "deny",

@@ -7,6 +7,25 @@ import { parseMarkdown } from "../src/core/frontmatter.js"
 import { openCodeRolePermission } from "../src/core/opencode-role-permissions.js"
 import { OPENCODE_SECRET_BASH_RULES, OPENCODE_SECRET_READ_RULES } from "../src/core/permissions.js"
 
+describe("cross-client delegation and acceptance policy", () => {
+  it("keeps preflight, evidence ownership and denial handling in common sources", async () => {
+    const sources = await Promise.all(["agents/ms-architect.md", "docs/agents-shared.md", "skills/delegation-brief/SKILL.md"].map((file) => readFile(path.join(DEFAULT_ASSETS_ROOT, file), "utf8")))
+    expect(sources[0]).toContain("allow | ask | deny | unknown")
+    expect(sources[0]).toContain("el commit por sí solo no acredita vigencia")
+    expect(sources[0]).toContain("una delegación de cierre por propietario")
+    expect(sources[1]).toContain("Una denegación de política termina ese intento")
+    expect(sources[1]).toContain("Una autorización textual no anula un `deny`")
+    expect(sources[1]).toContain("Continúa el trabajo permitido e independiente")
+    expect(sources[1]).toContain("reutiliza el contexto del brief")
+    expect(sources[1]).toContain("únicamente si el rol lo permite")
+    expect(sources[1]).toContain("no bloquea un artefacto cuando sus inputs necesarios ya están disponibles")
+    expect(sources[1]).toContain("sin un hook equivalente")
+    expect(sources[1]).toContain("incluidos los omitidos")
+    expect(sources[2]).toContain("Ausencias comprobadas")
+    expect(sources[2]).toContain("inspección estática")
+  })
+})
+
 const jqProbe = spawnSync("jq", ["--version"], { encoding: "utf8", timeout: 10_000 })
 const jqMissing = (jqProbe.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT"
 
@@ -501,7 +520,10 @@ describe("ms-architect policy", () => {
     expect(docs).toContain("`git branch --show-current`")
     expect(docs).toContain("`git branch --list`")
     expect(docs).not.toContain("`git branch --list*`")
-    expect(docs).toContain("`ms-spec` y `ms-designer` solo reciben `git status` y `git diff` exactos")
+    expect(docs).toContain("La inspección común de `ms-spec` y `ms-designer` se limita a `git status --short`")
+    expect(docs).toContain("`git --no-pager diff --no-ext-diff --no-textconv --stat -- <directorio propio>`")
+    expect(docs).toContain("su variante `--name-only`")
+    expect(docs).toContain("No habilita patches, `--check` ni shell general")
     for (const candidate of [
       "`pnpm build`",
       "`pnpm run build`",
