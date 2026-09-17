@@ -8,7 +8,7 @@ import { isSensitivePath } from "../core/permissions.js"
 export async function runResultCommand(args: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args, options: { file: { type: "string" }, json: { type: "boolean" } }, allowPositionals: true, strict: true })
   if (positionals.length !== 1 || positionals[0] !== "validate" || !values.file) {
-    throw new AppError("INVALID_ARGUMENT", "Uso: ms-agent-kit result validate --file <respuesta.md> [--json]", 2)
+    throw new AppError("INVALID_ARGUMENT", "Uso: pnpm start result validate --file <respuesta.md> [--json]", 2)
   }
   if (isSensitivePath(values.file)) throw new AppError("INVALID_ARGUMENT", "Ruta sensible no permitida", 2)
   const resolved = await realpath(values.file)

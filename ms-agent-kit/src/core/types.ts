@@ -6,7 +6,6 @@ export const TARGETS = ["opencode", "claude", "codex"] as const
 
 export type Target = (typeof TARGETS)[number]
 export type InstallScope = "user" | "project"
-export type PermissionProfile = "balanced" | "strict" | "trusted"
 export type ManagementStrategy = "managed-block"
 
 export type ArtifactKind =
@@ -67,7 +66,6 @@ export interface BuildContext {
   homeDir: string
   projectRoot: string
   scope: InstallScope
-  permissionProfile?: PermissionProfile
   kitConfiguration?: KitConfiguration
   projectPreferences?: ProjectPreferences
 }

@@ -1,5 +1,5 @@
 import path from "node:path"
-import { agentDefinition, agentToolCycleBudget } from "../core/agent-catalog.js"
+import { agentDefinition } from "../core/agent-catalog.js"
 import { renderMarkdown } from "../core/frontmatter.js"
 import { resolveAgentModel } from "../core/agent-models.js"
 import type { Artifact, BuildContext, Catalog } from "../core/types.js"
@@ -15,7 +15,7 @@ const OPENCODE_COMPATIBILITY = `
 - Este archivo es autocontenido: las reglas de docs/agents-shared.md estan incorporadas arriba.
 - Conserva los nombres nativos de herramientas, permisos, modelos y variantes de OpenCode.
 - El archivo docs/agents-shared.md tambien se instala como referencia humana, pero no es necesario cargarlo otra vez.
-- El kit genera permission: {} en OpenCode, sin restricciones adicionales en ningún perfil. Los límites de cada rol son instrucciones de trabajo; las referencias a bloqueos, guards o perfiles restrictivos de otros clientes no describen permisos técnicos de OpenCode. Los permisos efectivos dependen de los valores nativos y de la configuración externa del cliente.
+- El kit genera permission: {} en OpenCode, sin restricciones adicionales. Los límites de cada rol son instrucciones de trabajo. Los permisos efectivos dependen de los valores nativos y de la configuración externa del cliente.
 `
 
 const OPENCODE_DEFAULT_AGENT = "ms-architect"
@@ -106,7 +106,6 @@ export function buildOpenCodeArtifacts(catalog: Catalog, context: BuildContext):
 
   for (const agent of catalog.agents) {
     const definition = agentDefinition(agent.name)
-    const budget = agentToolCycleBudget(agent.name, "opencode")
     const model = resolveAgentModel(agent.name, "opencode", context.kitConfiguration)
     const frontmatter = {
       ...agent.frontmatter,
@@ -114,9 +113,6 @@ export function buildOpenCodeArtifacts(catalog: Catalog, context: BuildContext):
       model: model.model,
       variant: model.reasoningEffort,
       color: definition.openCodeColor,
-      ...(budget === undefined
-        ? {}
-        : { steps: budget }),
     }
     const body = embeddedAgentBody(projectSharedRules(catalog.sharedRules, context), [projectVerificationInstructions(agent.name, context), agent.body].filter(Boolean).join("\n\n"), OPENCODE_COMPATIBILITY)
     artifacts.push(

@@ -80,6 +80,70 @@ function legacyCodexMetadataArtifact(
 }
 
 describe("transactional installer", () => {
+  it.each(["user", "project"] as const)("removes completion hooks and cycle limits on upgrade in %s scope", async (scope) => {
+    const context = { ...await testContext(), scope }
+    const base = scope === "user" ? context.homeDir : context.projectRoot
+    const artifacts = await buildArtifacts(["opencode", "claude", "codex"], context)
+    const validator: Artifact = { target: "claude", kind: "policy", name: "ms-result-validator", root: path.join(base, ".claude"), destination: path.join(base, ".claude/hooks/ms-result-validator.mjs"), content: Buffer.from("process.exit(2)\n"), mode: 0o644 }
+    const hooks = { Stop: [{ hooks: [{ type: "command", command: `node ${validator.destination}` }] }] }
+    const legacy = artifacts.map((item) => {
+      if (item.target === "claude" && item.kind === "command" && item.name === "ms-fastlane") {
+        const doc = parseMarkdown(item.content.toString())
+        return { ...item, content: Buffer.from(renderMarkdown({ ...doc.frontmatter, hooks }, doc.body)) }
+      }
+      if (item.kind !== "agent") return item
+      if (item.target === "codex") return { ...item, content: Buffer.from(item.content.toString().replace('developer_instructions = "', 'developer_instructions = "Al agotar el ciclo 20, detente. ')) }
+      const doc = parseMarkdown(item.content.toString())
+      return { ...item, content: Buffer.from(renderMarkdown({ ...doc.frontmatter, ...(item.target === "opencode" ? { steps: 20 } : { maxTurns: 20, hooks }) }, doc.body)) }
+    })
+    await applyPlan(await createPlan([...legacy, validator], context), context)
+    const upgrade = await createPlan(artifacts, context)
+    expect(upgrade.obsolete).toMatchObject([{ action: "remove", file: { path: validator.destination } }])
+    expect(upgrade.items.some((item) => item.action === "conflict")).toBe(false)
+    await applyPlan(upgrade, context)
+    await expect(access(validator.destination)).rejects.toMatchObject({ code: "ENOENT" })
+    for (const item of artifacts.filter((item) => item.kind === "agent" || item.kind === "command")) expect(await readFile(item.destination)).toEqual(item.content)
+    const repeated = await createPlan(artifacts, context)
+    expect(repeated.items.every((item) => item.action === "unchanged")).toBe(true)
+    expect(repeated.obsolete).toEqual([])
+  })
+
+  it.each(["user", "project"] as const)("removes legacy Claude/Codex policies in %s scope while preserving native settings", async (scope) => {
+    const context = { ...await testContext(), scope }
+    const base = scope === "user" ? context.homeDir : context.projectRoot
+    const artifacts = await buildArtifacts(["claude", "codex"], context)
+    const settingsPath = path.join(base, ".claude", "settings.json")
+    const nativeClaude = '{"permissions":{"deny":["Bash(custom-command)"]}}\n'
+    const nativeCodex = 'sandbox_mode = "workspace-write"\napproval_policy = "on-request"\n'
+    await mkdir(path.dirname(settingsPath), { recursive: true })
+    await writeFile(settingsPath, nativeClaude)
+    await mkdir(path.join(base, ".codex"), { recursive: true })
+    await writeFile(path.join(base, ".codex/config.toml"), nativeCodex)
+    const legacyPolicies: Artifact[] = [
+      { target: "claude", kind: "policy", name: "ms-agent-guard", root: path.join(base, ".claude"), destination: path.join(base, ".claude/hooks/ms-agent-guard.mjs"), content: Buffer.from("process.exit(2)\n"), mode: 0o644 },
+      { target: "codex", kind: "policy", name: "ms-secrets", root: path.join(base, ".codex"), destination: path.join(base, ".codex/rules/ms-secrets.rules"), content: Buffer.from('prefix_rule(pattern=["cat", ".env"], decision="forbidden")\n'), mode: 0o644 },
+    ]
+    const legacy = artifacts.map((item) => {
+      if (item.kind !== "agent") return item
+      if (item.target === "codex") return { ...item, content: Buffer.concat([item.content, Buffer.from('default_permissions = "ms-agent"\n[permissions.ms-agent]\nextends = ":read-only"\n')]) }
+      const doc = parseMarkdown(item.content.toString())
+      return { ...item, content: Buffer.from(renderMarkdown({ ...doc.frontmatter, tools: ["Read"], disallowedTools: ["Bash"], permissionMode: "default", hooks: { PreToolUse: [{ hooks: [{ type: "command", command: `node ${legacyPolicies[0]!.destination}` }] }] } }, doc.body)) }
+    })
+    await applyPlan(await createPlan([...legacy, ...legacyPolicies], context), context)
+    const nativeCodexBefore = await readFile(path.join(base, ".codex/config.toml"), "utf8")
+    const upgrade = await createPlan(artifacts, context)
+    expect(upgrade.obsolete.map((item) => [item.file.path, item.action]).sort()).toEqual(legacyPolicies.map((item) => [item.destination, "remove"]).sort())
+    expect(upgrade.items.some((item) => item.action === "conflict")).toBe(false)
+    await applyPlan(upgrade, context)
+    for (const item of legacyPolicies) await expect(access(item.destination)).rejects.toMatchObject({ code: "ENOENT" })
+    for (const item of artifacts.filter((item) => item.kind === "agent" || item.kind === "policy")) expect(await readFile(item.destination)).toEqual(item.content)
+    expect(await readFile(settingsPath, "utf8")).toBe(nativeClaude)
+    expect(await readFile(path.join(base, ".codex/config.toml"), "utf8")).toBe(nativeCodexBefore)
+    const repeated = await createPlan(artifacts, context)
+    expect(repeated.items.every((item) => item.action === "unchanged")).toBe(true)
+    expect(repeated.obsolete).toEqual([])
+  })
+
   it("removes previously managed OpenCode permissions and keeps them empty on reinstall", async () => {
     for (const scope of ["user", "project"] as const) {
       const context = { ...await testContext(), scope }

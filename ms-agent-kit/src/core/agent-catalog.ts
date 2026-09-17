@@ -10,10 +10,6 @@ export interface AgentDefinition {
   capabilityProfile: CapabilityProfileName
   /** Color semántico del agente en la interfaz de OpenCode. */
   openCodeColor: `#${string}`
-  /** Presupuesto portable de ciclos; cada adaptador lo materializa cuando el cliente lo permite. */
-  toolCycleBudget?: number
-  /** Experimentos por cliente; no equipara steps, maxTurns y límites instructivos. */
-  toolCycleBudgetByTarget?: Partial<Record<Target, number>>
 }
 
 export const AGENT_DEFINITIONS = {
@@ -36,8 +32,6 @@ export const AGENT_DEFINITIONS = {
     },
     capabilityProfile: "code-writer",
     openCodeColor: "#3B82F6",
-    toolCycleBudget: 20,
-    toolCycleBudgetByTarget: { opencode: 32 },
   },
   "ms-debugger": {
     mode: "subagent",
@@ -48,7 +42,6 @@ export const AGENT_DEFINITIONS = {
     },
     capabilityProfile: "bug-investigator",
     openCodeColor: "#F97316",
-    toolCycleBudget: 20,
   },
   "ms-designer": {
     mode: "subagent",
@@ -59,7 +52,6 @@ export const AGENT_DEFINITIONS = {
     },
     capabilityProfile: "design-writer",
     openCodeColor: "#D946EF",
-    toolCycleBudget: 20,
   },
   "ms-discovery": {
     mode: "primary",
@@ -80,7 +72,6 @@ export const AGENT_DEFINITIONS = {
     },
     capabilityProfile: "fastlane-writer",
     openCodeColor: "#22C55E",
-    toolCycleBudget: 12,
   },
   "ms-plan": {
     mode: "primary",
@@ -101,7 +92,6 @@ export const AGENT_DEFINITIONS = {
     },
     capabilityProfile: "code-scout",
     openCodeColor: "#06B6D4",
-    toolCycleBudget: 12,
   },
   "ms-security-auditor": {
     mode: "subagent",
@@ -112,7 +102,6 @@ export const AGENT_DEFINITIONS = {
     },
     capabilityProfile: "security-auditor",
     openCodeColor: "#EF4444",
-    toolCycleBudget: 20,
   },
   "ms-spec": {
     mode: "subagent",
@@ -123,7 +112,6 @@ export const AGENT_DEFINITIONS = {
     },
     capabilityProfile: "spec-writer",
     openCodeColor: "#14B8A6",
-    toolCycleBudget: 20,
   },
   "ms-tester": {
     mode: "subagent",
@@ -134,7 +122,6 @@ export const AGENT_DEFINITIONS = {
     },
     capabilityProfile: "test-runner",
     openCodeColor: "#EAB308",
-    toolCycleBudget: 16,
   },
   "ms-writer": {
     mode: "subagent",
@@ -145,7 +132,6 @@ export const AGENT_DEFINITIONS = {
     },
     capabilityProfile: "documentation-writer",
     openCodeColor: "#84CC16",
-    toolCycleBudget: 20,
   },
 } as const satisfies Record<string, AgentDefinition>
 
@@ -155,9 +141,4 @@ export function agentDefinition(name: string): AgentDefinition {
   const definition = AGENT_DEFINITIONS[name as keyof typeof AGENT_DEFINITIONS]
   if (!definition) throw new Error(`No existe una definición central para el agente ${name}`)
   return definition
-}
-
-export function agentToolCycleBudget(name: string, target: Target): number | undefined {
-  const definition = agentDefinition(name)
-  return definition.toolCycleBudgetByTarget?.[target] ?? definition.toolCycleBudget
 }

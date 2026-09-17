@@ -36,7 +36,7 @@ Si falta cualquiera, **no edites**. Reporta `Estado: no califica para fastlane` 
 
 # Flujo
 
-No mantienes planes ni TODOs del cliente. Una misión admitida aspira a 8–12 ciclos de agente; si no cabe o se agota, preserva lo válido y devuelve el pendiente a `ms-architect` para dividirlo.
+No mantienes planes ni TODOs del cliente. Completa el cambio admitido y su verificación mientras avances dentro del alcance. Si aparece complejidad que lo saque de fastlane o un bloqueo real, preserva lo válido y devuelve el pendiente a `ms-architect`. No detengas la misión por un contador de ciclos.
 
 1. Lee el pedido y los archivos relevantes mínimos.
 2. Clasifica admisión contra la lista anterior.
@@ -87,4 +87,4 @@ El reporte debe ser corto y accionable: en éxito basta estado y evidencia decis
 
 En invocación directa como agente primario, entrega al usuario resultado, archivos, verificación y pendientes sin `Contrato para ms-architect`. Si necesitas coordinación, indica la siguiente acción para el arquitecto sin invocarlo.
 
-Si el cliente ejecuta una invocación directa como worker o fork (por ejemplo `context: fork` de Claude), conserva el contrato interno y sus hooks; el padre resume al usuario. La ausencia de un arquitecto inicial no convierte ese worker en agente primario.
+Si el cliente ejecuta una invocación directa como worker o fork (por ejemplo `context: fork` de Claude), conserva el contrato interno; el padre resume al usuario. La ausencia de un arquitecto inicial no convierte ese worker en agente primario.

@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 
-import { execFile } from "node:child_process"
 import { readdir, readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 import process from "node:process"
-import { parseArgs, promisify } from "node:util"
+import { parseArgs } from "node:util"
 import { buildArtifacts } from "./adapters/index.js"
 import { runProjectCommand } from "./cli/project.js"
 import { runResultCommand } from "./cli/result.js"
@@ -18,7 +17,7 @@ import { parseMarkdown } from "./core/frontmatter.js"
 import { applyPlan, installationStatus, uninstallTargets } from "./core/installer.js"
 import { withOperationLock, type MutableOperation } from "./core/operation-lock.js"
 import { createPlan } from "./core/planner.js"
-import { commandCapabilities, diagnoseClient, inspectRuntimeProject, installationCapabilities, probeOptions, projectContextDiagnostic, resolveClientExecutable } from "./core/runtime-diagnostics.js"
+import { commandCapabilities, diagnoseClient, inspectRuntimeProject, installationCapabilities, projectContextDiagnostic } from "./core/runtime-diagnostics.js"
 import { createTerminationController, type TerminationSignal } from "./core/termination.js"
 import {
   finishWithoutChanges,
@@ -37,32 +36,29 @@ import {
   type ArtifactKind,
   type InstallPlan,
   type InstallScope,
-  type PermissionProfile,
   type ObsoleteAction,
   type PlanAction,
   type Target,
 } from "./core/types.js"
 
-const execFileAsync = promisify(execFile)
 
 const HELP = `
 ms-agent-kit - instalador portable de agentes ms-*
 
-Uso:
-  ms-agent-kit                     Asistente interactivo de instalación
-  ms-agent-kit list
-  ms-agent-kit doctor [opciones]
-  ms-agent-kit plan [opciones]
-  ms-agent-kit install [opciones]
-  ms-agent-kit status [opciones]
-  ms-agent-kit uninstall [opciones]
-  ms-agent-kit project init|inspect [--project <ruta>] [--json] [--dry-run]
-  ms-agent-kit result validate --file <respuesta.md> [--json]
+Uso desde el directorio del kit (sin instalación global):
+  pnpm start                     Asistente interactivo de instalación
+  pnpm start list
+  pnpm start doctor [opciones]
+  pnpm start plan [opciones]
+  pnpm start install [opciones]
+  pnpm start status [opciones]
+  pnpm start uninstall [opciones]
+  pnpm start project init|inspect [--project <ruta>] [--json] [--dry-run]
+  pnpm start result validate --file <respuesta.md> [--json]
 
 Opciones:
   --target <valor>    Cliente objetivo: \`opencode\`, \`claude\`, \`codex\` o \`all\`. Puede repetirse.
   --scope <valor>     Alcance: \`user\` (predeterminado) o \`project\`.
-  --permission-profile <valor>  Perfil Claude/Codex (OpenCode sin reglas): \`balanced\` (predeterminado), \`strict\` o \`trusted\`.
   --project <ruta>    Raíz del proyecto para el alcance \`project\` (predeterminado: directorio actual).
   --home <ruta>       Directorio personal alternativo; útil para pruebas o dotfiles.
   --assets <ruta>     Catálogo alternativo de recursos (\`assets\`).
@@ -136,7 +132,6 @@ function cliOptions(args: string[]): CliOptions {
     options: {
       target: { type: "string", multiple: true },
       scope: { type: "string", default: "user" },
-      "permission-profile": { type: "string", default: "balanced" },
       project: { type: "string" },
       home: { type: "string" },
       assets: { type: "string" },
@@ -163,15 +158,6 @@ function cliOptions(args: string[]): CliOptions {
       2,
     )
   }
-  const permissionProfile = parsed.values["permission-profile"] as PermissionProfile
-  if (!["balanced", "strict", "trusted"].includes(permissionProfile)) {
-    throw new AppError(
-      "INVALID_ARGUMENT",
-      `Perfil de permisos no válido: ${String(parsed.values["permission-profile"])}`,
-      2,
-    )
-  }
-
   const homeDir = path.resolve(parsed.values.home ?? homedir())
   const projectRoot = path.resolve(parsed.values.project ?? process.cwd())
   return {
@@ -181,7 +167,6 @@ function cliOptions(args: string[]): CliOptions {
       homeDir,
       projectRoot,
       scope,
-      permissionProfile,
     },
     force: parsed.values.force,
     yes: parsed.values.yes,
@@ -314,7 +299,6 @@ async function interactiveInstallOptions(): Promise<CliOptions | null> {
       homeDir: path.resolve(homedir()),
       projectRoot: selected.projectRoot,
       scope: selected.scope,
-      permissionProfile: "balanced",
     },
     force: false,
     yes: false,
@@ -390,96 +374,6 @@ async function duplicateCodexSkills(context: BuildContext): Promise<Array<{ name
     .sort((left, right) => left.name.localeCompare(right.name))
 }
 
-async function checkCodexSecretRules(
-  rulePath: string | undefined,
-  projectRoot: string,
-): Promise<{ status: "passed" | "failed" | "not_installed" | "unavailable"; detail: string }> {
-  if (!rulePath) return { status: "not_installed", detail: "No se generó la política ms-secrets" }
-  try {
-    await readFile(rulePath)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { status: "not_installed", detail: "La política ms-secrets aún no está instalada" }
-    }
-    throw error
-  }
-
-  const executable = await resolveClientExecutable("codex", projectRoot)
-  if (!executable) return { status: "unavailable", detail: "No se encontró un binario Codex permitido fuera del proyecto" }
-
-  const cases = [
-    { args: ["cat", ".env"], forbidden: true },
-    { args: ["cat", ".env.secret"], forbidden: true },
-    { args: ["/bin/cat", ".env.local"], forbidden: true },
-    { args: ["head", "-n", "1", ".npmrc"], forbidden: true },
-    { args: ["head", "-c", "50", ".env"], forbidden: true },
-    { args: ["head", "-5", ".env"], forbidden: true },
-    { args: ["sed", "-n", "1p", ".env"], forbidden: true },
-    { args: ["sed", "-n", "2p", ".env"], forbidden: true },
-    { args: ["awk", "{print}", ".netrc"], forbidden: true },
-    { args: ["awk", "/DATABASE_URL/", ".env"], forbidden: true },
-    { args: ["rg", "TOKEN", ".env.secret"], forbidden: true },
-    { args: ["rg", "DATABASE_URL", ".env"], forbidden: true },
-    { args: ["rg", "-n", "TOKEN", ".env.secret"], forbidden: true },
-    { args: ["grep", "PASSWORD", ".env.production"], forbidden: true },
-    { args: ["grep", "DATABASE_URL", ".env"], forbidden: true },
-    { args: ["grep", "-n", "PASSWORD", ".env"], forbidden: true },
-    { args: ["env"], forbidden: true },
-    { args: ["git", "diff", "--", ".env"], forbidden: true },
-    { args: ["git", "show", "HEAD:.env"], forbidden: true },
-    { args: ["cat", ".env.example"], forbidden: false },
-    { args: ["cat", "README.md"], forbidden: false },
-    { args: ["sed", "-n", "1p", "README.md"], forbidden: false },
-    { args: ["rg", "TOKEN", ".env.example"], forbidden: false },
-    { args: ["head", "-c", "50", ".env.example"], forbidden: false },
-    { args: ["rg", "-n", "TOKEN", ".env.example"], forbidden: false },
-    { args: ["grep", "-n", "PASSWORD", "README.md"], forbidden: false },
-    { args: ["git", "diff", "--", ".env.example"], forbidden: false },
-    { args: ["git", "show", "HEAD:.env.example"], forbidden: false },
-  ] as const
-
-  try {
-    const options = await probeOptions(executable, projectRoot)
-    const results = await Promise.all(
-      cases.map(async (testCase) => {
-        const { stdout } = await execFileAsync(executable.path, [
-          "execpolicy",
-          "check",
-          "--rules",
-          rulePath,
-          "--",
-          ...testCase.args,
-        ], options)
-        const result = JSON.parse(stdout) as { decision?: unknown }
-        const isForbidden = result.decision === "forbidden"
-        const decision = ["forbidden", "allow", "allowed", "prompt"].includes(String(result.decision)) ? String(result.decision) : "sin decisión reconocida"
-        return { ...testCase, decision, passed: isForbidden === testCase.forbidden }
-      }),
-    )
-    const failed = results.filter((result) => !result.passed)
-    if (failed.length === 0) {
-      return {
-        status: "passed",
-        detail: `Protección práctica validada: ${results.length}/${results.length} casos`,
-      }
-    }
-    return {
-      status: "failed",
-      detail: `Matriz de protección incompleta (${results.length - failed.length}/${results.length}): ${failed
-        .map(
-          (result) =>
-            `${result.args.join(" ")} esperaba ${result.forbidden ? "un bloqueo" : "que se permitiera"} y obtuvo ${result.decision ?? "sin decisión"}`,
-        )
-        .join("; ")}`,
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { status: "unavailable", detail: "No se encontró el binario `codex`" }
-    }
-    return { status: "failed", detail: "Codex no pudo validar la política dentro del timeout y límite de salida; no se publica la salida del proceso" }
-  }
-}
-
 async function runDoctor(options: CliOptions): Promise<void> {
   const catalog = await loadCatalog(options.context.assetsRoot)
   const projectInspection = await inspectRuntimeProject(options.context.projectRoot)
@@ -550,20 +444,6 @@ async function runDoctor(options: CliOptions): Promise<void> {
     if (installation.status.modified > 0 || installation.status.missing > 0) ok = false
   }
 
-  const codexRule = artifacts.find(
-    (artifact) =>
-      owningTargets(artifact).includes("codex") &&
-      artifact.kind === "policy" &&
-      artifact.name === "ms-secrets",
-  )
-  const codexSecurity = options.targets.includes("codex")
-    ? await checkCodexSecretRules(codexRule?.destination, options.context.projectRoot)
-    : null
-  if (codexSecurity && installations.codex.managed > 0 && codexSecurity.status !== "passed") {
-    ok = false
-    warnings.push(`Codex: ${codexSecurity.detail}`)
-  }
-
   const duplicateSkills = options.targets.includes("codex")
     ? await duplicateCodexSkills(options.context)
     : []
@@ -589,7 +469,7 @@ async function runDoctor(options: CliOptions): Promise<void> {
     skills: catalog.skills.length,
     artifacts: counts,
     installation: installations,
-    security: { codexSecretRules: codexSecurity },
+    security: { permissions: "native", effective: "no comprobado" },
     duplicateSkills,
     modelConfiguration,
     capabilities,

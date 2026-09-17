@@ -1,7 +1,5 @@
 import path from "node:path"
 import type { Artifact, ArtifactKind, BuildContext, SourceSkill, Target } from "../core/types.js"
-import { agentDefinition } from "../core/agent-catalog.js"
-import { capabilityProfile } from "../core/profiles.js"
 import { renderMarkdown } from "../core/frontmatter.js"
 import { verificationForRole, verificationOutputPaths } from "../core/verification-policy.js"
 
@@ -78,16 +76,10 @@ export function embeddedAgentBody(sharedRules: string, body: string, compatibili
   ].join("\n\n")
 }
 
-export function projectWritePaths(agentName: string, context: BuildContext): readonly string[] {
-  const defaults = capabilityProfile(agentDefinition(agentName).capabilityProfile).writePaths
-  const paths = context.scope === "project" && agentName === "ms-writer" ? context.projectPreferences?.documentation.paths ?? [] : []
-  return [...defaults, ...paths.flatMap((directory) => [`${directory}/*.md`, `${directory}/**/*.md`])]
-}
-
 export function projectVerificationInstructions(agentName: string, context: BuildContext): string {
   const grant = verificationForRole(agentName, context)
   if (!grant.commands.length) return ""
-  return `# Verificaciones autorizadas personalmente\n\nSolo en la raíz ${JSON.stringify(path.resolve(context.projectRoot))}, comandos exactos revisados: ${JSON.stringify(grant.commands)}. Salidas autorizadas: ${JSON.stringify(verificationOutputPaths(agentName, context))}. La autorización proviene de la configuración personal del kit y solo aplica a este proyecto y rol; project.yaml no la concede. No añadas flags, wrappers ni comandos. El tester no puede editar código ni usar herramientas de edición: sus subprocessos de verificación solo pueden generar estas salidas. No autoriza secretos, operaciones destructivas ni acciones externas adicionales. Los permisos efectivos del cliente prevalecen; OpenCode y Claude no confinan subprocessos a esas salidas. Si cambian scripts, recetas, configuración o destinos relevantes, detente y solicita revisión de la autorización al padre.`
+  return `# Verificación del proyecto\n\nRaíz: ${JSON.stringify(path.resolve(context.projectRoot))}. Comandos revisados: ${JSON.stringify(grant.commands)}. Directorios de resultados: ${JSON.stringify(verificationOutputPaths(agentName, context))}. Estos datos orientan la verificación; no son una lista de permisos ni modifican la configuración del cliente. El tester informa de fallos y resultados dentro de su rol.`
 }
 
 export function projectSharedRules(sharedRules: string, context: BuildContext): string {

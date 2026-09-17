@@ -1,5 +1,5 @@
 import path from "node:path"
-import { AGENT_DEFINITIONS, agentToolCycleBudget } from "./agent-catalog.js"
+import { AGENT_DEFINITIONS } from "./agent-catalog.js"
 import type { KitConfiguration } from "./kit-config.js"
 import { resolveAgentModel } from "./agent-models.js"
 import { owningTargets, type InstallPlan, type Target } from "./types.js"
@@ -25,7 +25,6 @@ export function modelConfigurationDiagnostics(
     const source = (origin: string) => origin === "override"
       ? path.join(homeDir, ".ms-agent-kit/config.yaml")
       : origin === "inherited" ? "tarea principal del cliente" : `src/core/agent-catalog.ts#${role}`
-    const budget = { value: agentToolCycleBudget(role, target) ?? null, mechanism: target === "opencode" ? "steps" : target === "claude" ? "maxTurns" : "instruction" }
     return {
       target,
       role,
@@ -36,14 +35,12 @@ export function modelConfigurationDiagnostics(
         reasoningEffort: resolved.reasoningEffort,
         modelSource: source(resolved.modelSource),
         reasoningEffortSource: source(resolved.reasoningEffortSource),
-        budget: { ...budget, source: `src/core/agent-catalog.ts#${role}` },
       },
       installed: {
         status: matches ? "comprobado" : "no comprobado",
         source: item?.artifact.destination ?? null,
         model: matches && !inheritsTask ? resolved.model : null,
         reasoningEffort: matches && !inheritsTask ? resolved.reasoningEffort : null,
-        budget: matches && !inheritsTask ? budget : null,
         detail: matches
           ? inheritsTask ? "Skill administrada coincidente; modelo y esfuerzo heredan la tarea principal, no la configuración propia declarada"
             : "Hash actual coincide con el artefacto generado y el estado administrado; no acredita carga de sesión"
@@ -53,7 +50,6 @@ export function modelConfigurationDiagnostics(
         status: "no comprobado",
         model: null,
         reasoningEffort: null,
-        budget: null,
         source: null,
         detail: "Sin observación real de la sesión; la configuración instalada no demuestra los ajustes efectivos",
       },

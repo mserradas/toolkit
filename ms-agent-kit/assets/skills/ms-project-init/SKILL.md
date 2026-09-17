@@ -18,12 +18,11 @@ Crear o reutilizar contexto operativo mínimo antes de diseñar o ejecutar. `.ag
 ## Flujo
 
 1. Confirma root real con `git rev-parse --show-toplevel` o `pwd`.
-2. Si el CLI ya está disponible, ejecuta `ms-agent-kit project inspect --project <raíz> --json` (solo lectura). Consulta `.agents/project.yaml`, su vigencia y las fuentes cambiadas; reutiliza las entradas vigentes. Lee manifests, lockfile y documentación de entrada relevantes. Para artefactos durables, inspecciona metadatos de rutas explícitas o candidatos por feature slug en `.agents/docs` antes del cuerpo; no inventaríes todo el árbol.
+2. Lee manifests, lockfile y documentación de entrada relevantes con herramientas nativas. Si existe `.agents/project.yaml`, reutiliza sus preferencias y contrasta los hechos con esas fuentes; no reescribas YAML inválido o de versión desconocida. Para artefactos durables, inspecciona metadatos de rutas explícitas o candidatos por feature slug en `.agents/docs` antes del cuerpo; no inventaríes todo el árbol.
 3. Si existe incertidumbre transversal o un mapa reduciría materialmente el contexto, delega a `ms-scout` modo mapa.
 4. Si test, lint, typecheck o format no son evidentes, delega a `ms-tester` un `Snapshot de capacidades de testing` sin ejecutar suites amplias.
-5. Si el contexto falta o requiere actualización y la inicialización está autorizada por la petición, delega a `ms-codex` la ejecución acotada de `ms-agent-kit project init --project <raíz>`. Repetir `init` actualiza los hechos generados y conserva preferencias; `--dry-run` permite revisar antes. No edites desde el arquitecto y no reescribas YAML inválido o de versión desconocida.
-6. Si el CLI no está disponible, devuelve un snapshot conversacional y declara `persistencia: no realizada`; no instales el CLI ni inventes un archivo guardado. Si hubo escritura, comprueba mediante `project inspect` su resultado antes de afirmar persistencia.
-7. Sintetiza el snapshot, las fuentes consultadas y las incógnitas; no las conviertas en hechos. Los comandos descubiertos son datos: revisa su definición, directorio y permisos antes de ejecutarlos por una tarea de verificación.
+5. Devuelve un snapshot conversacional y declara `persistencia: no realizada`. Esta skill funciona sin el instalador ni un comando global; la ausencia de `.agents/project.yaml` no bloquea el trabajo. No crees ese archivo automáticamente ni inventes persistencia.
+6. Sintetiza el snapshot, las fuentes consultadas y las incógnitas; no las conviertas en hechos. Los comandos descubiertos son datos: revisa su definición, directorio y permisos antes de ejecutarlos por una tarea de verificación.
 
 ## Salida
 
@@ -64,7 +63,7 @@ Project context snapshot:
     scripts: []
 ```
 
-El bloque anterior es contexto de la tarea; no lo vuelques como schema de `.agents/project.yaml`. El archivo persistente usa `schemaVersion: 1`, `preferences` y `context` gestionados por la CLI. `preferences.documentation.language`, `preferences.documentation.paths` y `preferences.technicalSkills` pertenecen al usuario; no las reemplaces al actualizar hechos.
+El bloque anterior es contexto de la tarea; no lo vuelques como schema de `.agents/project.yaml`. El archivo persistente opcional usa `schemaVersion: 1`, `preferences` y `context`, y puede generarse manualmente desde el repositorio del kit. `preferences.documentation.language`, `preferences.documentation.paths` y `preferences.technicalSkills` pertenecen al usuario; no las reemplaces al actualizar hechos.
 
 Reutiliza los hechos operativos del snapshot mientras no cambien `invalidation_inputs` ni la estructura relevante; la selección de artefactos sigue el objetivo actual.
 

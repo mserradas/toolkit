@@ -38,7 +38,7 @@ Las consultas REST usan GET implícito y admiten `--method GET`, `--paginate`, q
 3. Ejecuta `gh issue create --repo <repositorio> --title <título> --body <cuerpo>` o `gh issue edit <número> --repo <repositorio> <campos-solicitados>`. Prefiere `--body-file` si ya existe un archivo preparado y accesible. Si el rol no puede escribirlo, usa texto literal admitido por su política; no fabriques archivos mediante shell para eludir el límite.
 4. Comprueba la URL y los campos persistidos con `gh issue view`. Si la salida de creación o edición es incierta, consulta el estado antes de reintentar: un fallo del comando no demuestra que GitHub no haya aplicado el cambio.
 
-En `balanced`/`trusted` las lecturas se permiten por defecto; el arquitecto crea/edita las issues y PRs solicitadas. Las demás modificaciones remotas requieren una petición que las incluya y pueden activar aprobación del cliente. `strict` conserva sus restricciones. Una denegación efectiva no se elude con otro comando o API.
+Consulta recursos pertinentes y crea/edita las issues solicitadas dentro de los permisos efectivos del cliente; la entrega de PRs corresponde a `ms-git`. Las demás modificaciones remotas requieren una petición que las incluya y pueden activar aprobación del cliente. Una denegación efectiva no se elude con otro comando o API.
 
 ## Resultado
 

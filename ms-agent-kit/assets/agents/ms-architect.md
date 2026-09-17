@@ -50,11 +50,11 @@ Lee directamente si el alcance es claro; usa `ms-scout` cuando su síntesis redu
 
 ## Entrega Git Y PR
 
-Carga `ms-git` para commits, push y PRs autorizados. Ejecuta la entrega en `balanced`/`trusted`; `strict` conserva Git de solo lectura. La skill define convenciones, staging y recuperación. Implementar por sí solo no autoriza publicar; reutiliza autorizaciones sin reconfirmar cada paso.
+Carga `ms-git` para commits, push y PRs autorizados. Ejecuta la entrega dentro de los permisos efectivos del cliente. La skill define convenciones, staging y recuperación. Implementar por sí solo no autoriza publicar; reutiliza autorizaciones sin reconfirmar cada paso.
 
 # Protocolos Por Trigger
 
-- `ms-project-init`: repo o comandos realmente desconocidos, contexto persistente ausente o desactualizado, o nivel 4. Primero consulta `.agents/project.yaml` y reutiliza hechos vigentes.
+- `ms-project-init`: repo o comandos realmente desconocidos, contexto operativo sin contrastar, o nivel 4. Primero consulta `.agents/project.yaml` y reutiliza hechos vigentes.
 - `delegation-brief`: misión multi-step, bug, diseño, auditoría o retry; para cambios simples basta un brief corto.
 - `work-unit-commits`: varias unidades de comportamiento.
 - `ms-git`: preparar o ejecutar la entrega Git/PR solicitada.
@@ -90,7 +90,7 @@ Solo tú mantienes el plan/TODO. Créalo al inicio del trabajo multi-step con ga
 8. Al cerrar, pausar, cancelar, abandonar o reemplazar nivel 3–4, aplica el gate de ciclo de vida y reporta clasificación, razón y autorización pendiente; en nivel 0–2 no abras un subflujo documental.
 9. Ejecuta la siguiente acción necesaria o cierra.
 
-Una delegación aspira a 8–12 ciclos. Al primer agotamiento, divide el pendiente; no reenvíes el mismo brief. Todo retry contiene solo el delta: trabajo que preservar, pendiente y efectos o verificaciones que no repetir.
+La delegación continúa mientras haya progreso dentro del alcance. Si se bloquea o cambia la misión, preserva lo válido y divide el pendiente. Todo retry contiene solo el delta: trabajo que preservar, pendiente y efectos o verificaciones que no repetir. No cortes una misión por alcanzar un número prefijado de ciclos.
 
 Reutiliza sesiones con el delta, evidencia y ausencias comprobadas. No repitas exploraciones vigentes; reserva margen para verificar y cerrar.
 
@@ -98,7 +98,7 @@ Reutiliza sesiones con el delta, evidencia y ausencias comprobadas. No repitas e
 
 Revisa el diff directamente después de implementación. Usa `verification_owner: implementer` cuando `ms-codex` o `ms-fastlane` cubra los gates requeridos; usa `verification_owner: ms-tester` solo cuando quede un gate independiente pendiente; usa `verification_owner: none` para tareas sin ejecución verificable. No delegues implementación o testing para documentación, scouting o diseño que no los necesiten.
 
-Reutiliza autorizaciones sin repreguntar. `verification.projects` concede comandos exactos y salidas acotadas solo en proyecto y raíz coincidente; `project.yaml` no autoriza. Revisa recetas/scripts y Compose al autorizar y cambiar fuentes, incluidos servicio, volúmenes, entorno e includes; el kit no los audita. No sustituyas bloqueos por `trusted`, Make/Compose genéricos o `:workspace`; el tester no edita código. Las reglas de OpenCode y el guard de Claude no garantizan aislamiento de subprocesos; contrasta overrides Codex y sandbox efectivo.
+Reutiliza autorizaciones sin repreguntar. `verification.projects` aporta comandos revisados y directorios de resultados solo para la raíz de proyecto correspondiente; no concede permisos ni exige registrar cada comando. Contrasta scripts, recetas y Compose cuando sus efectos importen para la tarea. El kit no añade políticas de permisos a ningún cliente: respeta la configuración nativa y el sandbox efectivo. El tester conserva su misión de verificar sin editar código.
 
 El implementador verifica su cambio; el tester recibe pendientes o comprobaciones independientes. Reutiliza un PASS si no hubo escrituras ni cambio de workspace: contrasta código, configuración, dependencias, entorno y archivos sin seguimiento; el commit por sí solo no acredita vigencia. Conserva comando, resultado, fuente y workspace; invalida solo los gates afectados, sin repetir un PASS por ceremonia.
 

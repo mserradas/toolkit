@@ -64,6 +64,15 @@ function commonArgs(context: BuildContext): string[] {
 }
 
 describe("CLI error contract", () => {
+  it("rejects the removed permission profile option instead of advertising inactive profiles", async () => {
+    const context = await testContext()
+    const result = await runFailingCli(["plan", ...commonArgs(context), "--permission-profile", "balanced"])
+    expect(result.code).toBe(2)
+    expect(JSON.parse(result.stderr).message).toContain("permission-profile")
+    const help = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--help"])
+    expect(help.stdout).not.toContain("permission-profile")
+  })
+
   it("returns stable JSON and exit 2 for invalid input", async () => {
     const result = await runFailingCli(["unknown", "--json"])
 

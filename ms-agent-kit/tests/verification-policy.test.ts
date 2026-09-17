@@ -1,13 +1,11 @@
-import { spawnSync } from "node:child_process"
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises"
+import { mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import { buildArtifacts } from "../src/adapters/index.js"
 import { DEFAULT_ASSETS_ROOT } from "../src/core/catalog.js"
-import { parseMarkdown } from "../src/core/frontmatter.js"
 import { validateKitConfiguration } from "../src/core/kit-config.js"
-import { getProjectVerification, verificationOutputPaths, withVerificationCommands } from "../src/core/verification-policy.js"
+import { getProjectVerification, verificationOutputPaths } from "../src/core/verification-policy.js"
 import type { Artifact, BuildContext } from "../src/core/types.js"
 
 const roots: string[] = []
@@ -17,7 +15,7 @@ const outputPaths = ["coverage", "packages/api/test-results", "node_modules/.cac
 async function fixture(): Promise<BuildContext> {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "ms-verification-")))
   roots.push(root)
-  return { projectRoot: root, homeDir: path.join(root, "home"), assetsRoot: DEFAULT_ASSETS_ROOT, scope: "project", permissionProfile: "strict", kitConfiguration: { schemaVersion: 1, models: {}, verification: { projects: [{ root, commands: [...commands], outputPaths: [...outputPaths] }] } } }
+  return { projectRoot: root, homeDir: path.join(root, "home"), assetsRoot: DEFAULT_ASSETS_ROOT, scope: "project", kitConfiguration: { schemaVersion: 1, models: {}, verification: { projects: [{ root, commands: [...commands], outputPaths: [...outputPaths] }] } } }
 }
 const configuration = (project: unknown) => ({ schemaVersion: 1, models: {}, verification: { projects: [project] } })
 function artifact(artifacts: Artifact[], target: string, name: string) {
@@ -25,16 +23,6 @@ function artifact(artifacts: Artifact[], target: string, name: string) {
   if (!result) throw new Error("Falta artefacto")
   return result.content.toString()
 }
-async function guardFixture(context: BuildContext) {
-  const artifacts = await buildArtifacts(["claude"], context)
-  const file = path.join(context.projectRoot, "guard.mjs")
-  await writeFile(file, artifact(artifacts, "claude", "ms-agent-guard"))
-  return (command: string, options: { agent?: string; cwd?: string; payload?: Record<string, unknown> } = {}) => {
-    const result = spawnSync(process.execPath, [file, options.agent ?? "ms-tester"], { cwd: options.cwd ?? context.projectRoot, encoding: "utf8", timeout: 10_000, input: JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command }, ...options.payload }) })
-    return { ...result, decision: result.stdout ? JSON.parse(result.stdout).hookSpecificOutput.permissionDecision : null }
-  }
-}
-
 describe("personal project verification grants", () => {
   it("accepts exact reviewed recipes and optional configuration without changing models", async () => {
     const context = await fixture()
@@ -61,13 +49,7 @@ describe("personal project verification grants", () => {
     expect(() => validateKitConfiguration({ schemaVersion: 1, models: {}, verification: { projects: [{ root: "/project", commands: [], outputPaths: [] }, { root: "/project/", commands: [], outputPaths: [] }] } })).toThrow()
   })
 
-  it("preserves explicit denials and other roles while allowing a reviewed fallback exception", async () => {
-    const context = await fixture()
-    const policy = { bash: { "*": "deny", "make ver*": "deny", "pnpm test:unit": "deny", "cat *": "allow" } }
-    expect(withVerificationCommands(policy, "ms-tester", context).bash).toMatchObject({ "*": "deny", "make verify": "deny", "pnpm test:unit": "deny", [commands[1]!]: "allow", "cat *": "allow" })
-    expect(withVerificationCommands(policy, "ms-scout", context)).toBe(policy)
-    expect(policy.bash).not.toHaveProperty(commands[1]!)
-  })
+
 
   it("rejects symlink roots, outputs, command references and non-directory outputs", async () => {
     const context = await fixture()
@@ -85,70 +67,28 @@ describe("personal project verification grants", () => {
     expect(() => getProjectVerification({ ...context, projectRoot: link, kitConfiguration: { schemaVersion: 1, models: {}, verification: { projects: [{ root: link, commands: ["make verify"], outputPaths: [] }] } } })).toThrow("canónica")
   })
 
-  it("grants default tester outputs in balanced/trusted without source-write tools or strict changes", async () => {
-    const base = await fixture()
-    for (const permissionProfile of ["balanced", "trusted", "strict"] as const) {
-      const context = { ...base, permissionProfile, scope: "user" as const }
-      const artifacts = await buildArtifacts(["opencode", "claude", "codex"], context)
-      const outputs = verificationOutputPaths("ms-tester", context)
-      expect(outputs.includes("coverage")).toBe(permissionProfile !== "strict")
-      expect(verificationOutputPaths("ms-scout", context)).toEqual([])
-      const codex = artifact(artifacts, "codex", "ms-tester")
-      expect(codex).toContain('extends = ":read-only"')
-      expect(codex.includes('"coverage" = "write"')).toBe(permissionProfile !== "strict")
-      for (const output of outputs) expect(codex).toContain(`"${output}" = "write"`)
-      expect(codex).not.toContain('"src" = "write"')
-      expect(parseMarkdown(artifact(artifacts, "claude", "ms-tester")).frontmatter.disallowedTools).toContain("Write")
-      expect(parseMarkdown(artifact(artifacts, "opencode", "ms-tester")).frontmatter.permission).toEqual({})
-    }
+  it("keeps optional result directory guidance for verification roles", async () => {
+    const context = { ...await fixture(), scope: "user" as const }
+    expect(verificationOutputPaths("ms-tester", context)).toContain("coverage")
+    expect(verificationOutputPaths("ms-scout", context)).toEqual([])
   })
 
-  it("materializes exact project grants and only tester output directories in all adapters", async () => {
+  it("includes reviewed project verification as guidance without access grants", async () => {
     const context = await fixture()
     const artifacts = await buildArtifacts(["opencode", "claude", "codex"], context)
-    for (const role of ["ms-codex", "ms-fastlane", "ms-tester"]) {
-      const openCode = parseMarkdown(artifact(artifacts, "opencode", role)).frontmatter
-      expect(openCode.permission).toEqual({})
-      expect(artifact(artifacts, "claude", role)).toContain("Verificaciones autorizadas personalmente")
-      expect(artifact(artifacts, "codex", role)).toContain("Verificaciones autorizadas personalmente")
+    for (const target of ["opencode", "claude", "codex"]) {
+      for (const role of ["ms-codex", "ms-fastlane", "ms-tester"]) {
+        const content = artifact(artifacts, target, role)
+        expect(content).toContain("Verificación del proyecto")
+        expect(content).toContain("make verify")
+        expect(content).toContain("packages/api/test-results")
+        expect(content).toContain("no son una lista de permisos")
+      }
+      expect(artifact(artifacts, target, "ms-scout")).not.toContain("Verificación del proyecto")
     }
-    const testerClaude = parseMarkdown(artifact(artifacts, "claude", "ms-tester")).frontmatter
-    expect(testerClaude.disallowedTools).toEqual(expect.arrayContaining(["Write", "Edit", "NotebookEdit"]))
-    const testerOpenCode = parseMarkdown(artifact(artifacts, "opencode", "ms-tester")).frontmatter.permission as Record<string, unknown>
-    expect(testerOpenCode).toEqual({})
-    const testerCodex = artifact(artifacts, "codex", "ms-tester")
-    expect(testerCodex).toContain('extends = ":read-only"')
-    for (const output of outputPaths) expect(testerCodex).toContain(`"${output}" = "write"`)
-    expect(testerCodex).not.toContain('"src" = "write"')
-    expect(artifact(artifacts, "codex", "ms-scout")).not.toContain('"coverage" = "write"')
     const user = await buildArtifacts(["opencode", "claude", "codex"], { ...context, scope: "user" })
-    for (const target of ["opencode", "claude", "codex"]) expect(artifact(user, target, "ms-tester")).not.toContain("Verificaciones autorizadas personalmente")
+    for (const target of ["opencode", "claude", "codex"]) expect(artifact(user, target, "ms-tester")).not.toContain("Verificación del proyecto")
   })
 
-  it("enforces approved commands, root and current destinations in the standalone Claude guard", async () => {
-    const context = await fixture()
-    const run = await guardFixture(context)
-    for (const command of commands) {
-      const result = run(command)
-      expect(result.status, result.stderr).toBe(0)
-      expect(result.decision).toBe("allow")
-    }
-    for (const command of [commands[1] + " --privileged", "docker compose -f compose.test.yml run --rm test-other", "cat .env", "rm -rf src"]) expect(run(command).status).toBe(2)
-    expect(run(commands[1]!, { agent: "ms-scout" }).status).toBe(2)
-    expect(run(commands[1]!, { cwd: path.dirname(context.projectRoot) }).status).toBe(2)
-    for (const padded of [` ${commands[1]}`, `${commands[1]} `]) {
-      expect(run(padded).status).toBe(2)
-      expect(run(padded, { cwd: path.dirname(context.projectRoot) }).status).toBe(2)
-    }
-    expect(run(commands[1]!, { payload: { cwd: path.dirname(context.projectRoot) } }).status).toBe(2)
-    expect(run(commands[1]!, { payload: { tool_input: { command: commands[1], cwd: path.dirname(context.projectRoot) } } }).status).toBe(2)
-    expect(run("", { payload: { tool_name: "Write", tool_input: { file_path: path.join(context.projectRoot, "coverage/result.json"), content: "{}" } } }).status).toBe(2)
-    await mkdir(context.homeDir)
-    await symlink(context.homeDir, path.join(context.projectRoot, "coverage"))
-    expect(run(commands[1]!).status).toBe(2)
-    for (const padded of [` ${commands[1]}`, `${commands[1]} `]) expect(run(padded).status).toBe(2)
-    await rm(path.join(context.projectRoot, "coverage"))
-    await symlink(context.homeDir, path.join(context.projectRoot, "compose.test.yml"))
-    expect(run(commands[1]!).status).toBe(2)
-  })
+
 })

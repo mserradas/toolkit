@@ -3,7 +3,7 @@ import path from "node:path"
 import { AppError } from "./errors.js"
 import { isSensitivePath } from "./permissions.js"
 import type { BuildContext } from "./types.js"
-import { DEFAULT_VERIFICATION_OUTPUTS } from "./development-policy.js"
+const DEFAULT_VERIFICATION_OUTPUTS = ["coverage", "test-results", "playwright-report", ".pytest_cache", ".ruff_cache", ".mypy_cache", "node_modules/.cache", "node_modules/.vite"] as const
 
 export interface ProjectVerification { root: string; commands: string[]; outputPaths: string[] }
 export interface VerificationConfiguration { projects: ProjectVerification[] }
@@ -113,19 +113,5 @@ export function verificationForRole(agentName: string, context: BuildContext): V
 
 export function verificationOutputPaths(agentName: string, context: BuildContext): string[] {
   if (!(VERIFICATION_ROLES as readonly string[]).includes(agentName)) return []
-  return [...new Set([...(context.permissionProfile === "strict" ? [] : DEFAULT_VERIFICATION_OUTPUTS), ...verificationForRole(agentName, context).outputPaths])]
-}
-
-/** Grants override fallback only; every matching explicit deny retains priority. */
-export function withVerificationCommands(policy: Record<string, unknown>, agentName: string, context: BuildContext): Record<string, unknown> {
-  const grant = verificationForRole(agentName, context)
-  if (!grant.commands.length) return policy
-  const original = typeof policy.bash === "object" && policy.bash !== null && !Array.isArray(policy.bash) ? policy.bash as Record<string, unknown> : { "*": policy.bash ?? "deny" }
-  const bash: Record<string, unknown> = { ...original }
-  for (const command of grant.commands) {
-    const denied = Object.entries(original).some(([pattern, decision]) => pattern !== "*" && decision === "deny" && new RegExp(`^${pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`).test(command))
-    delete bash[command]
-    bash[command] = denied ? "deny" : "allow"
-  }
-  return { ...policy, bash }
+  return [...new Set([...DEFAULT_VERIFICATION_OUTPUTS, ...verificationForRole(agentName, context).outputPaths])]
 }

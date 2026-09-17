@@ -1,6 +1,6 @@
 ---
 name: ms-doctor
-description: Diagnostica Claude Code, sus agentes ms-*, skills, hooks y permisos
+description: Diagnostica Claude Code, sus agentes ms-*, skills y configuración
 agent: ms-architect
 ---
 
@@ -18,18 +18,16 @@ Argumento: `$ARGUMENTS`
 
 Revisa solo el contexto Claude Code:
 
-- `~/.claude/settings.json`, `agents/ms-*.md`, `skills/*/SKILL.md` y `hooks/ms-agent-guard.mjs`.
+- `~/.claude/settings.json`, `agents/ms-*.md`, `skills/*/SKILL.md`.
 - En scope de proyecto, las rutas equivalentes bajo `.claude/` y los `CLAUDE.md` aplicables.
 
-Comprueba que los agentes y las skills tienen frontmatter válido; `ms-architect` conserva capacidad de coordinación; los workers no pueden subdelegar; los permisos y hooks concuerdan con cada rol; el guard bloquea secretos y escrituras fuera de ownership; `ms-shared` existe una sola vez; y `ms-status` y `ms-doctor` apuntan a `ms-architect`. Con argumento `full`, incluye todos los agentes; en otro caso usa los siete mínimos.
+Comprueba que agentes y skills tienen frontmatter válido; `ms-shared` existe una sola vez; `ms-status` y `ms-doctor` apuntan a `ms-architect`; los roles conservan sus responsabilidades de coordinación. El kit omite `tools`, `disallowedTools` y `permissionMode`, y no instala hooks `PreToolUse`. Tampoco instala hooks `Stop` ni configura `maxTurns`.
 
-Contrasta el perfil de comandos elegido (`balanced`, `strict` o `trusted`) sin asumir `balanced`. Las autorizaciones personales de verificación solo se materializan para la raíz exacta en scope de proyecto; no conceden `Edit`/`Write` al tester. Separa política, efectos y runtime: un guard no acredita aislamiento de subprocesos, y `unknown` no es una denegación ni obliga a pedir otra aprobación. No ejecutes verificaciones para resolverlo durante doctor.
+La ausencia de los antiguos `hooks/ms-agent-guard.mjs` y `hooks/ms-result-validator.mjs` es esperada. Los permisos efectivos dependen de la configuración nativa de Claude; no los infieras de las instrucciones del rol. `unknown` no es una denegación ni obliga a pedir otra aprobación. No ejecutes verificaciones durante doctor.
 
-No cuentes skills de OpenCode, Codex, cachés ni marketplaces.
+## Modelos
 
-## Modelos y presupuesto
-
-Consulta `ms-agent-kit doctor --target claude --scope user --json` (usa `--scope project` en ese alcance) con una proyección en la misma llamada de solo la fila de `modelConfiguration` del rol afectado: `role`, `declared`, `installed` y `effective`, incluidas sus fuentes; limita la salida a 2048 bytes y marca `no comprobado` si no cabe. No vuelques prompts, configuración completa ni secretos. El valor declarado incorpora overrides personales; el instalado requiere hashes administrados coincidentes y no acredita el efectivo de una sesión. Sin observación nativa real, el efectivo sigue `no comprobado`. Registra `maxTurns` como presupuesto propio de Claude; no lo equipares a `steps` de OpenCode ni a una instrucción de Codex. No cambies modelo o esfuerzo ni inicies sesiones para diagnosticar.
+Lee solo `model` y `effort` del frontmatter del agente afectado y los ajustes aplicables de Claude, indicando sus rutas. Un valor omitido se hereda del cliente. Estos archivos acreditan configuración declarada, no el modelo efectivo de una sesión ni coincidencia con el catálogo del kit. Sin observación nativa real, el efectivo sigue `no comprobado`. Limita la salida a 2048 bytes; no vuelques prompts, configuración completa ni secretos. El kit no fija un presupuesto de turnos. No cambies modelo o esfuerzo ni inicies sesiones para diagnosticar. El diagnóstico funciona sin el instalador del kit ni un comando global.
 
 ## Salida
 
@@ -40,7 +38,7 @@ Estado general: OK | advertencias | requiere atención
 Config: <resumen>
 Agentes: <tabla de estructura y permisos>
 Skills de Claude Code: <n válidas>/<n instaladas>
-Hooks / guard: <resumen>
+Validación del resultado: revisión de evidencia por el padre
 Instrucciones del proyecto: <resumen>
 Riesgos: <solo riesgos reales>
 Acciones recomendadas: <acciones concretas o "ninguna">

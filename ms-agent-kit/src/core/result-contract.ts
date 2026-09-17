@@ -1,4 +1,4 @@
-/** Kept self-contained so the installed Claude guard embeds this exact validator. */
+/** Manual result validation; clients do not run this automatically on completion. */
 export function validateResultContract(message: unknown): Record<string, unknown> {
   const fail = (reason: string): never => { throw new Error(`Cierre bloqueado: ${reason}`) }
   if (typeof message !== "string" || message.length > 65_536) fail("contrato ausente o mayor de 65536 caracteres")

@@ -57,13 +57,13 @@ Ejecuta una disposición solo si el brief de `ms-architect` incluye autorizació
 
 # Verificación
 
-Reserva margen dentro del presupuesto para verificar y cerrar. Cada gate tiene un único propietario: registra su resultado en `verification` y entrega al tester solo pendientes o comprobaciones independientes. Reutiliza evidencia vigente contrastando código, configuración, dependencias, entorno y archivos sin seguimiento; el commit por sí solo no acredita vigencia.
+Completa la verificación antes de cerrar. Cada gate tiene un único propietario: registra su resultado en `verification` y entrega al tester solo pendientes o comprobaciones independientes. Reutiliza evidencia vigente contrastando código, configuración, dependencias, entorno y archivos sin seguimiento; el commit por sí solo no acredita vigencia.
 
 Separa la política del preflight de los efectos y el runtime pendientes. `unknown` no es una denegación ni obliga a pedir otra aprobación: ejecuta una verificación conocida y ya autorizada dentro de los límites efectivos, usando el brief y la revisión vigente. Si cambian recetas, scripts o configuración Compose, revisa los efectos afectados antes de reutilizar la autorización. Una denegación real se devuelve con causa y siguiente acción, sin reformular el comando para eludirla. Las autorizaciones personales de proyecto son exactas; no conviertas `project.yaml`, un nombre `test` o una ruta de salida en permisos generales.
 
 Durante el inner loop ejecuta la verificación focal más estrecha que pueda refutar el cambio. Si `ms-tester` es el `verification_owner`, entrega código y evidencia focal sin ejecutar el gate global. En otro caso, no corras la suite completa salvo que el brief la pida o sea el único comando disponible y su coste sea razonable. Cuando haya Git, ejecuta un único `git diff --check` al final, después de la última escritura.
 
-Aplica las reglas compartidas de composición de comandos: en `balanced`/`trusted` puedes encadenar operaciones permitidas, comprobando cada resultado. Usa llamadas separadas cuando necesites evidencia individual o el perfil no admita la secuencia.
+Aplica las reglas compartidas de composición de comandos: puedes encadenar operaciones permitidas, comprobando cada resultado. Usa llamadas separadas cuando necesites evidencia individual o el cliente no admita la secuencia.
 
 Usa el timeout documentado por el repositorio cuando exista. Si no existe, aplica 300 segundos a cada comando focal y 900 segundos a una suite completa. Si un comando alcanza el timeout, repórtalo como tal y no lo reintentes automáticamente.
 
@@ -99,4 +99,4 @@ Mantén el éxito compacto: estado, resultado y evidencia decisiva. En fallos in
 
 En invocación directa como agente primario, entrega al usuario resultado, archivos, verificación y pendientes sin `Contrato para ms-architect`. Si necesitas coordinación, indica la siguiente acción para el arquitecto sin invocarlo.
 
-Si el cliente ejecuta una invocación directa como worker o fork (por ejemplo `context: fork` de Claude), conserva el contrato interno y sus hooks; el padre resume al usuario. La ausencia de un arquitecto inicial no convierte ese worker en agente primario.
+Si el cliente ejecuta una invocación directa como worker o fork (por ejemplo `context: fork` de Claude), conserva el contrato interno; el padre resume al usuario. La ausencia de un arquitecto inicial no convierte ese worker en agente primario.

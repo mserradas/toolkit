@@ -162,7 +162,7 @@ export function installationCapabilities(targets: Target[], plan: InstallPlan | 
 export function commandCapabilities(targets: Target[], inspection: RuntimeProjectInspection, context: BuildContext): CapabilityDiagnostic[] {
   const results: CapabilityDiagnostic[] = []
   for (const target of targets) {
-    results.push(diagnostic("project.commands.runtime", target, "no comprobado", "No se ejecutan comandos descubiertos. Los permisos efectivos del runtime, el guard de Claude y el sandbox de Codex no se verifican.", "Revisa definición, directorio y permisos del comando antes de ejecutarlo."))
+    results.push(diagnostic("project.commands.runtime", target, "no comprobado", "No se ejecutan comandos descubiertos. Los permisos efectivos de los clientes no se verifican; el kit no añade una política de permisos.", "Revisa definición, directorio y permisos del comando antes de ejecutarlo."))
     if (inspection.status !== "current" || !inspection.project) continue
     for (const [kind, commands] of Object.entries(inspection.project.context.commands)) {
       for (const [index, command] of commands.entries()) {

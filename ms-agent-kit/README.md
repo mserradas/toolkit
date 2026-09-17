@@ -1,6 +1,8 @@
 # ms-agent-kit
 
-Instalador de consola para distribuir una configuración reproducible de agentes, flujos de trabajo, habilidades reutilizables (`skills`) y permisos en OpenCode, Claude Code y Codex.
+Configuración compartida de agentes, flujos de trabajo y habilidades reutilizables (`skills`) para OpenCode, Claude Code y Codex. El equipo clona este repositorio y ejecuta el instalador con `pnpm start`; no necesita instalar `ms-agent-kit` como comando global.
+
+Una vez instalados los archivos, los agentes funcionan dentro de cada cliente sin ejecutar el instalador. Consulta la [instalación para el equipo](#instalación-para-el-equipo).
 
 El instalador calcula un plan antes de escribir, conserva el estado de propiedad y crea copias de seguridad cuando adopta archivos existentes. No instala los clientes de IA, no configura cuentas y no guarda credenciales.
 
@@ -8,19 +10,25 @@ El instalador calcula un plan antes de escribir, conserva el estado de propiedad
 
 | Cliente | Componentes instalados | Integración principal |
 |---|---|---|
-| OpenCode | 12 agentes, 4 comandos `/ms-*` y 11 `skills` generales | Configuración, interfaz de terminal (`TUI`), Context7, Playwright MCP y permisos por agente |
-| Claude Code | 12 agentes, 4 habilidades invocables (`slash skills`) `/ms-*` y 11 `skills` generales | Límites de herramientas y protección compartida `PreToolUse` |
-| Codex | 11 agentes especialistas, 4 comandos como `skills` y 10 `skills` generales del kit | Perfiles, reglas de seguridad, Context7, Playwright MCP y `$ms-architect` como orquestador padre |
+| OpenCode | 12 agentes, 4 comandos `/ms-*` y 11 `skills` generales | Configuración, interfaz de terminal (`TUI`), Context7, Playwright MCP y permisos nativos |
+| Claude Code | 12 agentes, 4 habilidades invocables (`slash skills`) `/ms-*` y 11 `skills` generales | Herramientas y permisos heredados |
+| Codex | 11 agentes especialistas, 4 comandos como `skills` y 10 `skills` generales del kit | Modelos por agente, Context7, Playwright MCP y `$ms-architect` como orquestador padre |
 
 El catálogo actual incluye 12 agentes, 4 comandos y 11 `skills` generales. En Codex, `ms-architect` se instala como `skill` de la tarea principal para que pueda delegar directamente en los 11 especialistas; `skill-creator` usa la versión nativa del cliente y no se copia desde el kit.
 
 `agent-instructions-design` crea, edita y revisa `AGENTS.md`, `CLAUDE.md` o el archivo equivalente solicitado. `cognitive-doc-design` se ocupa de documentación para personas, incluido un README que explique esos archivos. Cada skill se selecciona por el entregable y su propósito; consulta los [casos de selección](assets/docs/agents.md#skills-generales-instaladas).
 
+## Permisos nativos
+
+El kit no añade políticas de permisos en ninguno de los tres clientes. Conserva los roles como instrucciones y hereda los controles del cliente. Se retiró la opción `--permission-profile`; elimina ese argumento de invocaciones antiguas.
+
+Al actualizar se eliminan las políticas antiguas administradas y sin cambios locales. El instalador conserva configuraciones externas y protege archivos modificados como conflictos; revisa el plan antes de usar `--force`.
+
 ## Ciclo de trabajo
 
 `ms-architect` conserva el único plan y delega misiones focales. Cada worker lee lo necesario, aplica un parche coherente si su rol escribe, realiza la comprobación focal que corresponda y devuelve evidencia compacta; no mantiene un `TODO` paralelo. El arquitecto nombra un solo `verification_owner`: `implementer | ms-tester | none`. Usa `implementer` para gates cubiertos por `ms-codex` o `ms-fastlane`, `ms-tester` si queda un gate independiente pendiente y `none` para tareas sin ejecución verificable. Cada gate tiene un propietario; reutilizar un `PASS` exige contrastar código, configuración, dependencias, entorno y archivos sin seguimiento. El commit por sí solo no acredita vigencia.
 
-Las misiones se preparan para unas 8–12 iteraciones y reservan margen para verificar y cerrar. Si el primer presupuesto se agota, se divide o reduce el trabajo pendiente. `ms-fastlane` y `ms-scout` usan 12; `ms-tester`, 16; los demás subagentes, 20, salvo el experimento de `ms-codex` con `steps: 32` en OpenCode. Claude mantiene `maxTurns: 20` y Codex un presupuesto de 20 por instrucción para ese rol. Los mecanismos no equivalen entre clientes y los modelos se mantienen.
+Las misiones tienen un alcance concreto y continúan mientras haya progreso hasta completar su resultado y verificación. El kit no fija `steps`, `maxTurns` ni contadores de ciclos en las instrucciones. Si aparece un bloqueo real o cambia el alcance, el agente conserva lo válido y devuelve el pendiente al arquitecto. Los límites nativos del cliente siguen vigentes.
 
 Antes de delegar se contrastan comandos, directorio, efectos, servicios y permisos conocidos. El brief conserva evidencia, secciones afectadas y ausencias comprobadas; una sesión pertinente recibe solo el delta. Una denegación de política termina el intento con causa y siguiente acción, sin reformular el comando ni cambiar de intérprete o rol para eludirla. Cuando no condicionen la implementación, las actualizaciones documentales se agrupan al cierre por propietario.
 
@@ -41,7 +49,7 @@ La [convención compartida](assets/skills/ms-git/references/git-conventions.md) 
 
 Revisa el diff y los cambios ajenos antes de preparar rutas concretas. Para una PR, comprueba remoto, referencia de origen, base, commits y verificaciones; publica la rama y crea o actualiza la PR, sin duplicarla ni hacer merge. Una petición de PR autoriza sus pasos necesarios y no exige elegir un título o confirmar cada comando. La instalación del kit distribuye la convención; no crea ramas permanentes ni instala workflows de release en los proyectos.
 
-Pedir solo implementación termina con cambios listos para revisar; pedir commit no incluye push; pedir push publica commits existentes. `work-unit-commits` define unidades de trabajo y `ms-git` ejecuta su entrega. La skill respeta los permisos del cliente: en el flujo `ms-*` corresponde al arquitecto con `balanced`/`trusted`; `strict` mantiene Git de solo lectura.
+Pedir solo implementación termina con cambios listos para revisar; pedir commit no incluye push; pedir push publica commits existentes. `work-unit-commits` define unidades de trabajo y `ms-git` ejecuta su entrega. La skill respeta los permisos del cliente: en el flujo `ms-*` corresponde al arquitecto dentro de los permisos efectivos del cliente.
 
 ## GitHub Y CI Con gh
 
@@ -53,11 +61,11 @@ Investiga el fallo de Actions de la PR 42 y explica la causa.
 Crea una issue en owner/repo con el bug que acabamos de reproducir.
 ```
 
-En `balanced`/`trusted`, architect, codex, fastlane, debugger, tester y scout consultan repositorios, issues, PRs, diffs y checks. Todos esos roles también leen ejecuciones, logs, workflows y releases; el arquitecto ejecuta la creación/edición de issues autorizada. Los workers usan su brief sin cargar `ms-github`. Las consultas pertinentes no requieren confirmación por comando.
+Dentro de su misión, architect, codex, fastlane, debugger, tester y scout consultan repositorios, issues, PRs, diffs y checks. Todos esos roles también leen ejecuciones, logs, workflows y releases; el arquitecto ejecuta la creación/edición de issues autorizada. Los workers usan su brief sin cargar `ms-github`. Las consultas pertinentes no requieren confirmación por comando.
 
-OpenCode genera `permission: {}` y usa los permisos nativos del cliente. Claude conserva las reglas por subcomando en su guard. En Codex se distribuyen instrucciones por rol, sujetas a los permisos nativos y al sandbox; no son una allowlist nativa equivalente. `strict` conserva sus restricciones en Claude. Las modificaciones remotas adicionales, como merge, borrados o ejecución de Actions, requieren autorización de la tarea; el cliente decide si solicita aprobación.
+Los tres clientes usan sus permisos nativos. El kit no añade listas de comandos ni bloqueos a `gh api`, Git o las herramientas de edición. Las modificaciones remotas siguen el alcance solicitado; el cliente decide si necesita aprobación.
 
-Las lecturas REST con `gh api` admiten GET, paginación, query strings y filtros, sin lista de endpoints. Por ejemplo: `gh api --paginate repos/<owner>/<repo>/pulls/<numero>/comments --jq '.[].body'`. El guard de Claude pide aprobación para campos que envían payload, métodos de escritura y cambios de host. OpenCode aplica su configuración nativa.
+Para leer comentarios de revisión puedes usar `gh api --paginate repos/<owner>/<repo>/pulls/<numero>/comments --jq '.[].body'`. Consulta la skill para distinguir lecturas y modificaciones.
 
 ## Idioma de la documentación
 
@@ -71,47 +79,43 @@ Una edición puntual no autoriza traducir todo un documento. Los literales técn
 - `pnpm` para instalar dependencias y trabajar desde el repositorio.
 - Al menos uno de estos clientes ya instalado: OpenCode, Claude Code o Codex.
 - Codex `0.138.0` o superior si se selecciona ese cliente.
-- Conexión a Internet para instalar dependencias; la interfaz de consola (`CLI`) no la necesita para operar sobre el catálogo local.
+- Conexión a Internet para instalar dependencias; el instalador opera después sobre el catálogo local.
 
 `ms-agent-kit` configura clientes existentes. No instala sus binarios ni gestiona cuentas, proveedores o claves API.
 
-## Camino rápido
+## Instalación para el equipo
 
-Desde este directorio:
+Comparte este repositorio. Cada persona lo clona y, desde el directorio `ms-agent-kit`, ejecuta:
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 pnpm start
 ```
 
-El asistente guía el proceso:
+El asistente permite elegir clientes y alcance, muestra los cambios y conserva las configuraciones ajenas. Elige **Usuario** para tener los agentes disponibles en todos tus proyectos, o **Proyecto** para instalarlos en un repositorio concreto. Este alcance indica dónde guardar la configuración del cliente; no instala un programa global.
 
-1. Selecciona uno o varios clientes.
-2. Elige instalación global o de proyecto.
-3. Revisa un resumen vertical de clientes, alcance, cambios, conflictos y estado.
-4. Confirma únicamente si hay cambios que aplicar.
-5. Resuelve cada conflicto conservando, reemplazando con copia de seguridad u omitiendo el archivo.
+Después, abre el cliente y usa los agentes y skills. No hace falta ejecutar `pnpm start` en cada sesión, añadir el kit al `PATH` ni compilarlo.
 
-Si todo está actualizado, el asistente termina sin pedir una confirmación innecesaria.
+### Actualizar
 
-### Instalarlo como aplicación de consola
-
-Para ejecutar `ms-agent-kit` desde cualquier directorio sin depender de `pnpm start`:
+Desde la copia del kit, con tus cambios locales guardados:
 
 ```bash
-pnpm build
-pnpm add --global .
-ms-agent-kit
+git pull --ff-only
+pnpm install --frozen-lockfile
+pnpm start
 ```
 
-Cuando cambie el código de la interfaz de consola, repite `pnpm build` y `pnpm add --global .` para actualizar la instalación global.
+Selecciona los mismos clientes y alcance. El instalador aplica las diferencias y muestra los conflictos; si todo está actualizado, termina sin pedir confirmación. Abre una sesión nueva del cliente para cargar los cambios.
+
+Los comandos de mantenimiento que siguen se ejecutan desde el directorio `ms-agent-kit`.
 
 ## Verificar la instalación
 
 ```bash
-ms-agent-kit doctor
-ms-agent-kit plan --target all --scope user
-ms-agent-kit status --target all --scope user
+pnpm start doctor
+pnpm start plan --target all --scope user
+pnpm start status --target all --scope user
 ```
 
 | Comando | Qué confirma |
@@ -135,14 +139,14 @@ El código de salida `1` indica problemas de integridad o fallos comprobados, co
 ### Validar resultados de workers
 
 ```bash
-ms-agent-kit result validate --file respuesta.md --json
+pnpm start result validate --file /ruta/respuesta.md --json
 ```
 
 Valida una respuesta ya guardada con el título `Contrato para ms-architect` y un único bloque terminal `yaml` o `json`. El [contrato compartido](assets/docs/agents-shared.md#contrato-para-ms-architect) conserva los estados y campos anteriores y añade `verification`: cada gate declara propietario, obligatoriedad, comando, resultado, evidencia y contexto. `completed` exige evidencia, bloqueos/preguntas vacíos y `PASS` en los gates obligatorios declarados. Omitir `verification` sigue siendo compatible, pero no acredita cobertura; el padre contrasta los gates esperados.
 
 El YAML cerrado admite campos planos y listas de textos; usa JSON completo o una lista JSON inline para gates anidados. Se rechazan duplicados, formatos ambiguos y entradas fuera de los límites: 65536 caracteres, 100 entradas por lista y 8 niveles JSON. El CLI lee archivos regulares, rechaza symlinks finales y rutas sensibles, y limita la lectura a 256 KiB. No ejecuta comandos del contrato ni acredita la veracidad de referencias. El código `0` indica coherencia y `2` rechazo del contrato o de sus argumentos; `--json` informa además si se declaró `verification`.
 
-Claude integra el mismo validador en su guard. OpenCode y Codex disponen del CLI y de la aceptación del padre; no tienen un hook equivalente. La [evaluación manual](assets/evaluations/README.md) compara tareas equivalentes con modelos constantes y métricas opcionales de delegaciones, denegaciones, cortes, duplicaciones y retrabajo. Un valor no observado es `null`; las mejoras de rendimiento requieren medición.
+La validación desde el repositorio es manual y opcional en los tres clientes. Los workers conservan su contrato y el padre revisa la evidencia; el kit no instala hooks que bloqueen el cierre por formato. La [evaluación manual](assets/evaluations/README.md) compara tareas equivalentes con modelos constantes y métricas opcionales de delegaciones, denegaciones, cortes, duplicaciones y retrabajo. Un valor no observado es `null`; las mejoras de rendimiento requieren medición.
 
 ## Elegir el alcance
 
@@ -156,7 +160,7 @@ Claude integra el mismo validador en su guard. OpenCode y Codex disponen del CLI
 El alcance de usuario deja la configuración disponible en cualquier espacio de trabajo. El alcance de proyecto la mantiene dentro de un repositorio concreto:
 
 ```bash
-ms-agent-kit install \
+pnpm start install \
   --target opencode,claude,codex \
   --scope project \
   --project /ruta/al/repositorio
@@ -164,11 +168,9 @@ ms-agent-kit install \
 
 Si se omite `--project`, el directorio actual se usa como raíz del proyecto.
 
-### Autorizar verificaciones de un proyecto
+### Configurar verificaciones de un proyecto
 
-`balanced` permite comandos locales por defecto, incluidos scripts propios, runners, Make y Compose, dentro de una tarea autorizada. No necesitas registrar cada comando. `strict` conserva las listas cerradas; las excepciones siguientes permiten ampliar ese perfil y configurar salidas de verificación.
-
-Para comandos adicionales revisados, añade una entrada opcional a tu configuración personal `~/.ms-agent-kit/config.yaml`. Este ejemplo usa una raíz ilustrativa; conserva cualquier override existente en `models`:
+Puedes conservar comandos revisados y directorios de resultados en `~/.ms-agent-kit/config.yaml`. Es información opcional para los roles `ms-codex`, `ms-fastlane` y `ms-tester`; no concede ni restringe permisos y no necesitas registrar cada comando para ejecutarlo.
 
 ```yaml
 schemaVersion: 1
@@ -184,36 +186,28 @@ verification:
         - test-results
 ```
 
-Revisa los comandos, sus recetas/scripts y sus efectos antes de autorizarlos; para Compose incluye el servicio, los volúmenes, el entorno y los includes. El kit valida la forma del comando y las rutas, pero no audita automáticamente el contenido Compose: un nombre como `compose.test.yml` no demuestra aislamiento. Repite la revisión cuando cambien esas fuentes; la coincidencia literal del comando no acredita su vigencia. La autorización solo se aplica a la raíz normalizada exacta con `--scope project`, nunca a proyectos vecinos, subdirectorios ni instalaciones `--scope user`. `.agents/project.yaml` sigue siendo contexto, sin conceder permisos. El ejemplo no configura permisos en ningún proyecto por sí solo.
-
-Estas excepciones explícitas se limitan a `ms-codex`, `ms-fastlane` y `ms-tester`; pueden complementar cualquier perfil elegido, incluido `strict`, sin retirar las denegaciones protegidas. `commands` admite formas concretas de verificación, como `npm test`, `npm run test`, `make verify` y la invocación Compose del ejemplo; cada entrada autoriza únicamente ese literal, sin ampliar flags, objetivos ni servicios.
-
-En `balanced`/`trusted` ya se permiten las salidas habituales en la raíz del proyecto: `coverage`, `test-results`, `playwright-report`, `.pytest_cache`, `.ruff_cache`, `.mypy_cache`, `node_modules/.cache` y `node_modules/.vite`. Usa `outputPaths` para añadir salidas de módulos o concederlas en `strict`.
-
-`outputPaths` admite `coverage`, `test-results`, `playwright-report`, `.pytest_cache`, `.ruff_cache`, `.mypy_cache`, `node_modules/.cache` y `node_modules/.vite`, también bajo un prefijo de módulo validado, como `packages/web/coverage`. Se rechazan globs, traversal, secretos, rutas de código/configuración y symlinks. Estas salidas permiten generar reportes o cachés; no conceden al tester edición de código ni herramientas `Edit`/`Write`.
-
-Después de revisar la configuración, aplica la instalación de proyecto:
+El kit valida las formas de verificación y las rutas admitidas por este formato; no audita los efectos de scripts o servicios. La entrada se incorpora como instrucciones solo al instalar con `--scope project` en esa raíz exacta. `outputPaths` admite directorios convencionales de reportes/cachés, también bajo módulos, como `packages/web/coverage`.
 
 ```bash
-ms-agent-kit install --target all --scope project --project /ruta/al/proyecto --permission-profile balanced
+pnpm start install --target all --scope project --project /ruta/al/proyecto
 ```
 
-Codex conserva el tester en `:read-only` con overrides solo para las salidas autorizadas, sujetos al sandbox efectivo. OpenCode mantiene `permission: {}`, también con verificaciones autorizadas por proyecto. Claude usa su guard con el perfil elegido y conserva las protecciones de secretos y operaciones sensibles. Los permisos efectivos y el aislamiento de subprocesos dependen de cada cliente.
+Los permisos efectivos y el aislamiento de subprocesos corresponden a la configuración de cada cliente.
 
-## Empezar en un proyecto y reutilizar su contexto
+## Contexto opcional de un proyecto
 
-Desde la raíz del repositorio:
+Los agentes leen manifests, scripts y documentación con las herramientas del cliente. `ms-project-init` prepara un snapshot conversacional y reutiliza `.agents/project.yaml` cuando existe; no exige crearlo ni ejecutar el instalador para empezar a trabajar.
+
+Si quieres guardar contexto entre clientes, puedes generarlo manualmente desde el directorio del kit, indicando el repositorio de destino:
 
 ```bash
-ms-agent-kit project init
-ms-agent-kit project inspect --json
+pnpm start project init --project /ruta/al/proyecto
+pnpm start project inspect --project /ruta/al/proyecto --json
 ```
 
-`init` crea `.agents/project.yaml`; repetirlo actualiza el contexto generado y conserva las preferencias y comentarios humanos. Si no cambia nada, conserva el archivo byte a byte. `inspect` solo lee y devuelve `missing`, `current` o `stale`, junto con `changedSources`; un YAML inválido produce un error explícito. Usa `--project /ruta/al/repositorio` para otra raíz o `project init --dry-run --json` para revisar sin escribir.
+`init` crea `.agents/project.yaml`; repetirlo actualiza el contexto generado y conserva las preferencias y comentarios humanos. Si no cambia nada, conserva el archivo byte a byte. `inspect` solo lee y devuelve `missing`, `current` o `stale`, junto con `changedSources`; un YAML inválido produce un error explícito. Añade `--dry-run --json` a `project init` para revisar sin escribir.
 
 La detección lee manifests y lockfiles de Node y Python, además de módulos inmediatos en `apps`, `packages` y `services`, con un máximo de 64 módulos. No ejecuta scripts ni instala dependencias. Un stack desconocido deja las listas correspondientes vacías; debe completarse la investigación de la tarea cuando haga falta. Un contexto `current` tampoco acredita que tests anteriores sigan vigentes.
-
-Los agentes consultan el contexto disponible. `ms-architect` carga `ms-project-init` cuando desconoce el repositorio o los comandos, o el trabajo exige el preflight formal. Si falta contexto o está desactualizado y la petición vigente autoriza inicializarlo, delega `project init`; no hace falta ejecutarlo manualmente cada sesión ni pedir de nuevo un permiso ya concedido. Es una regla del agente, no un hook obligatorio al abrir el cliente. También puedes inicializarlo desde la terminal como arriba.
 
 Este ejemplo muestra el schema completo para un proyecto todavía sin manifest reconocido; solo `preferences` se edita a mano:
 
@@ -239,9 +233,9 @@ context:
 
 Al detectar módulos, `modules` contiene objetos como `{path: apps/web, stack: [node]}`. Cada comando incluye `command`, `cwd` y `source`; por ejemplo, `pnpm run test`, `apps/web` y `apps/web/package.json`. Cada fuente contiene `path` y un `sha256` calculado por el kit. No inventes hashes ni edites esos hechos generados: cambia las fuentes y repite `project init`.
 
-`documentation.paths` admite directorios relativos explícitos, sin globs, rutas absolutas, escapes ni directorios internos o secretos. Amplía únicamente los destinos de Markdown de `ms-writer`. Para materializar esas rutas, instala con `--scope project` después de editarlas. Claude limita la escritura a `*.md` y `**/*.md`; Codex concede acceso nativo al directorio y mantiene la restricción Markdown en las instrucciones del rol. OpenCode recibe esas preferencias como instrucciones y conserva `permission: {}`. La instalación `--scope user` permanece genérica y no incorpora preferencias del repositorio incidental. Los archivos humanos `AGENTS.md` y `CLAUDE.md` no se sobrescriben.
+`documentation.paths` admite directorios relativos explícitos, sin globs, rutas absolutas, escapes ni directorios internos o secretos. Indica destinos documentales de `ms-writer` como instrucciones en los tres clientes, sin generar concesiones de acceso. Para incorporar esas rutas, instala con `--scope project` después de editarlas. La instalación `--scope user` permanece genérica. Los archivos humanos `AGENTS.md` y `CLAUDE.md` no se sobrescriben.
 
-`technicalSkills` selecciona nombres o rutas relativas de skills técnicas existentes; también pueden indicarse como `skill_inputs` en el brief. `ms-codex`, `ms-fastlane` y `ms-tester` cargan solo las pertinentes mediante el catálogo nativo. La selección no instala skills ni dependencias, no habilita coordinación y no permite al tester escribir código. Los protocolos de coordinación permanecen bloqueados para esos roles.
+`technicalSkills` selecciona nombres o rutas relativas de skills técnicas existentes; también pueden indicarse como `skill_inputs` en el brief. `ms-codex`, `ms-fastlane` y `ms-tester` cargan solo las pertinentes mediante el catálogo nativo. La selección no instala skills ni dependencias, no habilita coordinación y no permite al tester escribir código. Los protocolos de coordinación quedan fuera de la misión de esos roles.
 
 El schema es estricto: versiones, claves o tipos desconocidos, aliases YAML y archivos inseguros se rechazan conservando el contenido. Desinstalar el kit no elimina `.agents/project.yaml`.
 
@@ -271,11 +265,11 @@ models:
       reasoningEffort: low
 ```
 
-Cada clave de `models` es el nombre de un agente del kit, como `ms-codex`, `ms-writer` o `ms-fastlane`. Cada override afecta solo al agente y cliente indicados; `model` y `reasoningEffort` son opcionales e independientes. Los defaults se definen por agente en [el catálogo](src/core/agent-catalog.ts). El esfuerzo admite únicamente `low`, `medium` o `high`. No guardes claves ni credenciales aquí.
+Cada clave de `models` es el nombre de un agente del kit, como `ms-codex`, `ms-writer` o `ms-fastlane`. Guarda solo los valores que quieras distinguir de los defaults; al omitirlos, seguirán los futuros cambios del catálogo. Cada override afecta solo al agente y cliente indicados; `model` y `reasoningEffort` son opcionales e independientes. Los defaults se definen por agente en [el catálogo](src/core/agent-catalog.ts). El esfuerzo admite únicamente `low`, `medium` o `high`. No guardes claves ni credenciales aquí.
 
 `schemaVersion: 1` se conserva, pero las claves antiguas `strong`, `balanced`, `light` y `fast` ya no se admiten dentro de `models`: sustitúyelas manualmente por los nombres de los agentes que quieras configurar. Sin archivo o con `models: {}` se mantienen los defaults actuales.
 
-`ms-agent-kit plan --target all --json` añade `models[cliente][agente]` sin retirar `items` ni `statePath`. Cada entrada muestra modelo, esfuerzo y procedencia independiente: `default` del kit, `override` personal o `inherited` del cliente. `availability: unchecked` significa que no se verificó el acceso real al modelo. Sin override, Codex hereda modelo y configura esfuerzo; Claude hereda ambos salvo fastlane; OpenCode usa los defaults del kit. Un identificador inválido falla antes de instalar; el kit no sustituye silenciosamente un modelo ni elige proveedores automáticamente.
+`pnpm start plan --target all --json` añade `models[cliente][agente]` sin retirar `items` ni `statePath`. Cada entrada muestra modelo, esfuerzo y procedencia independiente: `default` del kit, `override` personal o `inherited` del cliente. `availability: unchecked` significa que no se verificó el acceso real al modelo. Sin override, Codex hereda modelo y configura esfuerzo; Claude hereda ambos salvo fastlane; OpenCode usa los defaults del kit. Un identificador inválido falla antes de instalar; el kit no sustituye silenciosamente un modelo ni elige proveedores automáticamente.
 
 Los adaptadores generan `model`/`variant` en OpenCode, `model`/`effort` en Claude y `model`/`model_reasoning_effort` en los especialistas de Codex. Las skills principales de Codex, como `$ms-fastlane` y `$ms-architect`, heredan el modelo y esfuerzo de la tarea activa; la configuración del especialista no reconfigura esas skills. Reinstala el alcance correspondiente para aplicar un cambio personal; una menor intensidad de razonamiento no prueba por sí sola un menor coste.
 
@@ -359,22 +353,22 @@ Antes de migrarlas:
 3. Propón mover a `.agents/docs/archive/` solo los documentos con valor histórico explícito y motivo de retención.
 4. Mueve o elimina únicamente después de obtener autorización explícita y revisar el diff.
 
-Después de actualizar estas fuentes, vuelve a instalar la configuración para que los clientes reciban los contratos nuevos y ejecuta `ms-agent-kit doctor` para comprobar la instalación.
+Después de actualizar estas fuentes, vuelve a instalar la configuración para que los clientes reciban los contratos nuevos y ejecuta `pnpm start doctor` para comprobar la instalación.
 
 ## Comandos
 
 | Comando | Función |
 |---|---|
-| `ms-agent-kit` | Abre el asistente interactivo |
-| `ms-agent-kit list` | Lista agentes, flujos de trabajo, `skills` y complementos incluidos |
-| `ms-agent-kit doctor` | Valida el catálogo y la instalación administrada |
-| `ms-agent-kit plan` | Clasifica los cambios sin aplicarlos |
-| `ms-agent-kit install` | Aplica el plan de forma transaccional |
-| `ms-agent-kit status` | Compara la instalación con el catálogo actual |
-| `ms-agent-kit uninstall` | Elimina archivos propios y restaura copias de seguridad válidas |
-| `ms-agent-kit project init` | Crea o refresca contexto, conservando preferencias |
-| `ms-agent-kit project inspect` | Compara fuentes del contexto sin escribir |
-| `ms-agent-kit result validate --file <respuesta.md>` | Comprueba coherencia del contrato de un worker sin ejecutar su contenido |
+| `pnpm start` | Abre el asistente interactivo |
+| `pnpm start list` | Lista agentes, flujos de trabajo, `skills` y complementos incluidos |
+| `pnpm start doctor` | Valida el catálogo y la instalación administrada |
+| `pnpm start plan` | Clasifica los cambios sin aplicarlos |
+| `pnpm start install` | Aplica el plan de forma transaccional |
+| `pnpm start status` | Compara la instalación con el catálogo actual |
+| `pnpm start uninstall` | Elimina archivos propios y restaura copias de seguridad válidas |
+| `pnpm start project init` | Crea o refresca contexto, conservando preferencias |
+| `pnpm start project inspect` | Compara fuentes del contexto sin escribir |
+| `pnpm start result validate --file <respuesta.md>` | Comprueba coherencia del contrato de un worker sin ejecutar su contenido |
 
 ### Opciones comunes
 
@@ -382,7 +376,6 @@ Después de actualizar estas fuentes, vuelve a instalar la configuración para q
 |---|---|
 | `--target opencode\|claude\|codex\|all` | Selecciona clientes; admite comas o repeticiones |
 | `--scope user\|project` | Selecciona instalación global o local |
-| `--permission-profile balanced\|strict\|trusted` | Selecciona el perfil de Claude y las salidas de verificación de Codex; OpenCode siempre genera `permission: {}` |
 | `--project <ruta>` | Define la raíz para el alcance de proyecto |
 | `--home <ruta>` | Usa un directorio personal alternativo, útil para pruebas o `dotfiles` |
 | `--assets <ruta>` | Usa un catálogo de recursos (`assets`) alternativo |
@@ -395,16 +388,16 @@ Ejemplos habituales:
 
 ```bash
 # Revisar antes de instalar
-ms-agent-kit plan --target all --scope user
+pnpm start plan --target all --scope user
 
 # Instalar solo Claude Code y Codex
-ms-agent-kit install --target claude,codex --scope user
+pnpm start install --target claude,codex --scope user
 
 # Automatización sin interacción ni escrituras
-ms-agent-kit install --target all --scope user --yes --dry-run --json
+pnpm start install --target all --scope user --yes --dry-run --json
 
 # Desinstalar la configuración administrada de un proyecto
-ms-agent-kit uninstall --target all --scope project --project /ruta/al/repositorio
+pnpm start uninstall --target all --scope project --project /ruta/al/repositorio
 ```
 
 ### Contrato para automatización
@@ -442,13 +435,13 @@ Al recibir `SIGINT` o `SIGTERM`, una mutación se detiene en el siguiente límit
 
 ## Uso por cliente
 
-Los tres clientes comparten el contrato de roles y evidencia, pero materializan modelos, presupuestos y permisos de forma distinta. Esta tabla muestra los defaults sin configuración personal:
+Los tres clientes comparten roles y contrato de evidencia, con modelos propios y controles nativos. Esta tabla muestra los defaults sin configuración personal:
 
-| Cliente | `ms-fastlane` | Presupuesto de misión | Permisos |
-|---|---|---|---|
-| OpenCode | `openai/gpt-5.6-luna`, `variant: low` | Materializado por el cliente | Perfiles `balanced`, `strict` y `trusted` con permisos granulares por rol |
-| Claude Code | Haiku, esfuerzo bajo | `toolCycleBudget` materializado | Límites de herramientas y protección compartida `PreToolUse` |
-| Codex | Especialista: modelo heredado y razonamiento bajo. `$ms-fastlane` principal: modelo y esfuerzo de la tarea activa | Política de prompt; actualmente no hay hard turn budget | Perfiles y reglas que pueden quedar subordinados a la tarea padre o a la configuración global |
+| Cliente | `ms-fastlane` | Controles |
+|---|---|---|
+| OpenCode | `openai/gpt-5.6-luna`, `variant: low` | Permisos y límites nativos |
+| Claude Code | Haiku, esfuerzo bajo | Herramientas, permisos y límites heredados |
+| Codex | Especialista: modelo heredado y razonamiento bajo. `$ms-fastlane` principal: modelo y esfuerzo de la tarea activa | Configuración de la tarea padre |
 
 Para cambios claros y de bajo riesgo, usa la entrada directa; para coordinación o decisiones persistentes, activa el arquitecto. Tres archivos y 120 LOC orientan la reevaluación, sin sustituir el criterio de riesgo.
 
@@ -457,7 +450,7 @@ Para cambios claros y de bajo riesgo, usa la entrada directa; para coordinación
 | Cambio acotado | `/ms-fastlane <pedido>` | `/ms-fastlane <pedido>` | `$ms-fastlane <pedido>` |
 | Nota de traspaso | `/ms-handoff <objetivo>` | `/ms-handoff <objetivo>` | `$ms-handoff <objetivo>` |
 
-OpenCode usa el agente `ms-fastlane`; Claude ejecuta un fork del mismo rol y conserva sus hooks `PreToolUse` y `Stop`, con contrato interno para el padre. Codex ejecuta la skill fastlane en la tarea principal. La entrada evita una consulta inicial al arquitecto y no habilita delegación desde fastlane.
+OpenCode usa el agente `ms-fastlane`; Claude ejecuta un fork del mismo rol, con contrato interno para el padre. Codex ejecuta la skill fastlane en la tarea principal. La entrada evita una consulta inicial al arquitecto y no habilita delegación desde fastlane.
 
 `ms-handoff` entrega una nota en la conversación con objetivo, decisiones, archivos, Git observado, verificaciones y siguiente acción. Para guardarla, pide una ruta explícita dentro del proyecto: la tarea principal delega esa única escritura y no sobrescribe un destino existente ni sigue symlinks. En Claude, el fork devuelve la nota y el destino al padre, que coordina la persistencia; el fork no escribe ni crea subagentes anidados. El cliente receptor debe contrastar Git y fuentes antes de reutilizar evidencia; la nota no convierte una verificación antigua en un PASS actual.
 
@@ -496,12 +489,12 @@ set -Ux OPENCODE_DISABLE_EXTERNAL_SKILLS 1
 
 Esta variable evita importar adaptaciones externas incompatibles. Las `skills` administradas por `ms-agent-kit` se instalan directamente en la raíz nativa de OpenCode y no dependen de un plugin local.
 
-El kit genera `permission: {}` en `opencode.json` y en los 12 agentes `ms-*`, tanto en instalaciones de usuario como de proyecto. No añade reglas de comandos, secretos, edición, skills, delegación ni bucles repetidos. Los perfiles `balanced`, `strict` y `trusted` no cambian este comportamiento.
+El kit genera `permission: {}` en `opencode.json` y en los 12 agentes `ms-*`, tanto en instalaciones de usuario como de proyecto. No añade reglas de comandos, secretos, edición, skills, delegación ni bucles repetidos.
 
-Los permisos efectivos los decide OpenCode con sus valores nativos y cualquier configuración externa. Las instrucciones mantienen la misión y el alcance de cada rol; no constituyen bloqueos técnicos. El preflight muestra `unknown` para los permisos de OpenCode porque no inspecciona la sesión efectiva: no significa denegación ni obliga a pedir permiso por cada comando.
+Los permisos efectivos los decide OpenCode con sus valores nativos y cualquier configuración externa. Las instrucciones mantienen la misión y el alcance de cada rol; no constituyen bloqueos técnicos. El preflight muestra `unknown` para los permisos de cualquier cliente porque no inspecciona la sesión efectiva: no significa denegación ni obliga a pedir permiso por cada comando.
 
 ```bash
-ms-agent-kit install --target opencode --scope user
+pnpm start install --target opencode --scope user
 ```
 
 Las actualizaciones de instalaciones administradas sustituyen las reglas anteriores por el bloque vacío. Si se editaron archivos instalados, revisa el plan; `--force` guarda una copia de los conflictos antes de aplicar el contenido generado.
@@ -520,24 +513,9 @@ También se puede iniciar una sesión completa con el arquitecto:
 claude --agent ms-architect
 ```
 
-Los ganchos (`hooks`) se aplican a los agentes `ms-*` y sus flujos de trabajo. En ese contexto, la configuración compartible del proyecto en `<project>/.claude/settings.json` sigue disponible por esta capa; en cambio, se deniega el acceso a cualquier `.claude/settings.local.json`, a `~/.claude/settings.json` y a cualquier `.git/config`. En `strict` se deniega `git config`; en los perfiles permisivos requiere aprobación.
+Los agentes heredan las herramientas y el modo de permisos de Claude Code: el kit omite `tools`, `disallowedTools` y `permissionMode`. No instala hooks `PreToolUse` ni modifica `settings.json`.
 
-Estos ganchos administrados no alteran las sesiones normales de Claude, que conservan la configuración del usuario.
-
-`balanced` permite por defecto los comandos de los seis roles técnicos de desarrollo. Está pensado para repositorios de confianza:
-
-| Operación | Política |
-|---|---|
-| Trabajo local, herramientas nuevas, scripts, dependencias, tests, builds y consultas | Permitir |
-| Commit, push normal y PR solicitados al arquitecto | Permitir |
-| Borrados, reescritura de Git, administración del sistema, publicación y otras mutaciones remotas reconocidas | Pedir aprobación |
-| Acceso directo a secretos y credenciales | Denegar |
-
-Se eliminan las listas de runners, flags de verificación y endpoints de lectura. `trusted` conserva por compatibilidad la misma política de comandos; `strict` mantiene las restricciones anteriores. Los roles, herramientas de edición y coordinación siguen separados.
-
-Permitir un comando no autoriza ampliar la tarea. Estas reglas tampoco inspeccionan los efectos del código ejecutado: scripts e intérpretes pueden hacer lo que permita el entorno. Codex recibe las instrucciones y rutas de salida, sujeto a su sandbox, sin una allowlist de shell equivalente. Para excepciones de `strict` o salidas adicionales usa [autorizaciones por proyecto](#autorizar-verificaciones-de-un-proyecto).
-
-La política de comandos del guard respeta `--permission-profile`; no fija `balanced` cuando se elige `strict` o `trusted`. Un comando permitido por el guard no acredita el aislamiento de sus subprocesos ni amplía las herramientas del rol.
+El kit no instala hooks de bloqueo ni `maxTurns`. Al actualizar retira `hooks/ms-agent-guard.mjs` y `hooks/ms-result-validator.mjs` si siguen administrados y sin cambios locales. El comando manual `result validate` permanece disponible.
 
 ### Codex
 
@@ -548,7 +526,7 @@ $ms-architect implementa este cambio
 $ms-status mi-cambio
 ```
 
-Cada especialista recibe un perfil de sistema de archivos, razonamiento y búsqueda web. Una configuración global de `sandbox_mode` o los permisos de la tarea principal pueden prevalecer sobre esos perfiles.
+Cada especialista conserva sus instrucciones, modelo y esfuerzo. El kit omite `default_permissions`, tablas `permissions`, `sandbox_mode`, `approval_policy` y `web_search`; los ajustes se heredan de la tarea padre. La actualización retira las antiguas reglas administradas `rules/ms-secrets.rules` si no tienen cambios locales.
 
 `ms-agent-kit` registra Context7 como servidor MCP remoto y Playwright como servidor local mediante un bloque delimitado en `~/.codex/config.toml` o en `.codex/config.toml`, según el alcance. Codex solo carga la capa `.codex/config.toml` de proyecto cuando el repositorio está marcado como confiable; por eso `codex mcp get context7` o `codex mcp list` pueden no mostrarla dentro de un fixture o repositorio no confiable. El bloque referencia `CONTEXT7_API_KEY` por nombre en `env_http_headers`; nunca lee ni persiste su valor:
 
@@ -606,15 +584,15 @@ El mecanismo de seguridad incluye:
 
 Ejecuta siempre `plan` antes de usar `--force`.
 
-Si necesitas volver a una versión anterior de `ms-agent-kit` después de instalar el bloque Context7, ejecuta primero `ms-agent-kit uninstall --target codex` con la versión actual. Las versiones antiguas no reconocen el ownership limitado a bloques.
+Si necesitas volver a una versión anterior de `ms-agent-kit` después de instalar el bloque Context7, ejecuta primero `pnpm start uninstall --target codex` con la versión actual. Las versiones antiguas no reconocen el ownership limitado a bloques.
 
 ## Seguridad y límites
 
 - El catálogo es cerrado y rechaza patrones comunes de identificadores secretos (`tokens`), claves privadas y credenciales.
 - No se empaquetan `.env`, llaveros (`keychains`), cachés, archivos de bloqueo generados, sesiones ni `node_modules`.
 - OpenCode recibe `permission: {}` en configuración y agentes; sus permisos efectivos dependen del cliente.
-- Claude Code recibe límites de herramientas y una protección `PreToolUse` para los componentes `ms-*`.
-- Codex recibe perfiles y reglas `execpolicy` de defensa práctica; no sustituyen un entorno aislado (`sandbox`) administrado.
+- Claude Code hereda herramientas, permisos y límites del cliente; el kit no instala hooks de bloqueo.
+- Codex hereda los permisos de la tarea padre, sin perfiles ni reglas `execpolicy` del kit.
 - El kit no instala ni actualiza OpenCode, Claude Code o Codex.
 - Los paquetes externos declarados para OpenCode se descargan cuando el propio cliente arranca.
 
@@ -622,31 +600,22 @@ Para una política Codex no eludible hace falta una configuración administrada 
 
 ## Solución de problemas
 
-### `ms-agent-kit`: comando no encontrado
+### Una instrucción antigua pide el comando `ms-agent-kit`
 
-Si pnpm informa de que el directorio global no está en `PATH`, configura primero el intérprete de comandos:
-
-```bash
-pnpm setup
-```
-
-Abre una terminal nueva, vuelve al directorio `ms-agent-kit` y ejecuta:
+Ejecuta el comando desde la copia del repositorio con `pnpm start`; por ejemplo:
 
 ```bash
-pnpm build
-pnpm add --global .
-pnpm bin --global
-ms-agent-kit --help
+pnpm start doctor
 ```
 
-Asegúrate de que la ruta mostrada está incluida en `PATH` y abre una terminal nueva.
+Si la instrucción aparece dentro de un agente, actualiza sus archivos con `pnpm start` y abre una sesión nueva del cliente. Los agentes actuales usan herramientas nativas y no dependen de ese comando global.
 
 ### La instalación se detiene por conflictos
 
 Inspecciona el plan y el archivo señalado:
 
 ```bash
-ms-agent-kit plan --target all --scope user
+pnpm start plan --target all --scope user
 ```
 
 Usa `--force` solo si aceptas reemplazarlo. El contenido anterior quedará asociado a una copia de seguridad.
@@ -656,7 +625,7 @@ Usa `--force` solo si aceptas reemplazarlo. El contenido anterior quedará asoci
 Usa el modo no interactivo:
 
 ```bash
-ms-agent-kit install --target all --scope user --yes
+pnpm start install --target all --scope user --yes
 ```
 
 ### OpenCode muestra `skills` duplicadas o incompatibles
@@ -669,9 +638,9 @@ Comprueba que `CONTEXT7_API_KEY` existe en el entorno de la aplicación desde la
 
 Después de corregir el entorno, reinicia el cliente o abre una tarea nueva. En Codex puedes comprobar que el servidor quedó registrado con `codex mcp get context7`; el valor de la clave no debe aparecer en su configuración.
 
-### Codex no aplica el perfil esperado
+### El cliente sigue solicitando permisos
 
-Revisa si `~/.codex/config.toml` define un `sandbox_mode` global. Codex puede priorizarlo sobre `default_permissions` y los perfiles instalados.
+El kit no añade restricciones, pero cada cliente conserva su configuración de permisos, reglas externas y sandbox. Revisa los ajustes de la sesión y del proyecto; quitar las políticas del kit no desactiva esos controles. Después de actualizar, abre una sesión nueva para cargar los artefactos actuales.
 
 ### El asistente no pide confirmación
 

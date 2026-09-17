@@ -3,6 +3,9 @@ import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } fro
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { buildArtifacts } from "../src/adapters/index.js"
+import { applyPlan } from "../src/core/installer.js"
+import { createPlan } from "../src/core/planner.js"
 import { DEFAULT_ASSETS_ROOT } from "../src/core/catalog.js"
 import { initializeProjectContext } from "../src/core/project-context.js"
 import { commandCapabilities, diagnoseClient, inspectRuntimeProject, installationCapabilities, probeOptions, projectContextDiagnostic, resolveClientExecutable, staticCommandDecision, type ProbeRunner } from "../src/core/runtime-diagnostics.js"
@@ -29,6 +32,19 @@ afterEach(async () => {
 })
 
 describe("diagnóstico runtime seguro", () => {
+  it("doctor accepts native permissions after install without probing removed Codex policies", async () => {
+    const root = await directory()
+    const binaryRoot = await directory()
+    const buildContext = context(root)
+    await executable(binaryRoot, "codex", 'if (process.argv.slice(2).join(" ") !== "--version") throw new Error("Unexpected policy probe"); process.stdout.write("codex-cli 0.138.0\\n")')
+    await applyPlan(await createPlan(await buildArtifacts(["codex"], buildContext), buildContext), buildContext)
+    const result = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "doctor", "--target", "codex", "--scope", "project", "--project", root, "--home", buildContext.homeDir, "--json"], { encoding: "utf8", env: { ...process.env, PATH: binaryRoot }, timeout: 300_000 })
+    expect(result.status, result.stderr).toBe(0)
+    const report = JSON.parse(result.stdout)
+    expect(report).toMatchObject({ ok: true, security: { permissions: "native", effective: "no comprobado" }, warnings: [] })
+    expect(report.security).not.toHaveProperty("codexSecretRules")
+  })
+
   it("ignora PATH vacío/relativo y ejecutables del repo, incluso por symlinks", async () => {
     const root = await directory()
     const external = await directory()

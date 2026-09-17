@@ -5,7 +5,7 @@ description: "Prepara y ejecuta commits, push, PRs y releases con una convenció
 
 # Entrega Git Y PR
 
-Completa la entrega solicitada conservando los cambios ajenos y la evidencia de verificación. En un flujo `ms-*`, esta skill corresponde a `ms-architect`; los workers devuelven el resultado al arquitecto. En una tarea principal sin un rol restringido, úsala directamente dentro de sus permisos. La skill no amplía herramientas ni anula denegaciones; `strict` mantiene al arquitecto con Git de solo lectura.
+Completa la entrega solicitada conservando los cambios ajenos y la evidencia de verificación. En un flujo `ms-*`, esta skill corresponde a `ms-architect`; los workers devuelven el resultado al arquitecto. En una tarea principal sin un rol restringido, úsala directamente dentro de sus permisos. La skill no amplía herramientas ni anula denegaciones.
 
 ## Convención Aplicable
 
@@ -47,7 +47,7 @@ Aplica los mensajes y tipos de la convención resuelta. Un mensaje explícito de
 - Antes de crear una PR, busca una abierta para la misma rama, base y repositorio con `gh pr list`. Reutiliza la existente; actualízala solo dentro del alcance solicitado. No dupliques una PR por un error de red o una respuesta incompleta.
 - Publica con `git push -u <remoto> <rama>`. Después crea la PR con `gh pr create --base <base> --head <rama> --title <título> --body <cuerpo>` o actualiza con `gh pr edit <número>`. Respeta la petición de borrador cuando exista.
 - El título y cuerpo deben permitir revisar el cambio sin leer la conversación: problema y comportamiento resultante, verificaciones con sus resultados reales y limitaciones relevantes. Sigue la plantilla existente; usa `Closes #…` solo si la entrega debe cerrar esa issue. No crees issues ni planes adicionales para completar una entrega.
-- Usa `--body-file` cuando haya un archivo preparado. Si el rol no puede escribirlo, usa texto literal que admita su política; no fabriques archivos mediante redirecciones o intérpretes. En `balanced`/`trusted` puedes combinar consultas permitidas; ejecuta las mutaciones en pasos verificables y comprueba cada resultado. No cambies de sintaxis para eludir una denegación.
+- Usa `--body-file` cuando haya un archivo preparado. Si el rol no puede escribirlo, usa texto literal que admita su política; no fabriques archivos mediante redirecciones o intérpretes. Puedes combinar consultas permitidas por el cliente; ejecuta las mutaciones en pasos verificables y comprueba cada resultado. No cambies de sintaxis para eludir una denegación.
 - Verifica la URL, rama y base con `gh pr view`; consulta `gh pr checks` si aplica. Distingue CI pendiente de CI correcto. Si la publicación devuelve un resultado incierto, consulta el estado remoto (`git ls-remote --heads <remoto> <rama>`) y la PR antes de reintentar. Ante fallo de autenticación o rechazo de política, informa de la causa y conserva el trabajo para retomarlo.
 
 ## Cierre

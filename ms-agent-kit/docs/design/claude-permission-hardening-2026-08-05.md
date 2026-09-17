@@ -1,8 +1,11 @@
 # TDD: endurecimiento de permisos Claude
 
+> Referencia histórica. Desde 2026-09-17 el kit no genera políticas de permisos en ningún cliente. Se retiraron el guard de Claude, las tablas de comandos y las reglas de Codex. La validación de resultados queda disponible como comando manual en los tres clientes, sin hooks de bloqueo. Este diseño describe la implementación anterior.
+
 | Campo | Valor |
 |---|---|
-| Estado | Implementado y verificado |
+| Estado | Reemplazado |
+| Retención | Histórica |
 | Versión | 1.1 |
 | Fecha de creación | 2026-08-05 |
 | PRD | N/A — decisión técnica explícita |
