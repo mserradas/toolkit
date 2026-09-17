@@ -312,6 +312,11 @@ healthcheck() {
     fi
 
     if installed herdr; then
+        if bash "$DOTFILES_DIR/herdr/install-plugins.sh" --check; then
+            check "Plugins Herdr: notificaciones y títulos" "ok"
+        else
+            check "Plugins Herdr: notificaciones y títulos" "plugin, configuración o alerter no disponible"
+        fi
         if HERDR_CONFIG_PATH="$HOME/.config/herdr/config.toml" herdr config check &>/dev/null; then
             check "Sintaxis Herdr" "ok"
         else
@@ -386,6 +391,8 @@ main() {
     install_homebrew
     install_packages
     set_fish_shell
+    # Prepare Herdr plugins before applying configs that disable native toasts.
+    bash "$DOTFILES_DIR/herdr/install-plugins.sh"
     copy_configs
     install_fish_plugins
     install_herdr_integrations

@@ -6,6 +6,7 @@ import { buildArtifacts } from "../src/adapters/index.js"
 import { DEFAULT_ASSETS_ROOT } from "../src/core/catalog.js"
 import { applyPlan, installationStatus, uninstallTargets } from "../src/core/installer.js"
 import { createPlan } from "../src/core/planner.js"
+import { parseMarkdown, renderMarkdown } from "../src/core/frontmatter.js"
 import type { Artifact, BuildContext, InstallState } from "../src/core/types.js"
 
 const temporaryDirectories: string[] = []
@@ -79,6 +80,36 @@ function legacyCodexMetadataArtifact(
 }
 
 describe("transactional installer", () => {
+  it("removes previously managed OpenCode permissions and keeps them empty on reinstall", async () => {
+    for (const scope of ["user", "project"] as const) {
+      const context = { ...await testContext(), scope }
+      const artifacts = await buildArtifacts(["opencode"], context)
+      const legacy = artifacts.map((artifact) => {
+        if (artifact.name === "opencode.json") {
+          const config = JSON.parse(artifact.content.toString())
+          config.permission = { bash: { "gh api*": "deny" }, read: { "**/.env": "deny" } }
+          return { ...artifact, content: Buffer.from(JSON.stringify(config)) }
+        }
+        if (artifact.kind === "agent") {
+          const document = parseMarkdown(artifact.content.toString())
+          return { ...artifact, content: Buffer.from(renderMarkdown({ ...document.frontmatter, permission: { edit: "deny", bash: "ask" } }, document.body)) }
+        }
+        return artifact
+      })
+      await applyPlan(await createPlan(legacy, context), context)
+      const upgrade = await createPlan(artifacts, context)
+      expect(upgrade.items.filter((item) => item.action === "update")).toHaveLength(13)
+      expect(upgrade.items.some((item) => item.action === "conflict")).toBe(false)
+      await applyPlan(upgrade, context)
+      for (const artifact of artifacts.filter((entry) => entry.name === "opencode.json" || entry.kind === "agent")) {
+        const content = await readFile(artifact.destination, "utf8")
+        const permission = artifact.kind === "agent" ? parseMarkdown(content).frontmatter.permission : JSON.parse(content).permission
+        expect(permission).toEqual({})
+      }
+      expect((await createPlan(artifacts, context)).items.every((item) => item.action === "unchanged")).toBe(true)
+    }
+  })
+
   it("installs all targets idempotently", async () => {
     const context = await testContext()
     const artifacts = await buildArtifacts(["opencode", "claude", "codex"], context)

@@ -2,19 +2,12 @@ import path from "node:path"
 import { agentDefinition, agentToolCycleBudget } from "../core/agent-catalog.js"
 import { renderMarkdown } from "../core/frontmatter.js"
 import { resolveAgentModel } from "../core/agent-models.js"
-import {
-  OPENCODE_SECRET_BASH_RULES,
-  OPENCODE_SECRET_READ_RULES,
-} from "../core/permissions.js"
-import { openCodeRolePermission } from "../core/opencode-role-permissions.js"
-import { withVerificationCommands } from "../core/verification-policy.js"
 import type { Artifact, BuildContext, Catalog } from "../core/types.js"
 import {
   copySkillArtifacts,
   embeddedAgentBody,
   textArtifact,
   projectSharedRules,
-  projectWritePaths,
   projectVerificationInstructions,
 } from "./common.js"
 
@@ -22,6 +15,7 @@ const OPENCODE_COMPATIBILITY = `
 - Este archivo es autocontenido: las reglas de docs/agents-shared.md estan incorporadas arriba.
 - Conserva los nombres nativos de herramientas, permisos, modelos y variantes de OpenCode.
 - El archivo docs/agents-shared.md tambien se instala como referencia humana, pero no es necesario cargarlo otra vez.
+- El kit genera permission: {} en OpenCode, sin restricciones adicionales en ningún perfil. Los límites de cada rol son instrucciones de trabajo; las referencias a bloqueos, guards o perfiles restrictivos de otros clientes no describen permisos técnicos de OpenCode. Los permisos efectivos dependen de los valores nativos y de la configuración externa del cliente.
 `
 
 const OPENCODE_DEFAULT_AGENT = "ms-architect"
@@ -36,17 +30,6 @@ function configRootFor(context: BuildContext): string {
   return context.scope === "user" ? rootFor(context) : context.projectRoot
 }
 
-function appendPermissionRules(
-  current: unknown,
-  trailingRules: Record<string, string>,
-): Record<string, unknown> {
-  const base =
-    typeof current === "object" && current !== null && !Array.isArray(current)
-      ? (current as Record<string, unknown>)
-      : { "*": current ?? "allow" }
-  return { ...base, ...trailingRules }
-}
-
 function openCodeConfig(context: BuildContext): string {
   const defaultModel = resolveAgentModel(OPENCODE_DEFAULT_AGENT, "opencode", context.kitConfiguration)
   return `${JSON.stringify(
@@ -54,11 +37,7 @@ function openCodeConfig(context: BuildContext): string {
       $schema: "https://opencode.ai/config.json",
       model: defaultModel.model,
       default_agent: OPENCODE_DEFAULT_AGENT,
-      permission: {
-        bash: OPENCODE_SECRET_BASH_RULES,
-        read: OPENCODE_SECRET_READ_RULES,
-        skill: "allow",
-      },
+      permission: {},
       mcp: {
         playwright: {
           type: "local",
@@ -80,29 +59,16 @@ function openCodeConfig(context: BuildContext): string {
   )}\n`
 }
 
-function secureFrontmatter(
+function agentFrontmatter(
   agentName: string,
   frontmatter: Record<string, unknown>,
-  context: BuildContext,
 ): Record<string, unknown> {
   if (frontmatter.permission !== undefined) {
-    throw new Error(`El recurso (asset) ${agentName} no debe definir \`permission\`; usa la política central`)
-  }
-  const currentPermission = withVerificationCommands(openCodeRolePermission(agentName, context.permissionProfile ?? "balanced"), agentName, context)
-  if (agentName === "ms-writer") currentPermission.edit = {
-    ...Object.fromEntries([["*", "deny"], ...projectWritePaths(agentName, context).map((entry) => [entry, "allow"])]),
-    ...OPENCODE_SECRET_READ_RULES,
+    throw new Error(`El recurso (asset) ${agentName} no debe definir \`permission\`; OpenCode se genera sin restricciones del kit`)
   }
   return {
     ...frontmatter,
-    permission: {
-      ...currentPermission,
-      bash: appendPermissionRules(currentPermission.bash, OPENCODE_SECRET_BASH_RULES),
-      read: { ...OPENCODE_SECRET_READ_RULES },
-      // Evita que OpenCode prolongue automaticamente una ejecucion que ya esta atascada.
-      doom_loop: "deny",
-      skill: currentPermission.skill,
-    },
+    permission: {},
   }
 }
 
@@ -160,7 +126,7 @@ export function buildOpenCodeArtifacts(catalog: Catalog, context: BuildContext):
         name: agent.name,
         root,
         destination: path.join(root, "agents", agent.fileName),
-        content: renderMarkdown(secureFrontmatter(agent.name, frontmatter, context), body),
+        content: renderMarkdown(agentFrontmatter(agent.name, frontmatter), body),
       }),
     )
   }

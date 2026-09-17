@@ -7,7 +7,7 @@ import { buildArtifacts } from "../src/adapters/index.js"
 import { DEFAULT_ASSETS_ROOT } from "../src/core/catalog.js"
 import { parseMarkdown } from "../src/core/frontmatter.js"
 import { validateKitConfiguration } from "../src/core/kit-config.js"
-import { getProjectVerification, withVerificationCommands } from "../src/core/verification-policy.js"
+import { getProjectVerification, verificationOutputPaths, withVerificationCommands } from "../src/core/verification-policy.js"
 import type { Artifact, BuildContext } from "../src/core/types.js"
 
 const roots: string[] = []
@@ -85,19 +85,37 @@ describe("personal project verification grants", () => {
     expect(() => getProjectVerification({ ...context, projectRoot: link, kitConfiguration: { schemaVersion: 1, models: {}, verification: { projects: [{ root: link, commands: ["make verify"], outputPaths: [] }] } } })).toThrow("canónica")
   })
 
+  it("grants default tester outputs in balanced/trusted without source-write tools or strict changes", async () => {
+    const base = await fixture()
+    for (const permissionProfile of ["balanced", "trusted", "strict"] as const) {
+      const context = { ...base, permissionProfile, scope: "user" as const }
+      const artifacts = await buildArtifacts(["opencode", "claude", "codex"], context)
+      const outputs = verificationOutputPaths("ms-tester", context)
+      expect(outputs.includes("coverage")).toBe(permissionProfile !== "strict")
+      expect(verificationOutputPaths("ms-scout", context)).toEqual([])
+      const codex = artifact(artifacts, "codex", "ms-tester")
+      expect(codex).toContain('extends = ":read-only"')
+      expect(codex.includes('"coverage" = "write"')).toBe(permissionProfile !== "strict")
+      for (const output of outputs) expect(codex).toContain(`"${output}" = "write"`)
+      expect(codex).not.toContain('"src" = "write"')
+      expect(parseMarkdown(artifact(artifacts, "claude", "ms-tester")).frontmatter.disallowedTools).toContain("Write")
+      expect(parseMarkdown(artifact(artifacts, "opencode", "ms-tester")).frontmatter.permission).toEqual({})
+    }
+  })
+
   it("materializes exact project grants and only tester output directories in all adapters", async () => {
     const context = await fixture()
     const artifacts = await buildArtifacts(["opencode", "claude", "codex"], context)
     for (const role of ["ms-codex", "ms-fastlane", "ms-tester"]) {
       const openCode = parseMarkdown(artifact(artifacts, "opencode", role)).frontmatter
-      expect(openCode.permission).toMatchObject({ bash: { [commands[1]!]: "allow" } })
+      expect(openCode.permission).toEqual({})
       expect(artifact(artifacts, "claude", role)).toContain("Verificaciones autorizadas personalmente")
       expect(artifact(artifacts, "codex", role)).toContain("Verificaciones autorizadas personalmente")
     }
     const testerClaude = parseMarkdown(artifact(artifacts, "claude", "ms-tester")).frontmatter
     expect(testerClaude.disallowedTools).toEqual(expect.arrayContaining(["Write", "Edit", "NotebookEdit"]))
     const testerOpenCode = parseMarkdown(artifact(artifacts, "opencode", "ms-tester")).frontmatter.permission as Record<string, unknown>
-    expect(testerOpenCode.edit).toBe("deny")
+    expect(testerOpenCode).toEqual({})
     const testerCodex = artifact(artifacts, "codex", "ms-tester")
     expect(testerCodex).toContain('extends = ":read-only"')
     for (const output of outputPaths) expect(testerCodex).toContain(`"${output}" = "write"`)

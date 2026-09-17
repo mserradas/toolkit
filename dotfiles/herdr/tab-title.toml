@@ -1,0 +1,4 @@
+# Portable preferences only; process state and paths stay local to each machine.
+show_tab_number = false
+directory_depth = 1
+interval_seconds = 10

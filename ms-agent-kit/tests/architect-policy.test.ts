@@ -485,66 +485,31 @@ describe("ms-architect policy", () => {
     expect(tester).toContain("300 segundos para comandos focales")
     expect(tester).toContain("900 segundos para suites completas")
     expect(tester).not.toContain("1800")
-    expect(coder).toContain("una sola operación de shell por llamada")
-    for (const forbiddenGrouping of ["`&`", "`&&`", "`;`", "pipes (`|`)", "shells envolventes"]) {
-      expect(coder).toContain(forbiddenGrouping)
-    }
-    expect(coder).toContain("sustitución de comandos con `$()` o backticks")
-    expect(coder).toContain("sustitución de procesos con `<()` o `>()`")
-    expect(coder).toContain("redirecciones shell con `<` o `>`")
-    expect(coder).toContain("comandos multilínea")
+    expect(coder).toContain("puedes encadenar operaciones permitidas")
+    expect(coder).toContain("comprobando cada resultado")
     expect(coder).toContain("timeout documentado por el repositorio")
     expect(coder).toContain("300 segundos a cada comando focal")
     expect(coder).toContain("900 segundos a una suite completa")
     expect(coder).toContain("no lo reintentes automáticamente")
     expect(docs).toContain("diagnóstico operativo de solo lectura")
-    expect(docs).toContain("una sola operación de shell por llamada")
-    expect(docs).toContain("Sus permisos Bash bloquean la composición")
-    expect(docs).toContain("sustitución de comandos con `$()` o backticks")
-    expect(docs).toContain("sustitución de procesos con `<()` o `>()`")
-    expect(docs).toContain("redirecciones shell con `<` o `>`")
-    expect(docs).toContain("comandos multilínea")
+    expect(docs).toContain("cada operación conserva sus permisos")
+    expect(docs).toContain("el perfil confía en el código del proyecto")
     expect(docs).toContain("no se reintenta automáticamente")
     expect(docs).toContain("300 segundos para comandos focales")
     expect(docs).toContain("900 segundos para la suite completa")
   })
 
-  it("summarizes the narrowed OpenCode read and verification permissions", async () => {
-    const debuggerPrompt = await readFile(
-      path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-debugger.md"),
-      "utf8",
-    )
+  it("documents permissive development and bounded documentary inspection", async () => {
+    const debuggerPrompt = await readFile(path.join(DEFAULT_ASSETS_ROOT, "agents", "ms-debugger.md"), "utf8")
     const docs = await readFile(path.join(DEFAULT_ASSETS_ROOT, "docs", "agents.md"), "utf8")
-
-    expect(docs).toContain("`find` no forma parte de este permiso genérico")
-    expect(docs).toContain("`git branch --show-current`")
-    expect(docs).toContain("`git branch --list`")
-    expect(docs).not.toContain("`git branch --list*`")
+    expect(docs).toContain("`balanced` permite comandos por defecto")
+    expect(docs).toContain("`trusted` comparte esa política; `strict` mantiene sus listas cerradas")
+    expect(docs).toContain("La política no audita los efectos de scripts ni sustituye el sandbox")
     expect(docs).toContain("La inspección común de `ms-spec` y `ms-designer` se limita a `git status --short`")
     expect(docs).toContain("`git --no-pager diff --no-ext-diff --no-textconv --stat -- <directorio propio>`")
-    expect(docs).toContain("su variante `--name-only`")
     expect(docs).toContain("No habilita patches, `--check` ni shell general")
-    for (const candidate of [
-      "`pnpm build`",
-      "`pnpm run build`",
-      "`pnpm build:staging`",
-      "`pnpm run build:staging`",
-      "`pnpm exec ng build --configuration development`",
-      "`pnpm exec ng test`",
-      "Prettier con `--check`",
-      "`alembic heads`/`alembic history`",
-    ]) {
-      expect(docs).toContain(candidate)
-    }
-    expect(debuggerPrompt).toContain("comandos desconocidos quedan bloqueados por el fallback `deny`")
-    expect(debuggerPrompt).toContain("no entran en `ask`")
-    expect(debuggerPrompt).not.toContain("Cualquier otro comando entra en `ask`")
-    expect(docs).toContain('conserva `"*": "deny"` como fallback')
-    expect(docs).toContain("Kubernetes `get`/`describe`/`logs`")
-    expect(docs).toContain("`git push`, `ssh`, `scp`, `nc`, Netcat")
-    expect(docs).toContain("están en `deny`")
-    expect(docs).not.toContain("publicación/red (`git push`, `ssh`, `scp`, `nc`)")
-    expect(docs).not.toContain("`find`, `tree`")
+    expect(debuggerPrompt).toContain("En `strict`, los comandos desconocidos quedan bloqueados")
+    expect(debuggerPrompt).toContain("Tu misión sigue siendo de solo lectura")
   })
 
   it("documents the actual general skill catalog including lifecycle", async () => {
@@ -642,12 +607,8 @@ describe("ms-architect policy", () => {
         "parches coherentes",
         "diff antes de releer archivos completos",
         "inner loop",
-        "una sola operación de shell por llamada",
-        "bloqueadas por los permisos Bash del rol",
-        "sustitución de comandos con `$()` o backticks",
-        "sustitución de procesos con `<()` o `>()`",
-        "redirecciones shell con `<` o `>`",
-        "comandos multilínea",
+        "puedes encadenar operaciones permitidas",
+        "comprobando cada resultado",
         "timeout documentado por el repositorio",
         "no lo reintentes automáticamente",
         "un único `git diff --check`",

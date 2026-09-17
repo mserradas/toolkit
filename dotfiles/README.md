@@ -11,7 +11,7 @@ Instala y configura un entorno de terminal basado en Ghostty, Fish, Herdr, Stars
 | Herdr | Administrar Spaces, tabs, divisiones, procesos persistentes, agentes y notificaciones |
 | Atuin | Buscar en el historial y aplicar sus colores y atajos |
 | Starship | Mostrar el indicador de comandos con estado de Git, duración y versiones de entornos |
-| Herramientas | `eza`, `fzf`, `fd`, `bat`, `zoxide`, `fnm`, `git`, `pnpm` y `terminal-notifier` |
+| Herramientas | `eza`, `fzf`, `fd`, `bat`, `zoxide`, `fnm`, `git`, `pnpm`, `terminal-notifier` y `alerter` |
 
 Ghostty inicia Herdr por su nombre en `PATH`. Si Herdr no está disponible, muestra un aviso y abre Fish para que la terminal siga siendo utilizable. Ghostty no administra tabs, divisiones ni restauración de estado: esas funciones pertenecen únicamente a Herdr.
 
@@ -54,10 +54,11 @@ La comprobación del servidor usa `python3`. Ejecuta `--check` directamente en F
 | 1 | Instala Homebrew | Se omite si ya existe |
 | 2 | Instala aplicaciones, paquetes y fuente | Homebrew conserva lo que ya está instalado |
 | 3 | Registra Fish en `/etc/shells` y lo configura como intérprete predeterminado | Solo cambia lo necesario |
-| 4 | Valida y copia las cinco configuraciones | Crea un backup versionado y reemplaza cada destino |
-| 5 | Instala los plugins Fish declarados en `fish/plugins.list` | Añade solo los ausentes; conserva otros plugins y las versiones instaladas |
-| 6 | Instala las integraciones de Herdr para OpenCode y Codex | Solo actúa cuando ya existe la carpeta de configuración del cliente |
-| 7 | Ejecuta la comprobación de estado | Detecta binarios, fuente, archivos, sintaxis, plugins, integraciones, la versión activa de Herdr y colores desactivados en el panel actual |
+| 4 | Prepara los plugins de notificaciones y títulos de Herdr, y `alerter` | Conserva las versiones fijadas; instala Rust si falta `cargo` al instalar un plugin |
+| 5 | Valida y copia las cinco configuraciones | Crea un backup versionado y reemplaza cada destino |
+| 6 | Instala los plugins Fish declarados en `fish/plugins.list` | Añade solo los ausentes; conserva otros plugins y las versiones instaladas |
+| 7 | Instala las integraciones de Herdr para OpenCode y Codex | Solo actúa cuando ya existe la carpeta de configuración del cliente |
+| 8 | Ejecuta la comprobación de estado | Detecta binarios, fuente, archivos, sintaxis, plugins, integraciones, la versión activa de Herdr y colores desactivados en el panel actual |
 
 ### Paquetes instalados
 
@@ -70,6 +71,9 @@ Navegación:   eza, fzf, fd, bat, zoxide
 Historial:    atuin
 Entornos:     fnm
 Utilidades:   git, pnpm, terminal-notifier
+Avisos:       alerter, herdr-focus-notify v0.5.0
+Pestañas:     aarsh21/herdr-tab-title v0.1.6
+Compilación:  rust (solo si falta cargo al instalar el plugin)
 ```
 
 ## Archivos administrados
@@ -129,20 +133,22 @@ Son apropiados para rutas, alias, variables o preferencias exclusivas de un equi
 |---|---|
 | `Cmd+K` | Limpiar la pantalla |
 | `Cmd+G` | Enviar `Ctrl+A`, `Alt+G` a Herdr para abrir el terminal emergente; repetirlo en el prompt lo cierra |
+| `Cmd+Alt+←/→` | Pestaña anterior/siguiente de Herdr; reenvía sus atajos existentes `Ctrl+A`, `p/n` |
 | `Shift+Enter` | Enviar una entrada distinguible a aplicaciones compatibles |
 
 Los atajos nativos que crean tabs y divisiones de Ghostty están desactivados para evitar dos capas de organización.
 
 ### Herdr
 
-Herdr conserva su mapa de atajos predeterminado; la única personalización general es usar `Ctrl+A` como prefijo. Los atajos con prefijo se ejecutan pulsando `Ctrl+A`, soltándolo y pulsando la segunda tecla.
+Herdr conserva su mapa de atajos predeterminado; la única personalización general es usar `Ctrl+A` como prefijo. Ghostty añade el acceso directo a pestañas con `Cmd+Alt+←/→`. Los atajos con prefijo se ejecutan pulsando `Ctrl+A`, soltándolo y pulsando la segunda tecla.
 
 | Atajo | Acción |
 |---|---|
 | `Ctrl+A`, `Shift+N` | Crear un Space |
 | `Ctrl+A`, `w` | Abrir el selector de Spaces |
 | `Ctrl+A`, `Shift+G` | Crear un Space asociado a un Git worktree |
-| `Ctrl+A`, `c` | Crear una tab |
+| `Ctrl+A`, `c` | Crear una tab sin preguntar su nombre |
+| `Ctrl+A`, `p/n` | Pestaña anterior/siguiente |
 | `Ctrl+A`, `v` | Crear una división lateral |
 | `Ctrl+A`, `-` | Crear una división inferior |
 | `Ctrl+A`, `Shift+R` | Recargar la configuración |
@@ -152,6 +158,19 @@ Herdr conserva su mapa de atajos predeterminado; la única personalización gene
 | `Ctrl+A`, `q` | Separar el cliente sin detener los procesos |
 
 El cierre mediante `Alt+G` o `Cmd+G` pertenece al Fish del popup. Si hay una aplicación en primer plano dentro del popup, sal primero de ella. Herdr conserva los procesos cuando se cierra la ventana. Al volver a abrir Ghostty, el cliente se conecta a la sesión persistente existente.
+
+La barra lateral muestra los agentes con su estado, Space y título del terminal. Cada Space ocupa una línea con su rama y estado de Git. Los paneles comparten divisores, sin espacios adicionales. El aviso de copia al portapapeles está desactivado; la copia automática al seleccionar sigue disponible.
+
+Las pestañas usan [herdr-tab-title](https://github.com/aarsh21/herdr-tab-title) v0.1.6 para mostrar el proceso del panel enfocado, sin prefijo numérico. Cuando el shell está en reposo, muestran la carpeta actual. Los nombres manuales se respetan. El plugin responde a eventos de Herdr y revisa los títulos cada 10 segundos como respaldo; no añade inicializaciones a Fish ni a Ghostty.
+
+Limitación observada en v0.1.6: si un agente ejecuta procesos hijos, el plugin puede elegir uno de ellos para el título; en OpenCode con MCP se ha observado `mcp@latest` en lugar de `opencode`.
+
+Las preferencias portables están en `herdr/tab-title.toml`. `bash herdr/install-plugins.sh` instala o habilita ambos plugins, copia esas preferencias a la carpeta local del plugin y arranca el observador de títulos. `sync.sh` sigue limitado a las cinco configuraciones principales. Para comprobar el observador:
+
+```bash
+herdr plugin action invoke status --plugin aarsh21.tab-title
+herdr plugin log list --plugin aarsh21.tab-title --limit 1
+```
 
 ### Fish
 
@@ -165,7 +184,7 @@ Los plugins compartidos son Fisher, `fzf.fish` y `done`, declarados en `fish/plu
 fish fish/install-plugins.fish
 ```
 
-Herdr entrega avisos de agentes, `done` avisa de comandos largos cuando cambias de aplicación y `alert` envía avisos explícitos. `done` no distingue cambios entre paneles de Herdr.
+`herdr-focus-notify` entrega avisos de agentes, `done` avisa de comandos largos cuando cambias de aplicación y `alert` envía avisos explícitos. `done` no distingue cambios entre paneles de Herdr. `terminal-notifier` se conserva para estas funciones de Fish.
 
 Consulta la lista completa en [`fish/config.fish`](./fish/config.fish).
 
@@ -186,7 +205,7 @@ El instalador ejecuta de forma idempotente las integraciones oficiales de Herdr 
 - OpenCode, si existe `~/.config/opencode`.
 - Codex, si existe `~/.codex`.
 
-Si un cliente no está configurado, se omite sin considerar la instalación fallida. Las integraciones comunican a Herdr el estado y la sesión de cada agente; Herdr agrupa los agentes por Space y entrega notificaciones del sistema tras un segundo.
+Si un cliente no está configurado, se omite sin considerar la instalación fallida. Las integraciones comunican a Herdr el estado y la sesión de cada agente; Herdr agrupa los agentes por Space y el plugin gestiona las notificaciones.
 
 Después de instalar un cliente nuevo, vuelve a ejecutar `./install.sh` para añadir su integración. Comprueba el estado con:
 
@@ -194,6 +213,29 @@ Después de instalar un cliente nuevo, vuelve a ejecutar `./install.sh` para añ
 herdr integration status
 ./install.sh --check
 ```
+
+## Notificaciones de agentes
+
+Se usa [herdr-focus-notify](https://github.com/yankewei/herdr-focus-notify) v0.5.0, compatible con Herdr 0.9.0. Avisa cuando un agente termina o necesita entrada y permite volver a su panel mediante un clic. Las notificaciones y los sonidos nativos de Herdr están desactivados para evitar avisos duplicados.
+
+En una instalación existente, prepara el plugin antes de aplicar la configuración:
+
+```bash
+bash herdr/install-plugins.sh
+./sync.sh --apply
+herdr server reload-config
+```
+
+Recarga Ghostty con `Cmd+Shift+,`. En cada ordenador, enfoca manualmente un panel dentro de Ghostty para que el plugin asocie ese Space al terminal. Los permisos de notificación de macOS y las asociaciones del plugin son locales; no se sincronizan con dotfiles.
+
+Comprueba la instalación y envía un aviso de prueba:
+
+```bash
+bash herdr/install-plugins.sh --check
+herdr plugin action invoke test --plugin herdr-focus-notify
+```
+
+Si macOS solicita permiso para las notificaciones de `alerter`, concédelo. Si no aparece el aviso, revisa Ajustes del Sistema → Notificaciones y el modo de concentración. Las preferencias de colores y fuente son independientes de este plugin.
 
 ## Recuperación
 
@@ -243,7 +285,7 @@ La ruta exacta depende de la arquitectura y de la instalación de Homebrew.
 
 ### No llegan notificaciones
 
-Autoriza Herdr en Ajustes del Sistema → Notificaciones y confirma que `delivery = "system"` permanece en `~/.config/herdr/config.toml`.
+Comprueba `bash herdr/install-plugins.sh --check` y ejecuta la prueba descrita en «Notificaciones de agentes». Revisa los permisos de `alerter` en Ajustes del Sistema → Notificaciones. Mantén `delivery = "off"` en Herdr para evitar duplicados con el plugin.
 
 ### No aparecen iconos
 

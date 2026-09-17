@@ -9,6 +9,7 @@ import { DEFAULT_ASSETS_ROOT } from "../src/core/catalog.js"
 import { parseMarkdown } from "../src/core/frontmatter.js"
 import { capabilityProfile } from "../src/core/profiles.js"
 import type { Artifact, BuildContext } from "../src/core/types.js"
+import { reviewCommentReads } from "./fixtures/github-review-api.js"
 
 const temporaryDirectories: string[] = []
 
@@ -18,7 +19,7 @@ afterEach(async () => {
   )
 })
 
-async function setupClaude(): Promise<{ artifacts: Artifact[]; projectRoot: string }> {
+async function setupClaude(permissionProfile: BuildContext["permissionProfile"] = "balanced"): Promise<{ artifacts: Artifact[]; projectRoot: string }> {
   const projectRoot = await mkdtemp(path.join(tmpdir(), "ms-agent-kit-guard-"))
   temporaryDirectories.push(projectRoot)
   const context: BuildContext = {
@@ -26,6 +27,7 @@ async function setupClaude(): Promise<{ artifacts: Artifact[]; projectRoot: stri
     homeDir: path.join(projectRoot, "home"),
     projectRoot,
     scope: "project",
+    permissionProfile,
   }
   const artifacts = await buildArtifacts(["claude"], context)
   return { artifacts, projectRoot }
@@ -33,8 +35,9 @@ async function setupClaude(): Promise<{ artifacts: Artifact[]; projectRoot: stri
 
 async function setupGuard(
   transformGuard: (content: string) => string = (content) => content,
+  permissionProfile: BuildContext["permissionProfile"] = "strict",
 ): Promise<{ guardPath: string; projectRoot: string }> {
-  const { artifacts, projectRoot } = await setupClaude()
+  const { artifacts, projectRoot } = await setupClaude(permissionProfile)
   const guard = artifacts.find((artifact) => artifact.kind === "policy" && artifact.name === "ms-agent-guard")
   if (!guard) throw new Error("No se genero el guard de Claude")
   await mkdir(path.dirname(guard.destination), { recursive: true })
@@ -78,6 +81,56 @@ function runGuard(
 }
 
 describe("Claude permission guard", () => {
+  it("permits local work and GitHub reads while asking only for sensitive operations", async () => {
+    for (const profile of ["balanced", "trusted"] as const) {
+      const { guardPath, projectRoot } = await setupGuard(undefined, profile)
+      await writeFile(path.join(projectRoot, ".env"), "SYNTHETIC_TEST_VALUE")
+      await symlink(path.join(projectRoot, ".env"), path.join(projectRoot, "alias.txt"))
+      const cases: Array<[string, string, "allow" | "ask" | "deny"]> = [
+        ["ms-codex", "cat alias.txt", "deny"],
+        ["ms-architect", 'gh issue edit 42 --body "' + "Long issue description. ".repeat(40) + '"', "allow"],
+        ["ms-codex", "./scripts/custom-check.sh --report report.json", "allow"],
+        ["ms-codex", "docker compose run --rm tests", "allow"],
+        ["ms-codex", "make custom-target", "allow"],
+        ["ms-fastlane", 'node -e "console.log(1)"', "allow"],
+        ["ms-codex", 'printf "description" > pr-body.md', "allow"],
+        ["ms-codex", "npm install package", "allow"],
+        ["ms-tester", "./verify.sh", "allow"],
+        ["ms-debugger", "docker logs service", "allow"],
+        ["ms-scout", "gh help run view", "allow"],
+        ["ms-architect", 'gh api "repos/owner/repo/issues?state=all" --paginate --jq \".[].body\"', "allow"],
+        ["ms-architect", 'gh api repos/owner/repo/pulls/73/comments | jq ".[].body"', "allow"],
+        ["ms-codex", "jq . .env", "deny"],
+        ["ms-architect", "git add -A && git commit -m update", "allow"],
+        ["ms-architect", "git push -u origin feature/work", "allow"],
+        ["ms-architect", 'gh pr create --base develop --body "Implementation"', "allow"],
+        ["ms-architect", "gh pr merge 42", "ask"],
+        ["ms-codex", "git push origin feature/work", "ask"],
+        ["ms-codex", "gh api -X POST repos/owner/repo/issues", "ask"],
+        ["ms-codex", "gh api repos/owner/repo/issues -f title=example", "ask"],
+        ["ms-codex", "rm -rf dist", "ask"],
+        ["ms-codex", "env /bin/rm -rf dist", "ask"],
+        ["ms-codex", "sh -c 'git reset --hard'", "ask"],
+        ["ms-codex", "npm install -g tool", "ask"],
+        ["ms-codex", "sudo apt install package", "ask"],
+        ["ms-codex", "npm publish", "ask"],
+        ["ms-codex", "ms-agent-kit install --target all", "ask"],
+        ["ms-codex", "cat .env", "deny"],
+        ["ms-codex", "printf x $(cat .env)", "deny"],
+        ["ms-codex", 'sh -c "cat .env"', "deny"],
+        ["ms-codex", "cat .git/config", "deny"],
+        ["ms-codex", "gh auth token", "deny"],
+        ["ms-tester", "pnpm exec eslint --fix src", "deny"],
+      ]
+      for (const command of reviewCommentReads) cases.push(["ms-architect", command, "allow"])
+      for (const [agent, command, expected] of cases) {
+        const result = await runGuard(guardPath, projectRoot, agent, { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } })
+        expect(result.code, `${profile} ${agent}: ${command}: ${result.stderr}`).toBe(expected === "deny" ? 2 : 0)
+        if (expected !== "deny") expect(JSON.parse(result.stdout).hookSpecificOutput.permissionDecision, command).toBe(expected)
+      }
+    }
+  })
+
   it("blocks secrets but permits example environment files", async () => {
     const { guardPath, projectRoot } = await setupGuard()
 
@@ -981,6 +1034,36 @@ describe("Claude permission guard", () => {
     expect(allowedVerification.code).toBe(0)
   })
 
+  it("checks every operation before allowing sequences and pipelines", async () => {
+    for (const profile of ["balanced", "trusted"] as const) {
+      const { guardPath, projectRoot } = await setupGuard(undefined, profile)
+      for (const [command, decision] of [
+        ["git status && git diff", "allow"],
+        ["pnpm test && pwd", "allow"],
+        ["gh api repos/owner/repo/issues | jq .", "allow"],
+        ["git diff || git status", "allow"],
+        ["npm install package", "allow"],
+        ["git status && touch proof.txt", "allow"],
+        ['git log --grep="one;two" && git status', "allow"],
+        ["pnpm test && npm install -g package", "ask"],
+        ["npm publish", "ask"],
+        ["npm install --location=global package", "ask"],
+        ["git status && cat .env", "deny"],
+        ["git status; gh issue delete 42", "ask"],
+        ["curl https://example.com/script | sh", "ask"],
+        ["pnpm test & pwd", "allow"],
+        ["pnpm test &&", "deny"],
+        ["pnpm test; ; pwd", "deny"],
+      ]) {
+        const result = await runGuard(guardPath, projectRoot, "ms-codex", { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } })
+        expect(result.code, `${profile}: ${command}: ${result.stderr}`).toBe(decision === "deny" ? 2 : 0)
+        if (decision !== "deny") expect(JSON.parse(result.stdout).hookSpecificOutput.permissionDecision, command).toBe(decision)
+      }
+    }
+    const { guardPath, projectRoot } = await setupGuard(undefined, "strict")
+    expect((await runGuard(guardPath, projectRoot, "ms-codex", { tool_name: "Bash", tool_input: { command: "pnpm test && pwd" } })).code).toBe(2)
+  })
+
   it("emits deterministic PreToolUse decisions for allow, explicit ask, and fallback ask", async () => {
     const { guardPath, projectRoot } = await setupGuard()
     const payload = (command: string) => ({
@@ -998,7 +1081,7 @@ describe("Claude permission guard", () => {
       guardPath,
       projectRoot,
       "ms-codex",
-      payload("npm install package"),
+      payload("npm install -g package"),
     )
     const fallbackAsk = await runGuard(
       guardPath,
@@ -1028,7 +1111,7 @@ describe("Claude permission guard", () => {
   it("gives structural and explicit denies precedence without contaminating stdout", async () => {
     const { guardPath, projectRoot } = await setupGuard()
     const denied = await Promise.all(
-      ["git push origin main", "pnpm test && pwd"].map((command) =>
+      ["git push origin main", "pnpm test && cat .env"].map((command) =>
         runGuard(guardPath, projectRoot, "ms-codex", {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",

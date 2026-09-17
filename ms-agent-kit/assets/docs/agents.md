@@ -6,6 +6,8 @@ Este equipo separa producto, arquitectura, implementación, verificación y audi
 
 OpenCode asigna a cada rol un color semántico propio para distinguir agentes primarios, implementación, investigación, verificación, documentación y seguridad en la interfaz.
 
+El kit genera `permission: {}` en la configuración y en todos los agentes de OpenCode, con cualquier perfil. Las misiones y límites de rol de esta guía son instrucciones de trabajo, no restricciones técnicas impuestas por el kit. OpenCode conserva sus valores nativos y las reglas externas que configure el usuario.
+
 ## Flujo base
 
 ```text
@@ -28,7 +30,7 @@ TDD aprobado -> ms-architect -> work units -> verificación -> cierre de spec si
 
 Antes de delegar, el brief recoge comando, `cwd`, política `allow | ask | deny | unknown`, efectos de escritura, servicios/runtime y sus fuentes por separado. El preflight de `doctor` no ejecuta comandos. `unknown` expresa información pendiente, no una denegación ni una autorización: el arquitecto resuelve lo necesario con la revisión vigente, la autorización existente y los límites del cliente. Una verificación conocida y autorizada no requiere otra aprobación por ceremonia. Make, Compose o scripts llamados `test` no reciben autorización por su nombre; si cambian recetas, scripts o configuración, se revisan otra vez.
 
-Las autorizaciones personales descritas en la sección «Autorizar verificaciones de un proyecto» del README del paquete permiten comandos exactos revisados y salidas convencionales de reportes/caché. Solo se materializan con `scope: project` y raíz exacta; `project.yaml` sigue siendo contexto y una instalación de usuario no absorbe estas autorizaciones. La revisión Compose incluye servicio, volúmenes, entorno e includes; el kit no audita ese contenido automáticamente ni atribuye aislamiento a un nombre de archivo. El tester conserva su rol sin edición de código ni herramientas `Edit`/`Write`. Codex aplica overrides acotados sobre `:read-only`; las reglas de OpenCode y el guard de Claude no demuestran aislamiento de todos los efectos de subprocesos.
+Las autorizaciones personales descritas en la sección «Autorizar verificaciones de un proyecto» del README del paquete permiten comandos exactos revisados y salidas convencionales de reportes/caché. Solo se materializan con `scope: project` y raíz exacta; `project.yaml` sigue siendo contexto y una instalación de usuario no absorbe estas autorizaciones. La revisión Compose incluye servicio, volúmenes, entorno e includes; el kit no audita ese contenido automáticamente ni atribuye aislamiento a un nombre de archivo. El tester conserva su rol sin edición de código ni herramientas `Edit`/`Write`. Codex aplica overrides acotados sobre `:read-only`; OpenCode recibe instrucciones sin reglas de permisos del kit; el guard de Claude no demuestra aislamiento de todos los efectos de subprocesos.
 
 Una denegación de política termina el intento con operación, causa y siguiente acción. No se reformula, ofusca, cambia de intérprete ni traspasa a otro rol para eludirla; se distingue de errores de entorno. El brief reutiliza secciones/símbolos, evidencia y búsquedas negativas con su contexto; una sesión pertinente recibe el delta. El cierre documental se agrupa por propietario cuando no condiciona la implementación, sin añadir procesos a cambios simples.
 
@@ -111,6 +113,8 @@ Se incorporan ideas útiles sin añadir una segunda familia de agentes:
 | `cognitive-doc-design` | Documentación para personas: guías, READMEs, RFCs y notas de revisión con baja carga cognitiva |
 | `agent-instructions-design` | Crear, editar y revisar `AGENTS.md`, `CLAUDE.md` o equivalentes con reglas comprobables del proyecto |
 | `work-unit-commits` | Partir cambios en unidades revisables con tests/docs acoplados |
+| `ms-git` | Preparar commits, push, PRs y releases autorizados con una convención compartida y excepciones por proyecto |
+| `ms-github` | Consultar issues, revisiones y Actions; crear o editar issues solicitadas desde el arquitecto |
 | `judgment-day` | Doble juez ciego bajo petición explícita del usuario |
 | `delegation-brief` | Preparar tareas autosuficientes para subagentes con contexto, límites, DoD y evidencia esperada |
 | `ms-project-init` | Inspeccionar y reutilizar contexto persistente; delegar su creación o actualización cuando corresponda |
@@ -119,6 +123,12 @@ Se incorporan ideas útiles sin añadir una segunda familia de agentes:
 | `skill-improver` | Auditar y mejorar skills existentes |
 
 La selección depende del entregable y su propósito. `agent-instructions-design` es autónoma y no carga `cognitive-doc-design` automáticamente; conserva las decisiones del usuario y respeta las diferencias de alcance y carga de cada cliente. La selección explícita del usuario prevalece.
+
+`ms-git` carga `references/git-conventions.md` desde su directorio instalado. Allí se mantienen ramas, destinos, mensajes e integración, con prioridad para la petición explícita del usuario y las excepciones del `AGENTS.md` aplicable. La instalación distribuye esa única definición a todos los clientes; cada repositorio conserva su propia automatización de releases.
+
+`ms-github` complementa esa entrega con consultas de GitHub y creación/edición de issues solicitadas. En `balanced`/`trusted`, architect, codex, fastlane, debugger, tester y scout pueden leer repositorios, issues, PRs, diffs y checks; esos roles también leen ejecuciones, logs, workflows y releases. El arquitecto conserva las modificaciones remotas. Los workers consultan desde su brief sin cargar la skill. OpenCode y el guard de Claude controlan los subcomandos; Codex recibe límites por instrucciones, sujetos al sandbox efectivo. `strict` conserva sus restricciones y las modificaciones remotas adicionales requieren una petición que las incluya y pueden activar aprobación del cliente.
+
+Los roles de consulta pueden leer recursos REST con `gh api` sin lista de endpoints. GET, paginación, query strings y filtros están permitidos; payloads, métodos de escritura y cambios de host requieren aprobación. Un ejemplo es `gh api --paginate repos/<owner>/<repo>/pulls/<numero>/comments`.
 
 | Petición | Selección esperada |
 |---|---|
@@ -129,6 +139,9 @@ La selección depende del entregable y su propósito. `agent-instructions-design
 | «Mejora la guía de onboarding de agentes» | `cognitive-doc-design` si está dirigida a personas |
 | «Crea una skill para revisar migraciones» | `skill-creator` |
 | «Mejora los triggers de esta skill» | `skill-improver` |
+| «Haz commit de este cambio» o «Abre una PR» | `ms-git`; en un flujo `ms-*`, la ejecuta `ms-architect` |
+| «Revisa los checks de la PR» o «Crea una issue con este bug» | `ms-github`; el arquitecto delega una investigación de CI cuando haga falta |
+| «Divide esta feature en varias entregas» | `work-unit-commits`; la publicación se solicita por separado |
 | «Corrige el bug siguiendo AGENTS.md» | Seguir las instrucciones existentes; estas skills documentales no se activan por esa mención |
 | «Actualiza AGENTS.md y documenta su uso en el README» | Cada skill trabaja sobre su propio entregable |
 
@@ -150,7 +163,7 @@ Con el perfil `balanced`, cada agente conserva `skill` y `lsp` según el permiso
 |---|---|---:|---|---|
 | `ms-plan` | `openai/gpt-5.6-sol`, `variant: high` | — | Hace preguntas y crea PRDs | Solo `.agents/docs/prd/**` |
 | `ms-discovery` | `openai/gpt-5.6-sol`, `variant: high` | — | Debate ideas tempranas, clasifica inconvenientes y propone experimentos | Solo `.agents/docs/discovery/**` si el usuario pide guardar |
-| `ms-architect` | `openai/gpt-5.6-sol`, `variant: high` | — | Orquesta el flujo técnico, inspecciona en solo lectura y decide fastlane/spec/TDD | No |
+| `ms-architect` | `openai/gpt-5.6-sol`, `variant: high` | — | Orquesta el flujo técnico, decide fastlane/spec/TDD y gestiona la entrega Git/PR autorizada | No |
 | `ms-spec` | `openai/gpt-5.6-sol`, `variant: high` | 20 | Crea specs funcionales verificables y cierra specs tras implementación verificada | Solo `.agents/docs/spec/**` |
 | `ms-designer` | `openai/gpt-5.6-sol`, `variant: high` | 20 | Crea TDDs desde PRDs/specs aprobados | Solo `.agents/docs/design/**` |
 | `ms-fastlane` | `openai/gpt-5.6-luna`, `variant: low` | 12 | Ejecuta cambios acotados sin cadena de subagentes | Sí, scope limitado |
@@ -187,9 +200,9 @@ La evaluación manual descrita en `assets/evaluations/README.md` del paquete con
 - `ms-plan` pregunta antes de escribir PRD. No inventa contexto. Tras aprobarlo, el usuario decide e inicia el paso a `ms-architect`; `ms-plan` no lo invoca.
 - `ms-plan`, `ms-discovery` y `ms-architect` usan `question` para input bloqueante del usuario. Los subagentes devuelven `needs_user_input` y no preguntan directamente.
 - `ms-discovery` no crea PRDs, TDDs ni implementación. Clasifica inconvenientes, supuestos, riesgos y experimentos; si la idea madura, recomienda pasar a `ms-plan`, pero el usuario controla e inicia ese handoff.
-- `ms-architect` no edita. Puede usar bash solo para inspección de solo lectura acotada (`pwd`, `ls`, `wc`, `file`, `stat`, `rg`, `grep`, `git status`, `git diff`, `git show`, `git log`, `git rev-parse` y las variantes exactas `git branch`, `git branch --show-current`, `git branch --list`, `git branch -a` y `git branch -r`).
+- `ms-architect` no edita. Puede usar bash para inspección acotada (`pwd`, `ls`, `wc`, `file`, `stat`, `rg`, `grep`, `git status`, `git diff`, `git show`, `git log`, `git rev-parse` y las variantes exactas `git branch`, `git branch --show-current`, `git branch --list`, `git branch -a` y `git branch -r`).
 - `ms-architect` enruta el diagnóstico operativo de solo lectura sobre procesos, contenedores, servicios o CI a `ms-debugger`; tests/lint/typecheck/build a `ms-tester`; y una operación mutante explícitamente autorizada a `ms-codex`. No prueba primero comandos operativos bloqueados por su rol.
-- `ms-architect` delega tests, linters, formatters, servidores, instalaciones, migraciones, commits, pushes y cualquier comando con efectos secundarios.
+- `ms-architect` delega implementación, tests, linters, formatters, servidores, instalaciones y migraciones. Para entrega carga `ms-git`: en `balanced`/`trusted` prepara y ejecuta directamente commits, push y PRs autorizados; `strict` conserva Git de solo lectura. Pedir implementación termina con cambios revisables; pedir commit no publica, y pedir PR cubre sus pasos necesarios sin reconfirmación por comando. `work-unit-commits` define unidades; `ms-git` ejecuta su entrega, preserva cambios ajenos y comprueba las publicaciones antes de reintentar.
 - `ms-architect` elige primero un nivel de orquestación; no decide agentes por inercia.
 - `ms-architect` selecciona artefactos por relevancia antes de decidir spec/TDD o delegar; consulta metadatos antes del cuerpo y aplica la excepción explícita de los TDDs implementados descrita arriba, sin cargar todo `.agents/docs`.
 - `ms-architect` es el único propietario del plan y del `TODO`; los workers ejecutan la misión recibida y entregan evidencia, sin crear un plan paralelo.
@@ -214,7 +227,7 @@ La evaluación manual descrita en `assets/evaluations/README.md` del paquete con
 - `/ms-fastlane` entra directamente al ejecutor para una unidad coherente y verificable de bajo riesgo. Tres archivos y 120 LOC son señales orientativas, no límites obligatorios. Mantiene exclusiones por contrato público, datos persistidos, seguridad, infra, CI/CD, dependencias, ambigüedad de producto o decisión irreversible. Si necesita coordinación, devuelve el control sin iniciar subagentes.
 - `/ms-handoff` entrega una nota Markdown en la conversación con objetivo, decisiones, archivos, Git observado, vigencia de verificación y siguiente acción. Solo persiste por petición con ruta explícita, mediante una delegación acotada autorizada; no sobrescribe archivos existentes ni sustituye la comprobación del estado real al retomar.
 - `ms-codex` no rediseña ni amplía scope.
-- `ms-codex` agrupa lectura, edición y verificación; continúa mientras haya progreso observable y devuelve `partial` o `blocked` si repite el mismo fallo sin nueva evidencia. Ejecuta una sola operación de shell por llamada. Sus permisos Bash bloquean la composición con `&`, `&&`, `;`, pipes y shells envolventes; la sustitución de comandos con `$()` o backticks; la sustitución de procesos con `<()` o `>()`; las redirecciones shell con `<` o `>`; y los comandos multilínea. Respeta el timeout documentado por el repositorio; si no existe, usa 300 segundos para un comando focal y 900 segundos para la suite completa. Un timeout se reporta y no se reintenta automáticamente.
+- `ms-codex` agrupa lectura, edición y verificación; continúa mientras haya progreso observable y devuelve `partial` o `blocked` si repite el mismo fallo sin nueva evidencia. En `balanced`/`trusted` puede combinar operaciones permitidas con `&&`, `||`, `;` o pipes; cada operación conserva sus permisos y requiere evidencia de ejecución. Los scripts, intérpretes y redirecciones locales siguen el alcance autorizado; el perfil confía en el código del proyecto. Respeta el timeout documentado por el repositorio; si no existe, usa 300 segundos para un comando focal y 900 segundos para la suite completa. Un timeout se reporta y no se reintenta automáticamente.
 - `ms-tester` no edita código. Las cachés y artefactos de verificación requieren rutas acotadas y autorización vigente, reutilizable sin pedirla de nuevo; el nombre del script no acredita sus efectos. Las políticas incluyen candidatos convencionales (`test`, `lint`, `typecheck`, `check`, `build`, `validate`, `verify`, `ci`, `quality`), además de `pnpm build`, `pnpm exec ng test`, checks de Prettier con `--check` y las consultas `alembic heads`/`alembic history`, sujetos a revisión y permisos efectivos. Usa un gate agregado solo si cubre exactamente los gates pendientes y no repite un `PASS` vigente reutilizable. El cierre acepta cobertura vigente ejecutada o reutilizada; una denegación del rol se reporta con su causa y la falta de información no se presenta como esa denegación. Los timeouts de fallback son 300 segundos para comandos focales y 900 segundos para la suite completa, salvo que el repositorio documente explícitamente una duración mayor.
 - `ms-scout` solo ejecuta comandos de inspección de solo lectura: lectura, búsqueda, listados y git read-only.
 - `ms-scout` no revisa diffs terminados: mapea código y blast radius. La revisión general corresponde a `ms-architect`; seguridad profunda a `ms-security-auditor`.
@@ -223,14 +236,11 @@ La evaluación manual descrita en `assets/evaluations/README.md` del paquete con
 - `ms-security-auditor` no escribe fixes.
 - `ms-architect` usa el camino mínimo para cambios de bajo riesgo: no invoca scout, spec, TDD, writer, auditoría ni tester por prudencia genérica si no se activan disparadores explícitos.
 - Todo subagente que no orquesta declara `task: deny` explícito.
-- El perfil predeterminado `balanced` reserva `todowrite` para `ms-architect`, permite `lsp` y skills generales donde corresponde y usa allowlists silenciosas para roles acotados. Añade inspección y builds de fastlane y formas concretas de runners locales mediante `node`; no concede `node*` ni Make/Compose genéricos. Los workers no mantienen listas `TODO`. Solo `ms-codex` pregunta por comandos desconocidos o dependencias; `ms-debugger` conserva el fallback `deny` y solo pide confirmación para comandos sensibles con una regla `ask` explícita. Push, SSH, gestores del sistema, destrucción y secretos se bloquean. `strict` conserva su política cerrada; `trusted` reduce confirmaciones sin levantar denegaciones explícitas y no se recomienda como remedio a un bloqueo puntual. Claude materializa el perfil elegido, sin fijarlo a `balanced`.
-- OpenCode usa una única definición de secretos para lectura directa y comandos evidentes: `.env`, entornos reales, `.ssh`, credenciales, llaves y `secrets/**`; `.env.example` sigue permitido. El instalador la escribe globalmente y al final de cada frontmatter `ms-*`, después de los permisos del rol, para que las denegaciones prevalezcan en el orden efectivo.
-- La lectura genérica vía bash (`cat`, `head`, `tail`, `tree`, `rg`, `grep`) queda permitida en agentes operativos de lectura/código/verificación (`ms-codex`, `ms-tester`, `ms-debugger`, `ms-security-auditor`, `ms-scout`) para reducir fricción; `find` no forma parte de este permiso genérico. Las denegaciones añadidas al generar el agente se evalúan después de esos permisos.
-- OpenCode limita `git branch` a las variantes de lectura exactas documentadas arriba. La inspección común de `ms-spec` y `ms-designer` se limita a `git status --short` y `git --no-pager diff --no-ext-diff --no-textconv --stat -- <directorio propio>` o su variante `--name-only`, desde la raíz del proyecto. El directorio es `.agents/docs/spec` o `.agents/docs/design`, respectivamente. No habilita patches, `--check` ni shell general; Codex expresa el límite por instrucciones cuando no dispone de granularidad equivalente.
-- `ms-debugger` tiene `env` y `printenv*` en `deny` para evitar exposición accidental de secretos.
-- La política OpenCode de `ms-codex` incluye reglas `allow` para los comandos exactos `pnpm build`, `pnpm run build`, `pnpm build:staging`, `pnpm run build:staging` y `pnpm exec ng build --configuration development`, además de `pnpm exec ng test`, Prettier con `--check` y las consultas `uv run alembic heads`/`uv run alembic history`; esto no acredita efectos ni permisos efectivos de sesión. Mantiene en `ask` instalaciones, comandos desconocidos, flags largos `--write` o flags cortos de Prettier que contengan `w`, y `uv run alembic upgrade`/`downgrade`/`revision`/`stamp`. `git push`, `ssh`, `scp`, `nc`, Netcat y los comandos destructivos de git/filesystem están en `deny`.
-- `ms-debugger` permite verificaciones seguras concretas (`test`, `lint`, `typecheck`, `check`) para reproducir bugs sin fricción y conserva `"*": "deny"` como fallback: los scripts y comandos desconocidos quedan bloqueados, no entran en `ask`. Docker `logs`/`inspect` y Kubernetes `get`/`describe`/`logs` tienen reglas sensibles explícitas en `ask`.
-- Los agentes de solo lectura bloquean flags mutantes como `--fix`, `--autofix`, `--write` y actualizaciones de snapshots; logs/inspect sensibles de Docker/Kubernetes quedan en `ask`.
+- `balanced` permite comandos por defecto a architect, codex, fastlane, tester, debugger y scout. Los scripts propios, Make/Compose, herramientas nuevas y consultas no necesitan una excepción por comando. `trusted` comparte esa política; `strict` mantiene sus listas cerradas.
+- Los riesgos reconocidos de pérdida de datos, administración del sistema y modificación remota piden aprobación. Las consultas y la entrega Git/PR ya autorizada del arquitecto continúan sin confirmación rutinaria. La política no audita los efectos de scripts ni sustituye el sandbox del cliente.
+- OpenCode conserva una definición común de secretos para lectura directa y comandos evidentes: `.env`, credenciales, llaves y `secrets/**`; `.env.example` sigue permitido. Estas denegaciones se añaden al final de cada agente.
+- La inspección común de `ms-spec` y `ms-designer` se limita a `git status --short` y `git --no-pager diff --no-ext-diff --no-textconv --stat -- <directorio propio>` o su variante `--name-only`, desde la raíz del proyecto. No habilita patches, `--check` ni shell general; Codex expresa el límite por instrucciones.
+- Los roles y herramientas de edición siguen separados; el tester ejecuta verificaciones sin editar código ni snapshots. Los workers no mantienen listas `TODO` ni coordinan agentes.
 
 ## Runtime compartido
 

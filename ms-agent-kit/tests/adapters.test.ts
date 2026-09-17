@@ -10,10 +10,6 @@ import { DEFAULT_ASSETS_ROOT, loadCatalog } from "../src/core/catalog.js"
 import { parseMarkdown } from "../src/core/frontmatter.js"
 import { openCodeRolePermission } from "../src/core/opencode-role-permissions.js"
 import { capabilityProfile, gitInspectionCommands } from "../src/core/profiles.js"
-import {
-  OPENCODE_SECRET_BASH_RULES,
-  OPENCODE_SECRET_READ_RULES,
-} from "../src/core/permissions.js"
 import { owningTargets, type BuildContext } from "../src/core/types.js"
 
 const temporaryDirectories: string[] = []
@@ -35,6 +31,41 @@ async function context(scope: BuildContext["scope"] = "project"): Promise<BuildC
 }
 
 describe("platform adapters", () => {
+  it.each(["ms-git", "ms-github"])("installs %s in each native catalog and preserves Claude worker restrictions", async (skillName) => {
+    const source = (await loadCatalog(DEFAULT_ASSETS_ROOT)).skills.find((skill) => skill.name === skillName)!
+    expect(source).toBeDefined()
+    const reference = source.files.find((file) => file.relativePath === path.join("references", "git-conventions.md"))
+    if (skillName === "ms-git") expect(reference).toBeDefined()
+    for (const scope of ["user", "project"] as const) {
+      const buildContext = await context(scope)
+      const artifacts = await buildArtifacts(["opencode", "claude", "codex"], buildContext)
+      const skills = artifacts.filter((artifact) => artifact.kind === "skill" && artifact.name === skillName)
+      expect(skills).toHaveLength(3 * source.files.length)
+      for (const target of ["opencode", "claude", "codex"]) {
+        const base = scope === "user" ? buildContext.homeDir : buildContext.projectRoot
+        const root = target === "opencode" ? (scope === "user" ? ".config/opencode" : ".opencode") : target === "claude" ? ".claude" : scope === "user" ? ".codex" : ".agents"
+        const skillRoot = path.join(base, root, "skills", skillName)
+        for (const file of source.files) {
+          const artifact = skills.find((skill) => skill.target === target && skill.destination === path.join(skillRoot, file.relativePath))
+          expect(artifact?.content).toEqual(file.content)
+        }
+        // A copied entrypoint must resolve its local convention in every client and scope.
+        const linkedPath = /\]\((references\/[^)]+)\)/.exec(source.body)?.[1]
+        if (skillName === "ms-git") expect(linkedPath).toBeDefined()
+        if (linkedPath) expect(skills.some((skill) => skill.target === target && skill.destination === path.resolve(skillRoot, linkedPath))).toBe(true)
+      }
+      const workers = artifacts.filter((artifact) => artifact.target === "opencode" && artifact.kind === "agent" && ["ms-codex", "ms-fastlane", "ms-tester"].includes(artifact.name))
+      for (const worker of workers) {
+        expect(parseMarkdown(worker.content.toString("utf8")).frontmatter.permission).toEqual({})
+      }
+      for (const agent of artifacts.filter((artifact) => artifact.target === "claude" && artifact.kind === "agent" && ["ms-architect", "ms-codex", "ms-fastlane", "ms-tester"].includes(artifact.name))) {
+        const denied = parseMarkdown(agent.content.toString("utf8")).frontmatter.disallowedTools as string[]
+        if (agent.name === "ms-architect") expect(denied).not.toContain(`Skill(${skillName})`)
+        else expect(denied).toEqual(expect.arrayContaining([`Skill(${skillName})`, `Skill(${skillName} *)`]))
+      }
+    }
+  })
+
   it("keeps agent assets prompt-only and covers them with central definitions", async () => {
     const catalog = await loadCatalog(DEFAULT_ASSETS_ROOT)
 
@@ -182,7 +213,7 @@ describe("platform adapters", () => {
       if (definition.mode === "subagent") expectedFrontmatter.push("steps")
       expect(Object.keys(document.frontmatter).sort()).toEqual(expectedFrontmatter.sort())
       const permission = document.frontmatter.permission as Record<string, unknown>
-      expect(permission.doom_loop).toBe("deny")
+      expect(permission).toEqual({})
       expect(document.frontmatter.color).toBe(definition.openCodeColor)
       expect(document.frontmatter.color).toMatch(/^#[0-9A-F]{6}$/)
       expect(document.frontmatter.model).toBe(model.model)
@@ -190,18 +221,6 @@ describe("platform adapters", () => {
       if (definition.mode === "subagent") {
         expect(document.frontmatter.steps).toBe(agent.name === "ms-codex" ? 32 : definition.toolCycleBudget)
       }
-      const rolePermission = openCodeRolePermission(agent.name)
-      expect(permission.skill).toEqual(rolePermission.skill)
-      expect(permission.lsp).toBe(rolePermission.lsp)
-      expect(permission.question).toBe(definition.mode === "primary" ? "allow" : "deny")
-      expect(permission.todowrite).toBe(rolePermission.todowrite)
-      const bash = permission.bash as Record<string, unknown>
-      const read = permission.read as Record<string, unknown>
-      expect(Object.keys(bash).slice(-Object.keys(OPENCODE_SECRET_BASH_RULES).length)).toEqual(
-        Object.keys(OPENCODE_SECRET_BASH_RULES),
-      )
-      expect(read).toEqual(OPENCODE_SECRET_READ_RULES)
-      expect(bash).toMatchObject({ env: "deny", "env *": "deny", "printenv*": "deny" })
       expect(document.body.match(/# Reglas Compartidas MS/g)).toHaveLength(1)
     }
     expect(new Set(agents.map((agent) => agentDefinition(agent.name).openCodeColor))).toHaveLength(12)
@@ -209,19 +228,7 @@ describe("platform adapters", () => {
     const parsed = parseMarkdown(architect!.content.toString("utf8"))
     expect(parsed.frontmatter.model).toBe("openai/gpt-5.6-sol")
     expect(parsed.frontmatter.variant).toBe("high")
-    expect(parsed.frontmatter.permission).toMatchObject({
-      edit: "deny",
-      question: "allow",
-      task: {
-        "*": "deny",
-        "ms-codex": "allow",
-        "ms-tester": "allow",
-      },
-      bash: {
-        "*": "deny",
-        "git diff*": "allow",
-      },
-    })
+    expect(parsed.frontmatter.permission).toEqual({})
     expect(parsed.body).toContain("# Reglas Compartidas MS")
     expect(parsed.body).toContain("Contrato para ms-architect")
     expect(parsed.body).toContain("ms-project-init")
@@ -232,7 +239,7 @@ describe("platform adapters", () => {
       model: "openai/gpt-5.6-luna",
       variant: "low",
       steps: 12,
-      permission: { todowrite: "deny" },
+      permission: {},
     })
     const writer = artifacts.find(
       (artifact) => artifact.kind === "agent" && artifact.name === "ms-writer",
@@ -241,7 +248,7 @@ describe("platform adapters", () => {
       model: "openai/gpt-5.6-sol",
       variant: "medium",
       steps: 20,
-      permission: { todowrite: "deny" },
+      permission: {},
     })
     const skill = artifacts.find(
       (artifact) => artifact.kind === "skill" && artifact.name === "cognitive-doc-design",
@@ -276,18 +283,18 @@ describe("platform adapters", () => {
     ).toBeUndefined()
   })
 
-  it("offers balanced, strict, and trusted OpenCode permission profiles", () => {
+  it("retains balanced, strict, and trusted command profiles for the Claude guard", () => {
     const balanced = openCodeRolePermission("ms-codex", "balanced")
-    expect(balanced).toMatchObject({ lsp: "deny", todowrite: "deny", skill: { "*": "allow", "ms-architect": "deny" }, question: "deny" })
-    expect(balanced.bash).toMatchObject({ "*": "ask", "rm -rf*": "deny", "npm install*": "ask" })
+    expect(balanced).toMatchObject({ lsp: "allow", todowrite: "deny", skill: { "*": "allow", "ms-architect": "deny" }, question: "deny" })
+    expect(balanced.bash).toMatchObject({ "*": "allow", "rm *": "ask" })
 
     const strict = openCodeRolePermission("ms-codex", "strict")
     expect(strict).toMatchObject({ lsp: "deny", todowrite: "deny", skill: { "*": "allow", "ms-architect": "deny" } })
     expect(strict.bash).toMatchObject({ "*": "ask", "rm -rf*": "deny" })
 
     const trusted = openCodeRolePermission("ms-codex", "trusted")
-    expect(trusted).toMatchObject({ lsp: "deny", todowrite: "deny", skill: { "*": "allow", "ms-architect": "deny" }, websearch: "allow" })
-    expect(trusted.bash).toMatchObject({ "*": "allow", "rm -rf*": "deny", "npm install*": "allow" })
+    expect(trusted).toMatchObject({ lsp: "allow", todowrite: "deny", skill: { "*": "allow", "ms-architect": "deny" }, websearch: "allow" })
+    expect(trusted.bash).toMatchObject({ "*": "allow", "rm *": "ask" })
     expect(trusted.task).toEqual({ "*": "deny" })
 
     for (const profile of ["balanced", "strict", "trusted"] as const) {
@@ -299,281 +306,47 @@ describe("platform adapters", () => {
         if (profile === "balanced") {
           const strictPermission = openCodeRolePermission(name, "strict")
           expect(rolePermission.skill).toEqual(strictPermission.skill)
-          expect(rolePermission.lsp).toBe(strictPermission.lsp)
+          expect(rolePermission.lsp).toBe(["ms-architect", "ms-codex", "ms-fastlane", "ms-tester", "ms-scout", "ms-debugger", "ms-security-auditor"].includes(name) ? "allow" : strictPermission.lsp)
         }
       }
     }
 
-    for (const role of ["ms-fastlane", "ms-tester"] as const) {
-      expect(openCodeRolePermission(role, "balanced").bash).toMatchObject({ "*": "deny" })
+    for (const role of ["ms-fastlane", "ms-tester", "ms-debugger"] as const) {
+      expect(openCodeRolePermission(role, "balanced").bash).toMatchObject({ "*": "allow" })
     }
-    expect(openCodeRolePermission("ms-tester", "balanced").bash).toMatchObject({
-      "npm run validate*": "allow",
-      "pnpm run verify*": "allow",
-      "yarn run ci*": "allow",
-      "bun run quality*": "allow",
-      "make verify*": "allow",
-      "npm run *:fix*": "deny",
-      "*--update-snapshot*": "deny",
-    })
-    expect(openCodeRolePermission("ms-debugger", "balanced").bash).toMatchObject({
-      "*": "deny",
-      "docker logs*": "ask",
-      "kubectl logs*": "ask",
-    })
-    expect(balanced.bash).toMatchObject({
-      "git push*": "deny",
-      "ssh *": "deny",
-      "brew install*": "deny",
-    })
+    expect(openCodeRolePermission("ms-tester", "balanced").bash).toMatchObject({ "* --fix*": "deny", "* --write*": "deny" })
+    expect(balanced.bash).toMatchObject({ "git push *": "ask", "ssh *": "ask", "brew *": "ask" })
   })
 
-  it("keeps doctor read-only allows exact in every emitted architect profile", async () => {
-    const commands = [
-      "ms-agent-kit doctor --target opencode --scope user --json",
-      "ms-agent-kit doctor --target opencode --scope project --json",
-    ]
-    for (const profile of ["balanced", "strict", "trusted"] as const) {
-      const buildContext = await context()
-      buildContext.permissionProfile = profile
-      const artifacts = await buildArtifacts(["opencode"], buildContext)
-      const architect = artifacts.find((artifact) => artifact.kind === "agent" && artifact.name === "ms-architect")!
-      const permission = parseMarkdown(architect.content.toString("utf8")).frontmatter.permission as Record<string, unknown>
-      const bash = permission.bash as Record<string, string>
-      const doctorRules = Object.entries(bash).filter(([command]) => command.startsWith("ms-agent-kit doctor"))
-      expect(doctorRules).toEqual(commands.map((command) => [command, "allow"]))
-      expect(doctorRules.every(([command]) => !command.includes("*"))).toBe(true)
-      const decision = (command: string) => Object.entries(bash).reduce((last, [pattern, action]) => {
-        const expression = pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")
-        return new RegExp(`^${expression}$`).test(command) ? action : last
-      }, "deny")
-      for (const command of commands) expect(decision(command)).toBe("allow")
-      for (const command of [
-        `${commands[0]} --extra`,
-        "ms-agent-kit doctor --target codex --scope user --json",
-        "ms-agent-kit doctor --target opencode --scope user",
-        "ms-agent-kit install --target opencode --scope user --json",
-        "ms-agent-kit uninstall --target opencode --scope user --json",
-      ]) expect(decision(command)).toBe("deny")
-      expect(Object.keys(bash).slice(-Object.keys(OPENCODE_SECRET_BASH_RULES).length)).toEqual(Object.keys(OPENCODE_SECRET_BASH_RULES))
-    }
-  })
-
-  it("keeps OpenCode shell permissions narrow and read-only where required", () => {
-    const bashPermission = (name: string) =>
-      openCodeRolePermission(name, "balanced").bash as Record<string, string>
-
-    for (const name of Object.keys(AGENT_DEFINITIONS)) {
-      const bash = bashPermission(name)
-      if (typeof bash === "object") {
-        expect(bash["find *"]).toBeUndefined()
-        expect(bash["git branch*"]).toBeUndefined()
+  it("emits empty OpenCode permissions for every role, profile and installation scope", async () => {
+    for (const permissionProfile of ["balanced", "strict", "trusted"] as const) {
+      for (const scope of ["user", "project"] as const) {
+        const artifacts = await buildArtifacts(["opencode"], { ...await context(scope), permissionProfile })
+        const config = artifacts.find((artifact) => artifact.name === "opencode.json")!
+        expect(JSON.parse(config.content.toString()).permission).toEqual({})
+        const agents = artifacts.filter((artifact) => artifact.kind === "agent")
+        expect(agents).toHaveLength(12)
+        for (const agent of agents) {
+          expect(parseMarkdown(agent.content.toString()).frontmatter.permission, `${scope}/${permissionProfile}/${agent.name}`).toEqual({})
+          expect(agent.content.toString()).toContain("sin restricciones adicionales en ningún perfil")
+        }
       }
     }
+  })
 
-    for (const name of [
-      "ms-architect",
-      "ms-codex",
-      "ms-debugger",
-      "ms-scout",
-      "ms-security-auditor",
-    ]) {
-      const bash = bashPermission(name)
-      const allowedBranchCommands = Object.entries(bash)
-        .filter(([command, action]) => command.startsWith("git branch") && action === "allow")
-        .map(([command]) => command)
-      expect(allowedBranchCommands).toEqual([
-        "git branch",
-        "git branch --show-current",
-        "git branch --list",
-        "git branch -a",
-        "git branch -r",
-      ])
-      expect(bash["git branch --list*"]).toBeUndefined()
+  it("keeps strict command policies and documentary roles closed", () => {
+    for (const name of ["ms-architect", "ms-codex", "ms-debugger", "ms-scout", "ms-security-auditor"]) {
+      const bash = openCodeRolePermission(name, "strict").bash as Record<string, string>
+      expect(bash["find *"]).toBeUndefined()
+      expect(bash["git branch*"]).toBeUndefined()
+      expect(bash["git branch --show-current"]).toBe("allow")
     }
-
-    for (const name of [
-      "ms-codex",
-      "ms-debugger",
-      "ms-scout",
-      "ms-security-auditor",
-      "ms-tester",
-    ]) {
-      expect(bashPermission(name)).toMatchObject({
-        "tree *": "allow",
-        "rg *": "allow",
-        "grep *": "allow",
-      })
-    }
-
-    for (const name of ["ms-designer", "ms-spec"]) {
-      expect(bashPermission(name)).toEqual({
+    for (const profile of ["balanced", "strict", "trusted"] as const) for (const name of ["ms-designer", "ms-spec"]) {
+      expect(openCodeRolePermission(name, profile).bash).toEqual({
         "*": "deny",
         ...Object.fromEntries(gitInspectionCommands(capabilityProfile(agentDefinition(name).capabilityProfile)).map((command) => [command, "allow"])),
-        "pwd": "allow",
-        "ls -d .": "allow",
-        "command -v ms-agent-kit": "allow",
+        "pwd": "allow", "ls -d .": "allow", "command -v ms-agent-kit": "allow",
       })
-    }
-
-    const coder = bashPermission("ms-codex")
-    expect(coder).toMatchObject({
-      "pnpm build": "allow",
-      "pnpm run build": "allow",
-      "pnpm build:staging": "allow",
-      "pnpm run build:staging": "allow",
-      "pnpm exec ng test*": "allow",
-      "pnpm exec ng build --configuration development": "allow",
-      "pnpm exec prettier *--check*": "allow",
-      "pnpm exec prettier *-*w*": "ask",
-      "uv run alembic heads*": "allow",
-      "uv run alembic history*": "allow",
-      "*--write*": "ask",
-      "uv run alembic upgrade*": "ask",
-      "uv run alembic downgrade*": "ask",
-      "uv run alembic revision*": "ask",
-      "uv run alembic stamp*": "ask",
-      "rm -rf*": "deny",
-      "git push*": "deny",
-      "bash -c *": "deny",
-      "sh -c *": "deny",
-      "*&&*": "deny",
-      "*&*": "deny",
-      "*;*": "deny",
-      "*|*": "deny",
-      "*$(*": "deny",
-      "*`*": "deny",
-      "*<(*": "deny",
-      "*>(*": "deny",
-      "*>*": "deny",
-      "*<*": "deny",
-      "*\n*": "deny",
-    })
-    expect(coder["pnpm build*"]).toBeUndefined()
-    expect(coder["pnpm run build*"]).toBeUndefined()
-    expect(coder["pnpm exec ng build*"]).toBeUndefined()
-    const coderCommands = Object.keys(coder)
-    expect(coderCommands.indexOf("*--write*")).toBeGreaterThan(
-      coderCommands.indexOf("pnpm exec prettier *--check*"),
-    )
-    const lastCoderPrettierAllow = Math.max(
-      ...Object.entries(coder)
-        .filter(
-          ([command, action]) =>
-            command.startsWith("pnpm exec prettier") && action === "allow",
-        )
-        .map(([command]) => coderCommands.indexOf(command)),
-    )
-    expect(coderCommands.indexOf("pnpm exec prettier *-*w*")).toBeGreaterThan(
-      lastCoderPrettierAllow,
-    )
-    const lastCoderAlembicReadCommand = Math.max(
-      coderCommands.indexOf("uv run alembic heads*"),
-      coderCommands.indexOf("uv run alembic history*"),
-    )
-    for (const mutatingAlembicCommand of [
-      "uv run alembic upgrade*",
-      "uv run alembic downgrade*",
-      "uv run alembic revision*",
-      "uv run alembic stamp*",
-    ]) {
-      expect(coderCommands.indexOf(mutatingAlembicCommand)).toBeGreaterThan(
-        lastCoderAlembicReadCommand,
-      )
-    }
-    const lastCoderAllowOrAsk = Math.max(
-      ...Object.entries(coder)
-        .filter(([, action]) => action === "allow" || action === "ask")
-        .map(([command]) => coderCommands.indexOf(command)),
-    )
-    const terminalCompositionRules = [
-      "bash -c *",
-      "sh -c *",
-      "*&&*",
-      "*&*",
-      "*;*",
-      "*|*",
-      "*$(*",
-      "*`*",
-      "*<(*",
-      "*>(*",
-      "*>*",
-      "*<*",
-      "*\n*",
-      "*\r*",
-    ]
-    for (const blockedComposition of terminalCompositionRules) {
-      expect(coderCommands.indexOf(blockedComposition)).toBeGreaterThan(lastCoderAllowOrAsk)
-    }
-    expect(coderCommands.slice(-terminalCompositionRules.length)).toEqual(
-      terminalCompositionRules,
-    )
-    const adversarialCommands = new Map([
-      ["uv run alembic heads & echo unsafe", "*&*"],
-      ["$(echo unsafe)", "*$(*"],
-      ["`echo unsafe`", "*`*"],
-      ["diff <(first) <(second)", "*<(*"],
-      ["tee >(consumer)", "*>(*"],
-      ["cat payload > ~/.zshrc", "*>*"],
-      ["cat < ~/.ssh/id_rsa", "*<*"],
-      ["uv run alembic heads\necho unsafe", "*\n*"],
-    ])
-    for (const [adversarialCommand, denyRule] of adversarialCommands) {
-      expect(coder[denyRule], `regla terminal para: ${adversarialCommand}`).toBe("deny")
-    }
-
-    const tester = bashPermission("ms-tester")
-    expect(tester).toMatchObject({
-      "pnpm build*": "allow",
-      "pnpm exec ng test*": "allow",
-      "pnpm exec prettier *--check*": "allow",
-      "uv run alembic heads*": "allow",
-      "uv run alembic history*": "allow",
-      "*--fix*": "deny",
-      "*--write*": "deny",
-      "pnpm install*": "deny",
-      "uv run alembic upgrade*": "deny",
-      "uv run alembic downgrade*": "deny",
-      "uv run alembic revision*": "deny",
-      "uv run alembic stamp*": "deny",
-    })
-    const testerCommands = Object.keys(tester)
-    expect(testerCommands.indexOf("*--write*")).toBeGreaterThan(
-      testerCommands.indexOf("pnpm exec prettier *--check*"),
-    )
-    const lastAlembicReadCommand = Math.max(
-      testerCommands.indexOf("uv run alembic heads*"),
-      testerCommands.indexOf("uv run alembic history*"),
-    )
-    for (const mutatingAlembicCommand of [
-      "uv run alembic upgrade*",
-      "uv run alembic downgrade*",
-      "uv run alembic revision*",
-      "uv run alembic stamp*",
-    ]) {
-      expect(testerCommands.indexOf(mutatingAlembicCommand)).toBeGreaterThan(
-        lastAlembicReadCommand,
-      )
-    }
-
-    const debuggerPermission = bashPermission("ms-debugger")
-    expect(debuggerPermission).toMatchObject({
-      "*": "deny",
-      lsof: "allow",
-      "lsof *": "allow",
-      "pgrep *": "allow",
-      "docker logs*": "ask",
-      "docker inspect*": "ask",
-      "kubectl get*": "ask",
-    })
-    for (const blockedDiagnostic of [
-      "redis-cli *",
-      "celery *",
-      "gh *",
-      "docker exec*",
-      "python *",
-    ]) {
-      expect(debuggerPermission[blockedDiagnostic]).toBeUndefined()
     }
   })
 
@@ -620,16 +393,9 @@ describe("platform adapters", () => {
           headers: { CONTEXT7_API_KEY: "{env:CONTEXT7_API_KEY}" },
         },
       },
-      permission: {
-        read: { "**/.env": "deny" },
-        bash: {
-          env: "deny",
-          "* .env": "deny",
-          "* **/*.pem": "deny",
-        },
-        skill: "allow",
-      },
+      permission: {},
     })
+    expect(openCodeConfig.permission).toEqual({})
     expect(openCodeConfig).not.toHaveProperty("instructions")
     expect(openCodeConfig).not.toHaveProperty("plugin")
     expect(
@@ -791,7 +557,7 @@ describe("platform adapters", () => {
     const catalog = await loadCatalog(DEFAULT_ASSETS_ROOT)
 
     expect(Object.keys(policies).sort()).toEqual(catalog.agents.map((agent) => agent.name).sort())
-    expect(policies["ms-codex"].fallback).toBe("ask")
+    expect(policies["ms-codex"].fallback).toBe("allow")
     for (const agent of catalog.agents) {
       const policy = policies[agent.name]
       expect(["allow", "ask", "deny"]).toContain(policy.fallback)

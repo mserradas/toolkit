@@ -26,7 +26,7 @@ Tu único invocador autorizado en flujos orquestados es **`ms-architect`** (conf
 
 Por permisos no puedes editar código de producción. Si el arquitecto te pide **agregar tests nuevos**, eso es una tarea para `ms-codex`, no para ti. Tú los **ejecutas**, no los escribes.
 
-Puedes generar cachés y reportes en las salidas acotadas ya autorizadas para la verificación; eso no concede herramientas `Edit`/`Write` ni edición de código. Codex conserva `:read-only` con overrides solo para esas salidas. Las reglas de comandos de OpenCode y el guard Claude no demuestran aislamiento de todos los efectos del proceso.
+Puedes generar cachés y reportes en las salidas predeterminadas del perfil descritas en las reglas compartidas o las autorizadas para el proyecto; eso no concede herramientas `Edit`/`Write` ni edición de código. Codex conserva `:read-only` con overrides solo para esas salidas. Las reglas de comandos de OpenCode y el guard Claude no demuestran aislamiento de todos los efectos del proceso.
 
 # Flujo de trabajo
 
@@ -36,7 +36,7 @@ Puedes generar cachés y reportes en las salidas acotadas ya autorizadas para la
 2. Ejecutar exactamente los huecos pedidos que no tengan evidencia vigente. Si pidió "correr todo", aplica tests + lint + type-check + build + format-check en ese orden, omitiendo únicamente PASS reutilizables. Si el comando de formato modifica archivos, no lo ejecutes: reporta que esa corrección corresponde a `ms-codex`.
    - Separa la política de los efectos/runtime no comprobados: `unknown` no exige detener una verificación conocida y autorizada ni pedir permiso otra vez. Usa el brief y la revisión vigente dentro de los límites efectivos. Si falta información que cambie el alcance o hay una denegación real, devuelve esa causa al arquitecto; no la eludas.
    - Reutiliza autorizaciones personales exactas de proyecto y sus salidas, sin obtener permisos de `project.yaml`. Si cambiaron las recetas, scripts o configuración Compose revisados, contrasta los nuevos efectos antes de ejecutar. No sustituyas un bloqueo por permisos generales Make/Compose, `node*`, `trusted` o `:workspace`.
-   - Ejecuta cada test, lint, type-check, build o format-check como llamada independiente. No uses `&&`, `;`, pipes ni un shell envolvente para agrupar verificaciones.
+   - Puedes encadenar verificaciones permitidas según las reglas compartidas, conservando el resultado de cada gate. Si la secuencia se corta, registra los restantes como `NOT_RUN`; usa llamadas separadas cuando necesites evidencia individual.
    - Ejecuta cada comando directamente con el timeout nativo del cliente. Usa el timeout que el repositorio documente explícitamente, aunque sea mayor; si no existe, solicita 300 segundos para comandos focales y 900 segundos para suites completas cuando el cliente permita configurarlo.
    - Prioriza gates nativos agregados (`verify`, `ci` o `quality`) solo cuando cubran exactamente los gates pendientes y no exista ningún PASS vigente reutilizable dentro de su cobertura; en los demás casos usa los scripts declarados focales (`test`, `lint`, `type`, `typecheck`, `check`, `build`, `validate`) mediante el gestor del proyecto.
    - Si no hay script, usa binarios locales (`./node_modules/.bin/<tool>`) o `pnpm exec <tool>` para herramientas de solo lectura como `eslint`, `tsc --noEmit`, `prettier --check`, `vitest run`, `jest`, `stylelint`, `biome check`, `svelte-check`, `astro check`.

@@ -1,0 +1,15 @@
+export const reviewCommentReads = [
+  "gh api repos/owner/repo/issues/42/comments",
+  "gh api --paginate repos/owner/repo/actions/runs",
+  "gh api orgs/example/repos",
+  "gh api users/example/repos",
+  "gh api search/repositories",
+  "gh api --paginate repos/mserradas/data-sanitizer-service/pulls/73/comments",
+  "gh api repos/another-owner/another.repo/pulls/104/comments",
+  "gh api --method GET repos/owner/repo/pulls/42/comments",
+  "gh api -X GET repos/owner/repo/pulls/42/comments",
+  "gh api --method GET --paginate repos/owner/repo/pulls/42/comments",
+  "gh api --paginate --method GET repos/owner/repo/pulls/42/comments",
+  "gh api -X GET --paginate repos/owner/repo/pulls/42/comments",
+  "gh api --paginate -X GET repos/owner/repo/pulls/42/comments",
+]

@@ -3,6 +3,7 @@ import path from "node:path"
 import { AppError } from "./errors.js"
 import { isSensitivePath } from "./permissions.js"
 import type { BuildContext } from "./types.js"
+import { DEFAULT_VERIFICATION_OUTPUTS } from "./development-policy.js"
 
 export interface ProjectVerification { root: string; commands: string[]; outputPaths: string[] }
 export interface VerificationConfiguration { projects: ProjectVerification[] }
@@ -108,6 +109,11 @@ export function getProjectVerification(context: BuildContext): VerificationGrant
 
 export function verificationForRole(agentName: string, context: BuildContext): VerificationGrant {
   return (VERIFICATION_ROLES as readonly string[]).includes(agentName) ? getProjectVerification(context) : { commands: [], outputPaths: [] }
+}
+
+export function verificationOutputPaths(agentName: string, context: BuildContext): string[] {
+  if (!(VERIFICATION_ROLES as readonly string[]).includes(agentName)) return []
+  return [...new Set([...(context.permissionProfile === "strict" ? [] : DEFAULT_VERIFICATION_OUTPUTS), ...verificationForRole(agentName, context).outputPaths])]
 }
 
 /** Grants override fallback only; every matching explicit deny retains priority. */

@@ -1,5 +1,5 @@
 import path from "node:path"
-import { verificationForRole } from "../core/verification-policy.js"
+import { verificationOutputPaths } from "../core/verification-policy.js"
 import { agentDefinition } from "../core/agent-catalog.js"
 import { frontmatterString, renderMarkdown } from "../core/frontmatter.js"
 import { resolveAgentModel } from "../core/agent-models.js"
@@ -194,7 +194,7 @@ function codexAgent(agent: SourceMarkdown, sharedRules: string, context: BuildCo
   lines.push(`description = ${tomlString(`Permisos acotados para ${agent.name}`)}`)
   lines.push(`extends = ${tomlString(profile.writePaths.includes("**") ? ":workspace" : ":read-only")}`)
   lines.push("", '[permissions.ms-agent.filesystem.":workspace_roots"]')
-  const outputs = agent.name === "ms-tester" ? verificationForRole(agent.name, context).outputPaths : []
+  const outputs = agent.name === "ms-tester" ? verificationOutputPaths(agent.name, context) : []
   for (const writePath of [...codexWritePaths(projectWritePaths(agent.name, context)), ...outputs]) {
     if (writePath !== "**") lines.push(`${tomlString(writePath)} = "write"`)
   }

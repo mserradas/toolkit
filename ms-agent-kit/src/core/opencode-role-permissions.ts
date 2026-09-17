@@ -1,10 +1,13 @@
 import type { PermissionProfile } from "./types.js"
 import { agentDefinition } from "./agent-catalog.js"
+import { githubBashRules } from "./github-policy.js"
+import { developmentBash } from "./development-policy.js"
 import { capabilityProfile, COORDINATION_SKILLS, documentaryInspectionCommands, technicalSkillsOnly } from "./profiles.js"
 
 export type OpenCodeRolePermission = Record<string, unknown>
 
-// Politicas funcionales por rol. Las denegaciones de secretos se aplican aparte.
+// Tabla histórica reutilizada por el guard de Claude. OpenCode ya no la emite.
+// Las denegaciones de secretos se aplican aparte.
 const ROLE_PERMISSIONS: Record<string, OpenCodeRolePermission> = {
   "ms-architect": {
     "edit": "deny",
@@ -1085,66 +1088,6 @@ const BALANCED_WEBSEARCH_AGENTS = new Set([
 ])
 
 // Entry points locales equivalentes a los runners ya permitidos; nunca Node arbitrario.
-const LOCAL_VERIFICATION_RUNNERS = [
-  "node_modules/vitest/vitest.mjs run",
-  "node_modules/typescript/bin/tsc",
-  "node_modules/eslint/bin/eslint.js",
-  "node_modules/jest/bin/jest.js",
-] as const
-
-function balancedRoutineBash(name: string, value: unknown): unknown {
-  if (!["ms-codex", "ms-fastlane", "ms-tester"].includes(name) || !value || typeof value !== "object" || Array.isArray(value)) return value
-  const original = value as Record<string, unknown>
-  const commands: string[] = LOCAL_VERIFICATION_RUNNERS.flatMap((runner) => [`node ${runner}`, `node ./${runner}`])
-  const additions = Object.fromEntries(commands.flatMap((command) => name === "ms-tester" && command.includes("typescript/bin/tsc")
-    ? [[`${command} --noEmit`, "allow"], [`${command} * --noEmit`, "allow"]]
-    : [[command, "allow"], [`${command} *`, "allow"]]))
-  if (name === "ms-fastlane") {
-    for (const command of ["rg", "cat", "head", "tail", "wc", "file", "stat"]) {
-      additions[command] = "allow"
-      additions[`${command} *`] = "allow"
-    }
-    for (const command of ["npm run build", "pnpm build", "pnpm run build", "pnpm build:staging", "pnpm run build:staging", "yarn build", "yarn run build", "bun run build"]) additions[command] = "allow"
-  }
-  // Inserta permisos antes de las protecciones existentes: un allow nuevo no las eclipsa.
-  const result: Record<string, unknown> = { "*": original["*"], ...additions, ...original }
-  for (const pattern of ["*&*", "*;*", "*|*", "*`*", "*$(*", "*<*", "*>*", "*\n*", "*\r*"]) result[pattern] = "deny"
-  if (name === "ms-tester") {
-    const guardedRunners = [...commands, ...["pnpm exec", "npx --no-install"].flatMap((prefix) => ["vitest run", "jest", "eslint"].map((runner) => `${prefix} ${runner}`))]
-    for (const command of commands.filter((command) => command.includes("typescript/bin/tsc"))) {
-      result[`${command} *--noEmit false*`] = "deny"
-      result[`${command} *--noEmit=false*`] = "deny"
-    }
-    for (const command of guardedRunners.filter((command) => command.includes("vitest") || command.includes("jest"))) {
-      result[`${command} -u*`] = "deny"
-      result[`${command} * -u*`] = "deny"
-      for (const flag of ["--update", "--updateSnapshot", "--outputFile", "--output-file", "--coverage.reportsDirectory", "--coverageDirectory"]) {
-        for (const position of [`${command} ${flag}`, `${command} * ${flag}`]) {
-          for (const suffix of ["", " *", "=*", ...(flag === "--outputFile" ? [".*"] : [])]) result[position + suffix] = "deny"
-        }
-      }
-    }
-    for (const command of guardedRunners.filter((command) => command.includes("eslint"))) {
-      result[`${command} -o*`] = "deny"
-      result[`${command} * -o*`] = "deny"
-      for (const position of [`${command} --output-file`, `${command} * --output-file`]) {
-        for (const suffix of ["", " *", "=*"]) result[position + suffix] = "deny"
-      }
-    }
-  }
-  return result
-}
-
-function trustedBash(value: unknown): unknown {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return value
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([pattern, action]) => [
-      pattern,
-      action === "ask" ? "allow" : action,
-    ]),
-  )
-}
-
 function applyPermissionProfile(
   name: string,
   permission: OpenCodeRolePermission,
@@ -1160,14 +1103,19 @@ function applyPermissionProfile(
 
   const balanced: OpenCodeRolePermission = {
     ...rolePermission,
-    bash: balancedRoutineBash(name, rolePermission.bash),
+    bash: developmentBash(name, rolePermission.bash),
+    lsp: ["ms-architect", "ms-codex", "ms-fastlane", "ms-tester", "ms-scout", "ms-debugger", "ms-security-auditor"].includes(name) ? "allow" : rolePermission.lsp,
     websearch: BALANCED_WEBSEARCH_AGENTS.has(name) ? "allow" : rolePermission.websearch,
+  }
+  const githubRules = githubBashRules(name)
+  if (Object.keys(githubRules).length > 0) {
+    const bash = balanced.bash as Record<string, unknown>
+    balanced.bash = { ...bash, ...githubRules }
   }
   if (profile === "balanced") return balanced
 
   return {
     ...balanced,
-    bash: trustedBash(balanced.bash),
     websearch: "allow",
   }
 }

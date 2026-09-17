@@ -177,7 +177,7 @@ export function documentaryInspectionCommands(profile: CapabilityProfile): strin
   return [...gitInspectionCommands(profile), "pwd", "ls -d .", "command -v ms-agent-kit"]
 }
 
-export const COORDINATION_SKILLS = ["ms-architect", "ms-project-init", "ms-artifact-lifecycle", "delegation-brief", "work-unit-commits", "judgment-day", "ms-handoff"] as const
+export const COORDINATION_SKILLS = ["ms-architect", "ms-project-init", "ms-artifact-lifecycle", "delegation-brief", "work-unit-commits", "ms-git", "ms-github", "judgment-day", "ms-handoff"] as const
 export function technicalSkillsOnly(name: CapabilityProfileName): boolean {
   return ["code-writer", "fastlane-writer", "test-runner"].includes(name)
 }

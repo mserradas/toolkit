@@ -4,6 +4,7 @@ import { agentDefinition } from "../core/agent-catalog.js"
 import { frontmatterString, renderMarkdown } from "../core/frontmatter.js"
 import { resolveAgentModel } from "../core/agent-models.js"
 import { capabilityProfile, COORDINATION_SKILLS, documentaryInspectionCommands, technicalSkillsOnly } from "../core/profiles.js"
+import { DEVELOPMENT_ROLES } from "../core/development-policy.js"
 import { openCodeRolePermission } from "../core/opencode-role-permissions.js"
 import { verificationForRole, withVerificationCommands } from "../core/verification-policy.js"
 import {
@@ -165,6 +166,7 @@ type BashDecision = "allow" | "ask" | "deny"
 
 interface BashPolicy {
   fallback: BashDecision
+  githubFallback?: "deny"
   allow: string[]
   ask: string[]
   deny: string[]
@@ -204,6 +206,12 @@ function bashPolicies(catalog: Catalog, context: BuildContext): Record<string, B
       // sobre texto citado sin retirar la proteccion del parser.
       for (const [pattern, action] of entries) {
         if (pattern === "*") continue
+        // OpenCode's ordered gh fallback has explicit allow exceptions. Keep it
+        // separate from hard denials, which always win in this guard.
+        if (pattern === "gh *" && action === "deny") {
+          policy.githubFallback = "deny"
+          continue
+        }
         if (
           action === "allow" &&
           (pattern.startsWith("opencode ") || /^git\s+config(?:\s|$)/.test(pattern))
@@ -247,6 +255,8 @@ const SENSITIVE_PATH_SEGMENTS = ${JSON.stringify(SENSITIVE_PATH_SEGMENTS, null, 
 const USER_CLAUDE_SETTINGS = ${JSON.stringify(path.resolve(context.homeDir, ".claude/settings.json"))}
 const SECRET_BASENAME_PATTERNS = ${JSON.stringify(SECRET_BASENAME_PATTERNS, null, 2)}
 const SAFE_ENVIRONMENT_TEMPLATES = new Set(${JSON.stringify(SAFE_ENVIRONMENT_TEMPLATES, null, 2)})
+const ALLOW_COMMAND_SEQUENCES = ${JSON.stringify(context.permissionProfile !== "strict")}
+const PERMISSIVE_ROLES = new Set(${JSON.stringify(context.permissionProfile === "strict" ? [] : DEVELOPMENT_ROLES)})
 
 function secretBasename(value) {
   return SECRET_BASENAME_PATTERNS.some((pattern) => {
@@ -311,9 +321,16 @@ function commandPatternRegex(pattern) {
     const character = pattern[index]
     if (character === "*") {
       output += ".*"
-    } else if (character === " " || character === "\t") {
+    } else if (character === "?") {
+      output += "."
+    } else if (pattern.slice(index) === " *") {
+      output += "(?:[ \\t]+.*)?"
+      break
+    } else if (character === " ") {
       output += "[ \\t]+"
-      while (pattern[index + 1] === " " || pattern[index + 1] === "\t") index += 1
+      // Explicit tabs in denial patterns stay literal; only ordinary spaces
+      // represent flexible argument separators.
+      while (pattern[index + 1] === " ") index += 1
     } else {
       output += character.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")
     }
@@ -416,11 +433,13 @@ function shellSegments(command) {
 
 function shellSequence(command) {
   const sequence = []
+  let invalid = false
   let current = ""
   let quote = null
   let escaped = false
   const flush = (operator) => {
     if (current.trim()) sequence.push({ command: current.trim(), operator })
+    else invalid = true
     current = ""
   }
   for (let index = 0; index < command.length; index += 1) {
@@ -458,7 +477,7 @@ function shellSequence(command) {
   }
   if (quote || escaped) return null
   flush(null)
-  return sequence
+  return invalid ? null : sequence
 }
 
 function invocationStages(words) {
@@ -1235,6 +1254,7 @@ function validBashPolicy(policy) {
     policy !== null &&
     !Array.isArray(policy) &&
     ["allow", "ask", "deny"].includes(policy.fallback) &&
+    (policy.githubFallback === undefined || policy.githubFallback === "deny") &&
     ["allow", "ask", "deny"].every(
       (action) =>
         Array.isArray(policy[action]) &&
@@ -1261,7 +1281,10 @@ function matchesDenyRule(agent, command) {
   if (!validBashPolicy(policy)) return true
   const candidates = denyPolicyCandidates(command)
   if (!candidates) return null
-  return matchesPolicyRules(policy.deny, candidates)
+  if (matchesPolicyRules(policy.deny, candidates)) return true
+  return policy.githubFallback === "deny" && candidates.some(
+    (candidate) => /^gh(?: |$)/.test(candidate) && !matchesPolicyRules(policy.allow, [candidate]),
+  )
 }
 
 const FILE_READER_COMMANDS = new Set([
@@ -1557,7 +1580,57 @@ function unsafeReadOnlyArguments(words) {
   return false
 }
 
+// This is a convenience policy for trusted code, not a shell sandbox. Inspect
+// explicit operations and secret operands; do not reject a local runner merely
+// because its executable, flags or inline script are absent from a catalogue.
+function decidePermissiveCommand(agent, command, depth = 0) {
+  if (depth > MAX_SHELL_INSPECTION_DEPTH) return "ask"
+  const policy = BASH_POLICIES[agent]
+  if (!validBashPolicy(policy)) return "deny"
+  const sequence = shellSequence(command)
+  const tokens = shellWordTokens(command)
+  if (!sequence || !tokens) return "ask"
+  if (sequence.length > 1) {
+    const candidates = [command.trim(), ...canonicalDenyCandidates(command)]
+    const decisions = sequence.map((entry) => decidePermissiveCommand(agent, entry.command, depth + 1))
+    if (matchesPolicyRules(policy.deny.filter((pattern) => /[|;&]/.test(pattern)), candidates)) decisions.push("deny")
+    if (matchesPolicyRules(policy.ask.filter((pattern) => /[|;&]/.test(pattern)), candidates)) decisions.push("ask")
+    return decisions.includes("deny") ? "deny" : decisions.includes("ask") ? "ask" : policy.fallback
+  }
+  // Filters and message bodies are text, not filesystem operands.
+  const filterIndex = tokens[0]?.value === "jq" ? tokens.findIndex((token, index) => index > 0 && !token.value.startsWith("-")) : -1
+  const literalFlags = tokens[0]?.value === "gh" ? ["--jq", "--template", "--json", "-q", "-t", "--body", "--title"] : tokens[0]?.value === "git" && tokens[1]?.value === "commit" ? ["-m", "--message"] : []
+  const operands = tokens.filter((_, index) => index !== filterIndex && !literalFlags.includes(tokens[index - 1]?.value))
+  if (operands.some((token) => secretPath(token.value)) || invokesEnvironmentDump(command)) return "deny"
+  if (operands.some((token) => {
+    const operand = token.value.replace(/^[<>]+/, "")
+    return secretPath(canonicalPath(expandedPath(operand))) || protectedPath(operand)
+  })) return "deny"
+  const candidates = denyPolicyCandidates(command)
+  if (!candidates) return "ask"
+  if (matchesPolicyRules(policy.deny, candidates)) return "deny"
+  const decisions = []
+  if (matchesPolicyRules(policy.ask, candidates)) decisions.push("ask")
+  const nested = invocationCommands(command)
+  const substitutions = substitutionCommands(command)
+  if (!nested || !substitutions) return "ask"
+  decisions.push(...[...substitutions, ...nested.map((entry) => entry.command)].map((inner) => decidePermissiveCommand(agent, inner, depth + 1)))
+  return decisions.includes("deny") ? "deny" : decisions.includes("ask") ? "ask" : policy.fallback
+}
+
 function decideBashCommand(agent, command) {
+  if (PERMISSIVE_ROLES.has(agent)) return decidePermissiveCommand(agent, command)
+  if (ALLOW_COMMAND_SEQUENCES) {
+    const sequence = shellSequence(command)
+    if (!sequence) return "deny"
+    if (sequence.length > 1) {
+      if (sequence.some((entry) => entry.operator && !["&&", "||", "|", ";"].includes(entry.operator))) return "deny"
+      const policy = BASH_POLICIES[agent]
+      if (!validBashPolicy(policy) || matchesPolicyRules(policy.deny.filter((pattern) => /[|;&]/.test(pattern)), [command.trim(), ...canonicalDenyCandidates(command)])) return "deny"
+      const decisions = sequence.map((entry) => decideBashCommand(agent, entry.command))
+      return decisions.includes("deny") ? "deny" : decisions.includes("ask") ? "ask" : "allow"
+    }
+  }
   if (!passesRecursiveDenyRules(agent, command)) return "deny"
   const policy = BASH_POLICIES[agent]
   if (!validBashPolicy(policy)) return "deny"
@@ -1566,10 +1639,13 @@ function decideBashCommand(agent, command) {
   const denyCandidates = denyPolicyCandidates(command)
   if (!denyCandidates) return "deny"
   if (matchesPolicyRules(policy.deny, denyCandidates)) return "deny"
-  if (PROJECT_VERIFICATION[agent]?.commands.includes(command) && !unsafeShellSyntax(command) && !unsafeReadOnlyArguments(words)) return "allow"
+  const ownsWrites = ${JSON.stringify(context.permissionProfile !== "strict")} && ["ms-codex", "ms-fastlane"].includes(agent)
+  const ownsDelivery = agent === "ms-architect" && words[0] === "git" && ["add", "commit", "branch", "switch", "checkout", "fetch", "push"].includes(words[1])
+  const unsafeArguments = !ownsWrites && !ownsDelivery && unsafeReadOnlyArguments(words)
+  if (PROJECT_VERIFICATION[agent]?.commands.includes(command) && !unsafeShellSyntax(command) && !unsafeArguments) return "allow"
   if (matchesPolicyRules(policy.ask, denyCandidates)) return "ask"
   const unsafeAutomaticAllow =
-    unsafeShellSyntax(command) || unsafeReadOnlyArguments(words)
+    unsafeShellSyntax(command) || unsafeArguments
   if (matchesPolicyRules(policy.allow, [command.trim()])) {
     return unsafeAutomaticAllow ? "deny" : "allow"
   }

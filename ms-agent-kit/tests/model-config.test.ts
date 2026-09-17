@@ -115,12 +115,7 @@ describe("configuración de modelos y preferencias por cliente", () => {
     initial.project.preferences = { documentation: { language: "en", paths: ["documentation/guides"] }, technicalSkills: ["project-react"] }
     await writeFile(initial.path, YAML.stringify(initial.project))
     const artifacts = await buildArtifacts(["opencode", "claude", "codex"], context)
-    expect(parseMarkdown(artifact(artifacts, "opencode", "agent", "ms-writer").content.toString()).frontmatter.permission).toMatchObject({ edit: { "documentation/guides/*.md": "allow", "documentation/guides/**/*.md": "allow" } })
-    const editRules = (parseMarkdown(artifact(artifacts, "opencode", "agent", "ms-writer").content.toString()).frontmatter.permission as { edit: Record<string, string> }).edit
-    const effectiveEdit = (filePath: string): string | undefined => Object.entries(editRules).filter(([pattern]) => new RegExp(`^${pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`).test(filePath)).at(-1)?.[1]
-    expect(effectiveEdit("documentation/guides/readme.md")).toBe("allow")
-    expect(effectiveEdit("documentation/guides/secrets/key.md")).toBe("deny")
-    expect(effectiveEdit("documentation/guides/private.key")).toBe("deny")
+    expect(parseMarkdown(artifact(artifacts, "opencode", "agent", "ms-writer").content.toString()).frontmatter.permission).toEqual({})
     expect(artifact(artifacts, "codex", "agent", "ms-writer").content.toString()).toContain('"documentation/guides/**" = "write"')
     expect(artifact(artifacts, "codex", "agent", "ms-writer").content.toString()).toContain("escribe únicamente archivos Markdown")
     const guardArtifact = artifact(artifacts, "claude", "policy", "ms-agent-guard")

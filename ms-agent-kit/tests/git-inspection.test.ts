@@ -27,7 +27,7 @@ describe("Claude documentary inspection guard", () => {
   it("accepts the shared closed list and rejects added operations, scope escapes and wrong cwd", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "ms-git-inspection-"))
     roots.push(root)
-    const artifacts = await buildArtifacts(["claude"], { assetsRoot: DEFAULT_ASSETS_ROOT, projectRoot: root, homeDir: path.join(root, "home"), scope: "project" })
+    const artifacts = await buildArtifacts(["claude"], { assetsRoot: DEFAULT_ASSETS_ROOT, projectRoot: root, homeDir: path.join(root, "home"), scope: "project", permissionProfile: "strict" })
     const guard = artifacts.find((artifact) => artifact.kind === "policy" && artifact.name === "ms-agent-guard")!
     await mkdir(path.dirname(guard.destination), { recursive: true })
     await writeFile(guard.destination, guard.content)

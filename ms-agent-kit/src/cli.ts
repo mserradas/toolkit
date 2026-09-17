@@ -62,7 +62,7 @@ Uso:
 Opciones:
   --target <valor>    Cliente objetivo: \`opencode\`, \`claude\`, \`codex\` o \`all\`. Puede repetirse.
   --scope <valor>     Alcance: \`user\` (predeterminado) o \`project\`.
-  --permission-profile <valor>  Permisos OpenCode: \`balanced\` (predeterminado), \`strict\` o \`trusted\`.
+  --permission-profile <valor>  Perfil Claude/Codex (OpenCode sin reglas): \`balanced\` (predeterminado), \`strict\` o \`trusted\`.
   --project <ruta>    Raíz del proyecto para el alcance \`project\` (predeterminado: directorio actual).
   --home <ruta>       Directorio personal alternativo; útil para pruebas o dotfiles.
   --assets <ruta>     Catálogo alternativo de recursos (\`assets\`).

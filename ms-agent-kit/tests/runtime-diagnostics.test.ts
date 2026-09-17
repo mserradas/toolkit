@@ -120,8 +120,8 @@ describe("diagnóstico runtime seguro", () => {
     for (const target of ["opencode", "claude", "codex"]) {
       for (const role of ["ms-codex", "ms-fastlane", "ms-tester"]) {
         const preflight = commands.find((item) => item.target === target && item.id.endsWith(`.${role}`))
-        expect(preflight?.status).toBe(target === "opencode" ? "correcto" : "no comprobado")
-        expect(preflight?.operation).toMatchObject({ command: "npm run test", target, role, decision: target === "opencode" ? "allow" : "unknown", effects: { status: "unknown", writes: null }, runtime: "unknown" })
+        expect(preflight?.status).toBe("no comprobado")
+        expect(preflight?.operation).toMatchObject({ command: "npm run test", target, role, decision: "unknown", effects: { status: "unknown", writes: null }, runtime: "unknown" })
       }
     }
     expect(commands.filter((item) => item.id.endsWith(".runtime")).every((item) => item.status === "no comprobado")).toBe(true)
@@ -133,12 +133,12 @@ describe("diagnóstico runtime seguro", () => {
     expect(await readFile(file, "utf8")).toBe("schemaVersion: [")
   })
 
-  it("contrasta reglas simples y no interpreta composición shell", async () => {
+  it("no atribuye reglas del kit a comandos de OpenCode", async () => {
     const root = await directory()
-    expect(staticCommandDecision("npm run test", "ms-tester", context(root))).toBe("allow")
-    expect(staticCommandDecision("cat .env", "ms-codex", context(root))).toBe("deny")
+    expect(staticCommandDecision("npm run test", "ms-tester", context(root))).toBe("unknown")
+    expect(staticCommandDecision("cat .env", "ms-codex", context(root))).toBe("unknown")
     expect(staticCommandDecision("npm test && cat .env", "ms-codex", context(root))).toBe("unknown")
-    expect(staticCommandDecision("some-unknown-command", "ms-codex", context(root))).toBe("ask")
+    expect(staticCommandDecision("some-unknown-command", "ms-codex", context(root))).toBe("unknown")
   })
 
   it("doctor usa el snapshot personal para mostrar grants exactos sin ejecutar el comando", async () => {
@@ -156,7 +156,7 @@ describe("diagnóstico runtime seguro", () => {
     expect([0, 1]).toContain(result.status)
     const payload = JSON.parse(result.stdout)
     const preflight = payload.capabilities.find((item: { id: string }) => item.id.startsWith("project.commands.static.test.") && item.id.endsWith(".ms-tester"))
-    expect(preflight).toMatchObject({ status: "correcto", operation: { command: "./scripts/verify.sh", decision: "allow", runtime: "unknown", effects: { status: "unknown", writes: null }, projectAuthorization: { command: true, outputPaths: ["coverage"], source: path.join(buildContext.homeDir, ".ms-agent-kit/config.yaml#verification.projects") } } })
+    expect(preflight).toMatchObject({ status: "no comprobado", operation: { command: "./scripts/verify.sh", decision: "unknown", runtime: "unknown", effects: { status: "unknown", writes: null }, projectAuthorization: { command: true, outputPaths: ["coverage"], source: path.join(buildContext.homeDir, ".ms-agent-kit/config.yaml#verification.projects") } } })
   })
 
   it("exige artefacto instalado para Context7 y no infiere reconocimiento ni acceso remoto", async () => {
