@@ -1,7 +1,7 @@
 font-family = "Geist Mono"
 font-feature = calt
 font-feature = liga
-font-size = 14
+font-size = 15
 
 background-opacity = 1
 background-blur-radius = 0
@@ -10,36 +10,13 @@ window-padding-color = extend
 window-step-resize = false
 window-padding-balance = true
 
-# Herdr owns Spaces, tabs, splits and terminal-state restoration.
-window-save-state = never
-keybind = cmd+d=ignore
-keybind = cmd+shift+d=ignore
-keybind = cmd+t=ignore
-keybind = cmd+shift+t=ignore
-
-### Mac Alt Fix
-macos-option-as-alt = right
-
-keybind = alt+left=unbind
-keybind = alt+right=unbind
-
-# Switch Herdr tabs using its existing Ctrl+A prefix bindings.
-keybind = cmd+alt+left=text:\x01p
-keybind = cmd+alt+right=text:\x01n
-
-# Miscellaneous
-keybind = cmd+g=text:\x01\x1bg
-keybind = alt+g=text:\x01\x1bg
-
-# Use it by writing 'vim' first and then the keybinding to open the file with vim
-keybind = alt+s=write_screen_file:paste
-keybind = shift+enter=text:\x1b\r
-
 # Theme
 theme = Material Ocean
+background = #111522
+
+# herdr-radar font block
+font-codepoint-map = U+E1A0-U+E1B6="Herdr Agent Icons Max"
+font-codepoint-map = U+E1C0-U+E1C5="Herdr Agent Icons Max"
 
 # Herdr
-command = /bin/sh -c 'PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; export PATH; if command -v herdr >/dev/null 2>&1; then exec herdr; fi; echo "Herdr no está instalado; iniciando Fish"; if command -v fish >/dev/null 2>&1; then exec fish -l; fi; exec "${SHELL:-/bin/sh}" -l'
-
-# Machine-specific settings loaded after this shared configuration.
-config-file = ?local
+command = /bin/sh -c 'PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; export PATH; exec herdr'

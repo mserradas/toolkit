@@ -1,3 +1,4 @@
+inline_height = 12
 enter_accept = true
 # Keep command history local to each computer.
 auto_sync = false

@@ -36,16 +36,6 @@ if type -q fnm
     end
 end
 
-function alert
-    set -l message (test -n "$argv[1]"; and echo $argv; or echo "Proceso finalizado")
-    terminal-notifier \
-        -title "Ghostty" \
-        -subtitle (prompt_pwd) \
-        -message $message \
-        -sound Glass \
-        -activate com.mitchellh.ghostty
-end
-
 if status is-interactive
     if type -q starship
         starship init fish | source
@@ -94,14 +84,9 @@ if status is-interactive
     abbr --add occ 'opencode -c'
 
     abbr --add c clear
-    abbr --add bu 'brew update && brew upgrade && brew autoremove && brew cleanup'
+    abbr --add brewup 'brew update && brew upgrade && brew autoremove && brew cleanup'
 
 end
 
 # Editor Default
 set -gx EDITOR vim
-
-# Machine-specific settings that must not be synced to the repository.
-if test -f "$HOME/.config/fish/local.fish"
-    source "$HOME/.config/fish/local.fish"
-end
