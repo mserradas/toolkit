@@ -64,6 +64,8 @@ configure_paths() {
             "$DOTFILES_DIR/herdr/config.toml"
             "$DOTFILES_DIR/starship/starship.toml"
             "$DOTFILES_DIR/atuin/config.toml"
+            "$DOTFILES_DIR/herdr/radar.toml"
+            "$DOTFILES_DIR/herdr/auto-title.env"
         )
         DESTINATIONS=(
             "$HOME/.config/ghostty/config"
@@ -71,6 +73,8 @@ configure_paths() {
             "$HOME/.config/herdr/config.toml"
             "$HOME/.config/starship.toml"
             "$HOME/.config/atuin/config.toml"
+            "$HOME/.config/herdr/plugins/config/hhdebb.herdr-radar/config.toml"
+            "$HOME/Library/Application Support/herdr-auto-title/config.env"
         )
     else
         SOURCES=(
@@ -79,6 +83,8 @@ configure_paths() {
             "$HOME/.config/herdr/config.toml"
             "$HOME/.config/starship.toml"
             "$HOME/.config/atuin/config.toml"
+            "$HOME/.config/herdr/plugins/config/hhdebb.herdr-radar/config.toml"
+            "$HOME/Library/Application Support/herdr-auto-title/config.env"
         )
         DESTINATIONS=(
             "$DOTFILES_DIR/ghostty/config"
@@ -86,6 +92,8 @@ configure_paths() {
             "$DOTFILES_DIR/herdr/config.toml"
             "$DOTFILES_DIR/starship/starship.toml"
             "$DOTFILES_DIR/atuin/config.toml"
+            "$DOTFILES_DIR/herdr/radar.toml"
+            "$DOTFILES_DIR/herdr/auto-title.env"
         )
     fi
 }
@@ -149,6 +157,9 @@ stage_all() {
         if ! cp -p "$src" "$staged"; then
             error "no se pudo preparar la copia de $src"
             return 1
+        fi
+        if [[ "$MODE" == "sync" && "$dst" == "$DOTFILES_DIR/herdr/config.toml" ]]; then
+            python3 "$DOTFILES_DIR/herdr/portable-config.py" "$src" > "$staged"
         fi
     done
 }

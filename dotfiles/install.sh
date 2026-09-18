@@ -237,6 +237,8 @@ healthcheck() {
 
         if [[ ! -f "$destination" ]]; then
             check "$label" "no encontrado en $destination"
+        elif [[ "$source" == "$DOTFILES_DIR/herdr/config.toml" ]] && python3 "$DOTFILES_DIR/herdr/portable-config.py" "$source" "$destination"; then
+            check "$label" "ok"
         elif cmp -s "$source" "$destination"; then
             check "$label" "ok"
         else
@@ -313,9 +315,9 @@ healthcheck() {
 
     if installed herdr; then
         if bash "$DOTFILES_DIR/herdr/install-plugins.sh" --check; then
-            check "Plugins Herdr: notificaciones y títulos" "ok"
+            check "Plugins Herdr: Auto Title y Radar" "ok"
         else
-            check "Plugins Herdr: notificaciones y títulos" "plugin, configuración o alerter no disponible"
+            check "Plugins Herdr: Auto Title y Radar" "plugin, preferencias, Node.js o fuente no disponible"
         fi
         if HERDR_CONFIG_PATH="$HOME/.config/herdr/config.toml" herdr config check &>/dev/null; then
             check "Sintaxis Herdr" "ok"
@@ -391,9 +393,8 @@ main() {
     install_homebrew
     install_packages
     set_fish_shell
-    # Prepare Herdr plugins before applying configs that disable native toasts.
-    bash "$DOTFILES_DIR/herdr/install-plugins.sh"
     copy_configs
+    bash "$DOTFILES_DIR/herdr/install-plugins.sh"
     install_fish_plugins
     install_herdr_integrations
     healthcheck
