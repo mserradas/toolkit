@@ -341,9 +341,7 @@ describe("platform adapters", () => {
           artifact.kind === "documentation" && artifact.name === "agents-shared.md",
       ),
     ).toBeDefined()
-    expect(JSON.parse(tui!.content.toString("utf8"))).toMatchObject({
-      attention: { enabled: true, notifications: false, sound: false },
-    })
+    expect(JSON.parse(tui!.content.toString("utf8"))).not.toHaveProperty("attention")
     expect(tui!.content.toString("utf8")).not.toContain("opencode-subagent-statusline")
     expect(opencode!.content.toString("utf8")).not.toMatch(/sk-[A-Za-z0-9]/)
   })
