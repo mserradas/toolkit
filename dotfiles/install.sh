@@ -40,11 +40,11 @@ registered_user_shell() {
     printf '%s\n' "$registered_shell"
 }
 
-geist_mono_font_installed() {
+jetbrains_mono_font_installed() {
     local font_dir font_file
     for font_dir in "$HOME/Library/Fonts" "/Library/Fonts"; do
         [[ -d "$font_dir" ]] || continue
-        for font_file in "$font_dir"/GeistMono*.{ttf,otf}; do
+        for font_file in "$font_dir"/JetBrainsMono*.{ttf,otf}; do
             [[ -e "$font_file" ]] && return 0
         done
     done
@@ -76,7 +76,7 @@ install_packages() {
 
     local casks=(
         ghostty
-        font-geist-mono
+        font-jetbrains-mono
     )
 
     local formulae=(
@@ -98,7 +98,7 @@ install_packages() {
     for cask in "${casks[@]}"; do
         if brew list --cask "$cask" &>/dev/null; then
             success "$cask ya instalado"
-        elif [[ "$cask" == "font-geist-mono" ]] && geist_mono_font_installed; then
+        elif [[ "$cask" == "font-jetbrains-mono" ]] && jetbrains_mono_font_installed; then
             success "$cask ya instalado (fuente detectada)"
         else
             brew install --cask "$cask"
@@ -273,7 +273,7 @@ healthcheck() {
     installed zoxide    && check "zoxide"             "ok" || check "zoxide"             "no encontrado"
     installed fnm       && check "fnm"                "ok" || check "fnm"                "no encontrado"
     installed terminal-notifier && check "terminal-notifier" "ok" || check "terminal-notifier" "no encontrado"
-    geist_mono_font_installed && check "Geist Mono" "ok" || check "Geist Mono" "no encontrada"
+    jetbrains_mono_font_installed && check "JetBrains Mono" "ok" || check "JetBrains Mono" "no encontrada"
 
     # Configs
     check_config "Config Ghostty"  "$DOTFILES_DIR/ghostty/config"          "$HOME/.config/ghostty/config"

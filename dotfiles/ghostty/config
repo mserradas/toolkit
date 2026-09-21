@@ -1,7 +1,7 @@
-font-family = "Geist Mono"
+font-family = "JetBrains Mono"
 font-feature = calt
 font-feature = liga
-font-size = 15
+font-size = 14
 
 background-opacity = 1
 background-blur-radius = 0
@@ -13,6 +13,7 @@ window-padding-balance = true
 # Theme
 theme = Material Ocean
 background = #111522
+foreground = #eeeeee
 
 # herdr-radar font block
 font-codepoint-map = U+E1A0-U+E1B6="Herdr Agent Icons Max"

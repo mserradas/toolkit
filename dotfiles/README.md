@@ -64,7 +64,7 @@ La comprobación del servidor usa `python3`. Ejecuta `--check` directamente en F
 
 ```text
 Aplicaciones: Ghostty
-Fuente:       Geist Mono
+Fuente:       JetBrains Mono
 Intérprete:   fish
 Terminal:     herdr, starship
 Navegación:   eza, fzf, fd, bat, zoxide
@@ -290,7 +290,7 @@ Revisa los permisos de Herdr en Ajustes del Sistema → Notificaciones y el modo
 
 ### No aparecen iconos
 
-Comprueba que Ghostty usa `Geist Mono` y que la fuente aparece en `~/Library/Fonts` o `/Library/Fonts`. El paquete administrado por Homebrew es `font-geist-mono`.
+Comprueba que Ghostty usa `JetBrains Mono` y que la fuente aparece en `~/Library/Fonts` o `/Library/Fonts`. El paquete administrado por Homebrew es `font-jetbrains-mono`.
 
 ## Compatibilidad y límites
 
