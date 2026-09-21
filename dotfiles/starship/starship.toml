@@ -3,6 +3,8 @@
 format = """\
 ($directory)\
 $git_branch\
+$git_commit\
+$git_state\
 $git_status\
 $fill\
 $python\
@@ -46,6 +48,7 @@ read_only = " 🔒"
 format = " ⏱ took [ $duration]($style) "
 style = "bold yellow"
 min_time = 500
+show_milliseconds = true
 
 [git_branch]
 format = "-> [$symbol$branch]($style) "
@@ -80,11 +83,11 @@ detect_files = [
 	"requirements.txt",
 	".python-version",
 ]
-format = '[${symbol}${version}( \($virtualenv\))]($style)'
+format = '[${symbol}${version}( \($virtualenv\))]($style) '
 
 [bun]
 version_format = "$raw"
-format = '[$symbol$version]($style)'
+format = '[$symbol$version]($style) '
 symbol = "🥟 "
 
 [nodejs]
@@ -92,38 +95,38 @@ symbol = " "
 style = "bold green"
 detect_files = ["package.json", ".node-version"]
 detect_extensions = ["js", "mjs", "cjs", "ts"]
-format = '[${symbol}${version}]($style)'
+format = '[${symbol}${version}]($style) '
 
 [rust]
 symbol = "🦀 "
-format = '[$symbol$version](bold red)'
+format = '[$symbol$version](bold red) '
 
 [golang]
 symbol = "🐹 "
 style = "bold cyan"
-format = '[$symbol$version]($style)'
+format = '[$symbol$version]($style) '
 
 [php]
 symbol = "🐘 "
 style = "bold blue"
-format = '[$symbol$version]($style)'
+format = '[$symbol$version]($style) '
 
 [java]
 symbol = "☕ "
 style = "bold red"
-format = '[$symbol$version]($style)'
+format = '[$symbol$version]($style) '
 
 [c]
 symbol = "© "
 style = "bold blue"
-format = '[$symbol$version]($style)'
+format = '[$symbol$version]($style) '
 
 [zig]
 symbol = "⚡ "
 style = "bold yellow"
-format = '[$symbol$version]($style)'
+format = '[$symbol$version]($style) '
 
 [conda]
 symbol = "🅒 "
 style = "bold green"
-format = '[$symbol$environment]($style)'
+format = '[$symbol$environment]($style) '
