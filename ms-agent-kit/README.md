@@ -456,6 +456,10 @@ OpenCode usa el agente `ms-fastlane`; Claude ejecuta un fork del mismo rol, con 
 
 ### OpenCode
 
+El tema compartido `material-ocean-readable` conserva la paleta Material Ocean, fondo `#111522` y texto `#eeeeee`. Usa colores explícitos para evitar texto invisible en las etiquetas de archivos del tema `system`. Se incluye en `assets/opencode/config/themes/` y se selecciona desde `assets/opencode/config/tui.json`.
+
+El instalador coloca el tema en `~/.config/opencode/themes/` para alcance de usuario y en `.opencode/themes/` para alcance de proyecto, con el seguimiento y las copias de seguridad habituales del kit. En una sesión abierta, selecciona `material-ocean-readable` con `/theme`. Los archivos de OpenCode pertenecen a este kit; `dotfiles` solo gestiona el entorno de terminal.
+
 OpenCode conserva comandos y menciones de agentes:
 
 ```text
@@ -463,7 +467,7 @@ OpenCode conserva comandos y menciones de agentes:
 @ms-scout localiza el flujo de autenticación
 ```
 
-La instalación global administra `opencode.json`, `tui.json`, agentes, comandos y `skills`. Desactiva las notificaciones propias de OpenCode y no declara `@mohak34/opencode-notifier`; no hay plugins TypeScript locales ni interceptores del ciclo de delegación.
+La instalación global administra `opencode.json`, `tui.json`, temas, agentes, comandos y `skills`. Desactiva las notificaciones propias de OpenCode y no declara `@mohak34/opencode-notifier`; no hay plugins TypeScript locales ni interceptores del ciclo de delegación.
 
 Playwright MCP se registra como servidor local habilitado con `npx -y @playwright/mcp@latest`. Usa el Node.js y `npx` del entorno del cliente; el primer inicio puede descargar el paquete. El instalador no inicia el navegador ni comprueba la conexión. Esta configuración sigue la [documentación oficial de Playwright MCP](https://github.com/microsoft/playwright-mcp).
 

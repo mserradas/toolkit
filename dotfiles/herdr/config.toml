@@ -2,7 +2,7 @@ onboarding = false
 
 [theme]
 
-name = "terminal"
+name = "catppuccin"
 auto_switch = false
 
 [keys]
@@ -22,16 +22,19 @@ pane_gaps = false
 
 # >>> herdr-radar tab-bar block
 tab_bar_right_separator = " · "
-tab_bar_right = [
-  { type = 'command', command = 'cat "${XDG_STATE_HOME:-$HOME/.local/state}/herdr/plugins/hhdebb.herdr-radar/tabbar.txt"', interval_seconds = 6, timeout_seconds = 2 },
-]
+tab_bar_right = []
 # <<< herdr-radar tab-bar block
 
+status_indicators = "symbols"
 [experimental]
 pane_history = false
 
 # >>> herdr-radar theme block
 [theme.custom]
+panel_bg = "#111522"
+sidebar_bg = "#111522"
+text = "#eeeeee"
+accent = "#82aaff"
 active_row_bg = "#414868"
 # <<< herdr-radar theme block
 
@@ -53,20 +56,6 @@ kilo = [[{ token = "$group_parent", fg = "#a6adbb", bold = true, dim = false }],
 row_gap = 0
 rows = [
   [
-    { token = "$space_blocked", fg = "#c04a4a", bold = true, dim = false },
-    { token = "$space_working_claude", fg = "#d97757", bold = true, dim = false },
-    { token = "$space_working_gemini", fg = "#4285f4", bold = true, dim = false },
-    { token = "$space_working_kimi", fg = "#1783ff", bold = true, dim = false },
-    { token = "$space_working_deepseek", fg = "#4d6bfe", bold = true, dim = false },
-    { token = "$space_working_qwen", fg = "#615ced", bold = true, dim = false },
-    { token = "$space_working_kiro", fg = "#9046ff", bold = true, dim = false },
-    { token = "$space_working_cline", fg = "#586876", bold = true, dim = false },
-    { token = "$space_working_kilo", fg = "#9a9808", bold = true, dim = false },
-    { token = "$space_working_other", fg = "#c78a1f", bold = true, dim = false },
-    { token = "$space_done", fg = "#4c9a5a", bold = true, dim = false },
-    { token = "$space_idle", fg = "#b8bdcc", bold = false, dim = false },
-    { token = "$space_unknown", fg = "#907aa9", bold = false, dim = false },
-    { token = "$space_none", fg = "#dce1e9", bold = false, dim = false },
     { token = "$space_label", fg = "#dce1e9", bold = false, dim = false }
   ],
   [

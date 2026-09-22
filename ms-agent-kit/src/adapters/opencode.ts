@@ -90,7 +90,7 @@ export function buildOpenCodeArtifacts(catalog: Catalog, context: BuildContext):
 
   for (const file of catalog.openCodeConfigFiles) {
     const destinationRoot =
-      file.relativePath === "package.json" ? root : configRoot
+      file.relativePath === "package.json" || file.relativePath.startsWith("themes/") ? root : configRoot
     artifacts.push(
       textArtifact({
         target: "opencode",

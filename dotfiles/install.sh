@@ -156,7 +156,7 @@ copy_configs() {
 
     # Crear directorios necesarios
     mkdir -p ~/.config/ghostty
-    mkdir -p ~/.config/fish
+    mkdir -p ~/.config/fish/functions
     mkdir -p ~/.config/herdr
     mkdir -p ~/.config/atuin
     mkdir -p ~/.config
@@ -186,6 +186,7 @@ copy_configs() {
     copy_with_backup "$DOTFILES_DIR/herdr/config.toml"     ~/.config/herdr/config.toml
     copy_with_backup "$DOTFILES_DIR/starship/starship.toml" ~/.config/starship.toml
     copy_with_backup "$DOTFILES_DIR/atuin/config.toml"     ~/.config/atuin/config.toml
+    copy_with_backup "$DOTFILES_DIR/fish/functions/md.fish" "$HOME/.config/fish/functions/md.fish"
 }
 
 # --- INTEGRACIONES HERDR ---
@@ -281,6 +282,7 @@ healthcheck() {
     check_config "Config Herdr"    "$DOTFILES_DIR/herdr/config.toml"        "$HOME/.config/herdr/config.toml"
     check_config "Config Starship" "$DOTFILES_DIR/starship/starship.toml"  "$HOME/.config/starship.toml"
     check_config "Config Atuin"    "$DOTFILES_DIR/atuin/config.toml"       "$HOME/.config/atuin/config.toml"
+    check_config "Función md" "$DOTFILES_DIR/fish/functions/md.fish" "$HOME/.config/fish/functions/md.fish"
 
     if installed atuin; then
         if [[ "$(atuin config get --resolved auto_sync 2>/dev/null)" == "false" ]]; then

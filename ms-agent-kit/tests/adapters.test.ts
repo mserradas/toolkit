@@ -301,6 +301,27 @@ describe("platform adapters", () => {
 
 
 
+  it("installs the selected readable theme in OpenCode's native theme directory for both scopes", async () => {
+    for (const scope of ["user", "project"] as const) {
+      const buildContext = await context(scope)
+      const artifacts = await buildArtifacts(["opencode"], buildContext)
+      const tui = artifacts.find((artifact) => artifact.name === "tui.json")!
+      const selected = JSON.parse(tui.content.toString("utf8")).theme
+      const theme = artifacts.find((artifact) => artifact.name === `themes/${selected}.json`)!
+      const root = scope === "user"
+        ? path.join(buildContext.homeDir, ".config", "opencode")
+        : path.join(buildContext.projectRoot, ".opencode")
+      expect(theme.destination).toBe(path.join(root, "themes", `${selected}.json`))
+      expect(theme.root).toBe(root)
+      expect(theme.kind).toBe("configuration")
+      expect(JSON.parse(theme.content.toString("utf8")).theme).toMatchObject({
+        background: "#111522",
+        secondary: "#c792ea",
+        text: "#eeeeee",
+      })
+    }
+  })
+
   it("builds a reproducible global OpenCode configuration without secrets", async () => {
     const buildContext = await context("user")
     const artifacts = await buildArtifacts(["opencode"], buildContext)
@@ -310,7 +331,7 @@ describe("platform adapters", () => {
 
     const catalog = await loadCatalog(DEFAULT_ASSETS_ROOT)
     expect(artifacts).toHaveLength(catalog.agents.length + catalog.commands.length + catalog.skills.reduce((count, skill) => count + skill.files.length, 0) + catalog.documentation.length + catalog.openCodeConfigFiles.length + catalog.openCodePlugins.length + 1)
-    expect(configurations).toHaveLength(2)
+    expect(configurations).toHaveLength(3)
     expect(opencode?.destination).toBe(path.join(buildContext.homeDir, ".config", "opencode", "opencode.json"))
     const openCodeConfig = JSON.parse(opencode!.content.toString("utf8"))
     expect(openCodeConfig).toMatchObject({

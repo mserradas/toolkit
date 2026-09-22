@@ -66,6 +66,7 @@ configure_paths() {
             "$DOTFILES_DIR/atuin/config.toml"
             "$DOTFILES_DIR/herdr/radar.toml"
             "$DOTFILES_DIR/herdr/auto-title.env"
+            "$DOTFILES_DIR/fish/functions/md.fish"
         )
         DESTINATIONS=(
             "$HOME/.config/ghostty/config"
@@ -75,6 +76,7 @@ configure_paths() {
             "$HOME/.config/atuin/config.toml"
             "$HOME/.config/herdr/plugins/config/hhdebb.herdr-radar/config.toml"
             "$HOME/Library/Application Support/herdr-auto-title/config.env"
+            "$HOME/.config/fish/functions/md.fish"
         )
     else
         SOURCES=(
@@ -85,6 +87,7 @@ configure_paths() {
             "$HOME/.config/atuin/config.toml"
             "$HOME/.config/herdr/plugins/config/hhdebb.herdr-radar/config.toml"
             "$HOME/Library/Application Support/herdr-auto-title/config.env"
+            "$HOME/.config/fish/functions/md.fish"
         )
         DESTINATIONS=(
             "$DOTFILES_DIR/ghostty/config"
@@ -94,6 +97,7 @@ configure_paths() {
             "$DOTFILES_DIR/atuin/config.toml"
             "$DOTFILES_DIR/herdr/radar.toml"
             "$DOTFILES_DIR/herdr/auto-title.env"
+            "$DOTFILES_DIR/fish/functions/md.fish"
         )
     fi
 }

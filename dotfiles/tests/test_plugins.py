@@ -140,6 +140,28 @@ else:
         self.assertTrue(list(radar.parent.glob('config.toml.backup.*')))
         self.assertTrue(list((self.home / 'Library/Application Support/herdr-auto-title').glob('config.env.backup.*')))
 
+    def test_md_function_round_trip_and_backup(self):
+        result = self.run_script('sync.sh', '--apply')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        source = self.scripts / 'fish/functions/md.fish'
+        target = self.home / '.config/fish/functions/md.fish'
+        self.assertEqual(source.read_bytes(), target.read_bytes())
+        target.write_text(target.read_text() + '# local preference\n')
+        result = self.run_script('sync.sh', '--force')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(source.read_bytes(), target.read_bytes())
+        target.write_text('local sentinel')
+        self.assertEqual(self.run_script('sync.sh', '--apply').returncode, 0)
+        self.assertTrue(any(p.read_text() == 'local sentinel' for p in target.parent.glob('md.fish.backup.*')))
+
+    def test_missing_md_function_aborts_before_any_apply(self):
+        sentinel = self.home / '.config/ghostty/config'
+        sentinel.parent.mkdir(parents=True)
+        sentinel.write_text('sentinel\n')
+        (self.scripts / 'fish/functions/md.fish').unlink()
+        self.assertNotEqual(self.run_script('sync.sh', '--apply').returncode, 0)
+        self.assertEqual(sentinel.read_text(), 'sentinel\n')
+
     def test_missing_plugin_preference_aborts_before_any_apply(self):
         sentinel = self.home / '.config/ghostty/config'
         sentinel.parent.mkdir(parents=True)

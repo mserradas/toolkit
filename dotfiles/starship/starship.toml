@@ -33,11 +33,12 @@ error_symbol = "[✖](bold red)"
 
 [directory]
 format = "[$path](bold $style)[$read_only]($read_only_style) "
-truncation_length = 2
+truncation_length = 1
 style = "blue"
 read_only_style = "blue"
-before_repo_root_style = "blue"
-truncation_symbol = "…/"
+repo_root_style = "bold blue"
+repo_root_format = "[$repo_root]($repo_root_style)[$path]($style)[$read_only]($read_only_style) "
+truncation_symbol = ""
 truncate_to_repo = true
 read_only = " 🔒"
 
@@ -45,15 +46,15 @@ read_only = " 🔒"
 "Documents" = "󰈙 "
 
 [cmd_duration]
-format = " ⏱ took [ $duration]($style) "
+format = " [⏱ $duration]($style) "
 style = "bold yellow"
-min_time = 500
-show_milliseconds = true
+min_time = 2000
+show_milliseconds = false
 
 [git_branch]
-format = "-> [$symbol$branch]($style) "
-style = "bold green"
-symbol = " "
+format = "[$symbol$branch]($style) "
+style = "#c4a7e7"
+symbol = " "
 
 [git_status]
 format = '([$all_status$ahead_behind]($style) )'

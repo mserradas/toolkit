@@ -21,3 +21,7 @@ font-codepoint-map = U+E1C0-U+E1C5="Herdr Agent Icons Max"
 
 # Herdr
 command = /bin/sh -c 'PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; export PATH; exec herdr'
+
+# Keep the macOS window buttons and hide only the title text.
+macos-titlebar-style = transparent
+title = " "

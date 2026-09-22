@@ -72,7 +72,7 @@ Historial:    atuin
 Entornos:     fnm
 Utilidades:   git, pnpm, terminal-notifier
 Pestañas:     kryptamine/herdr-auto-title v0.6.2
-Agentes:      hhdebb/herdr-radar v1.3.5
+Agentes:      hhdebb/herdr-radar v1.3.12
 Iconos:       Herdr Agent Icons Max (incluida en Radar)
 Plugins:      Go para compilar Auto Title; Node.js >=18 para Radar
 ```
@@ -101,7 +101,7 @@ cd dotfiles
 git diff -- .
 ```
 
-`sync.sh` copia hacia el repositorio las configuraciones actuales de Ghostty, Fish, Herdr, Starship y Atuin, más las preferencias de Auto Title y Radar. Normaliza la ruta generada de la barra de Radar para resolverla mediante `XDG_STATE_HOME` o `$HOME` en cada equipo. Antes de escribir, comprueba las siete fuentes y prepara todas las copias. Si una operación falla, restaura lo que ya hubiera cambiado.
+`sync.sh` copia hacia el repositorio las configuraciones actuales de Ghostty, Fish, Herdr, Starship y Atuin, más las preferencias de Auto Title y Radar. Normaliza la ruta generada de la barra de Radar para resolverla mediante `XDG_STATE_HOME` o `$HOME` en cada equipo. Incluye también la función Fish `md`. Antes de escribir, comprueba las ocho fuentes y prepara todas las copias. Si una operación falla, restaura lo que ya hubiera cambiado.
 
 Sin argumentos, la sincronización se detiene si cualquiera de los siete archivos del repositorio ya tiene cambios locales. Para reemplazarlos deliberadamente:
 
@@ -162,9 +162,9 @@ Herdr conserva su mapa de atajos predeterminado; la única personalización gene
 
 El cierre mediante `Alt+G` o `Cmd+G` pertenece al Fish del popup. Si hay una aplicación en primer plano dentro del popup, sal primero de ella. Herdr conserva los procesos cuando se cierra la ventana. Al volver a abrir Ghostty, el cliente se conecta a la sesión persistente existente.
 
-La barra lateral muestra los agentes con su estado, Space y título del terminal. Cada Space ocupa una línea con su rama y estado de Git. Los paneles comparten divisores, sin espacios adicionales. El aviso de copia al portapapeles está desactivado; la copia automática al seleccionar sigue disponible.
+La barra lateral muestra los agentes con su estado, Space y título del terminal. La primera fila de cada Space muestra solo su nombre, sin indicador ni separador delante; los logos de agentes pueden ocupar una segunda fila. La esquina derecha de la barra de pestañas queda vacía (`tab_bar_right = []`). Los paneles comparten divisores, sin espacios adicionales. El aviso de copia al portapapeles está desactivado; la copia automática al seleccionar sigue disponible.
 
-Las pestañas usan [Herdr Auto Title](https://github.com/kryptamine/herdr-auto-title) 0.6.2. Las preferencias compartidas desactivan el prefijo numérico y el renombrado de paneles. [Herdr Radar](https://github.com/hhdebb/herdr-radar) 1.3.5 muestra los agentes y sus estados con iconos y colores, sin separación entre grupos.
+Las pestañas usan [Herdr Auto Title](https://github.com/kryptamine/herdr-auto-title) 0.6.2. Las preferencias compartidas desactivan el prefijo numérico, el renombrado de paneles, la rama y el nombre del agente; limitan el título a 32 columnas. [Herdr Radar](https://github.com/hhdebb/herdr-radar) 1.3.12 muestra los agentes y sus estados con iconos y colores, sin separación entre grupos.
 
 ### Plugins de Herdr
 
@@ -172,7 +172,7 @@ Las pestañas usan [Herdr Auto Title](https://github.com/kryptamine/herdr-auto-t
 
 | Plugin | Preferencias compartidas | Efecto |
 |---|---|---|
-| `herdr.auto-title` | `herdr/auto-title.env` | Sin números en las pestañas; conserva los nombres de paneles |
+| `herdr.auto-title` | `herdr/auto-title.env` | Sin números, rama ni nombre de agente; máximo 32 columnas; conserva los nombres de paneles |
 | `hhdebb.herdr-radar` | `herdr/radar.toml` | `group_gap = false` |
 
 Para preparar una instalación existente:
@@ -188,7 +188,7 @@ El instalador guarda las preferencias antes de instalar o habilitar los plugins,
 
 Auto Title lee `~/Library/Application Support/herdr-auto-title/config.env` en macOS, **no** el directorio que muestra `herdr plugin config-dir`. Lee las preferencias al arrancar; cambiar el archivo de un plugin ya activo no reinicia sus procesos. Node.js >=18 debe estar disponible en el `PATH` del servidor Herdr para ejecutar Radar.
 
-Después de editar preferencias locales, `./sync.sh` también las trae al repositorio. Las revisiones de `plugins.list` se actualizan por separado cuando decidas cambiar la versión compartida. El script no desinstala plugins ajenos ni los anteriores (`herdr-focus-notify` y `aarsh21.tab-title`); si aún están en otro equipo, revísalos antes de habilitar funciones que puedan duplicarse.
+Después de editar preferencias locales, `./sync.sh` también las trae al repositorio. Las revisiones de `plugins.list` se actualizan por separado cuando decidas cambiar la versión compartida. Auto Title es el único gestor de títulos incluido. Si otro equipo conserva `aarsh21.tab-title`, detén su watcher con `herdr plugin action invoke aarsh21.tab-title.stop` y elimínalo con `herdr plugin uninstall aarsh21.tab-title`. El instalador no elimina otros plugins, como `herdr-focus-notify`.
 
 ### Fish
 
@@ -196,7 +196,7 @@ La configuración inicializa Starship, Atuin y Zoxide solo en sesiones interacti
 
 FNM selecciona Node: las sesiones interactivas habilitan el cambio de versión al cambiar de directorio; los scripts hijos conservan la selección heredada. Un Fish no interactivo con entorno independiente usa la versión predeterminada de FNM. Puedes elegirla con `fnm default <versión-instalada>`; los scripts que necesiten otra versión de proyecto deben seleccionarla explícitamente. La configuración no instala versiones de Node automáticamente.
 
-Los plugins compartidos son Fisher, `fzf.fish` y `done`, declarados en `fish/plugins.list`. El instalador añade los ausentes sin sustituir tu lista personal `~/.config/fish/fish_plugins`; `sync.sh` sincroniza las cinco configuraciones principales y las preferencias de los dos plugins de Herdr. Para añadir los plugins compartidos a una instalación existente:
+Los plugins compartidos son Fisher, `fzf.fish` y `done`, declarados en `fish/plugins.list`. El instalador añade los ausentes sin sustituir tu lista personal `~/.config/fish/fish_plugins`; `sync.sh` sincroniza las configuraciones principales, las preferencias de los dos plugins de Herdr, la función `md`. Para añadir los plugins compartidos a una instalación existente:
 
 ```bash
 fish fish/install-plugins.fish
@@ -299,3 +299,19 @@ Comprueba que Ghostty usa `JetBrains Mono` y que la fuente aparece en `~/Library
 - El proyecto instala una configuración personal y administra los siete archivos de configuración declarados.
 - No gestiona secretos ni credenciales.
 - No elimina automáticamente paquetes o configuraciones ajenas a esos archivos.
+
+## Apariencia compartida
+
+Ghostty mantiene Material Ocean, fondo `#111522` y texto `#eeeeee`. `title = " "` oculta el texto de la barra superior; `macos-titlebar-style = transparent` conserva los botones. Herdr usa Catppuccin con fondo y acento explícitos para mejorar el contraste de la pestaña activa.
+
+Starship muestra el directorio compacto, la rama violeta y Node verde. La duración aparece desde 2 segundos, sin milisegundos. `md README.md` usa `bat` para leer Markdown con resaltado, paginación y un ancho máximo de 100 columnas (no renderiza Markdown).
+
+La configuración visual y el tema de OpenCode se administran desde `../ms-agent-kit`, no desde dotfiles.
+
+Archivos adicionales administrados por `install.sh` y `sync.sh`:
+
+| Repositorio | Destino |
+| --- | --- |
+| `fish/functions/md.fish` | `~/.config/fish/functions/md.fish` |
+
+Auto Title necesita reiniciar su proceso para leer sus preferencias; no basta con recargar la configuración de Herdr. Termina el trabajo activo antes de reiniciar el servidor.

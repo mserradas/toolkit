@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/tui.json",
-  "theme": "system",
+  "theme": "material-ocean-readable",
   "diff_style": "auto",
   "scroll_acceleration": {
     "enabled": true
