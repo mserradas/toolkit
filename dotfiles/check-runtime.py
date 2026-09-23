@@ -28,6 +28,19 @@ def server_problem(status):
     return 0, ""
 
 
+def radar_problem(payload):
+    # Keep the latest outcome for each command, so a successful retry clears
+    # its earlier failure. The server logs expose failures hidden by --check.
+    latest = {}
+    for entry in sorted(payload["result"]["logs"], key=lambda row: row.get("started_unix_ms", 0)):
+        command = tuple(entry.get("command", []))
+        if command and command[0] == "node":
+            latest[command] = entry
+    if any(entry.get("status") == "failed" for entry in latest.values()):
+        return 1, "Radar falló al ejecutar Node desde Herdr; revisa herdr plugin log list --plugin hhdebb.herdr-radar. Si corregiste el arranque, el servidor existente necesita reiniciarse con el nuevo entorno."
+    return 0, ""
+
+
 def colors_disabled(environment):
     # Empty NO_COLOR does not disable colors. Never return the values.
     return bool(environment.get("NO_COLOR")) or environment.get("TERM") == "dumb"
@@ -39,13 +52,19 @@ def main():
         if code:
             print(message)
             return code
+        code, message = radar_problem(json.loads(capture(
+            "herdr", "plugin", "log", "list", "--plugin", "hhdebb.herdr-radar"
+        )))
+        if code:
+            print(message)
+            return code
         if os.environ.get("HERDR_ENV") != "1":
             print("Servidor Herdr correcto; colores pendientes: ejecuta --check directamente en Ghostty/Herdr")
             return 2
         if colors_disabled({key: os.environ.get(key) for key in ("NO_COLOR", "TERM")}):
             print("colores desactivados por NO_COLOR o TERM=dumb en el entorno de esta comprobación")
             return 1
-    except (OSError, ValueError, subprocess.SubprocessError):
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         print("no comprobado: falló la consulta del servidor Herdr")
         return 1
     return 0

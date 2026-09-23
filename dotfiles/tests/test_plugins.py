@@ -42,6 +42,7 @@ class PluginTests(unittest.TestCase):
         font.parent.mkdir(parents=True)
         font.write_bytes(b'fixture font')
         for name, body in {
+            'fnm': '#!/bin/sh\n[ "$1 $2 $3" = "exec --using default" ] || exit 1\nshift 3\nexec "$@"\n',
             'go': '#!/bin/sh\nexit 0\n',
             'brew': '#!/bin/sh\necho "unexpected brew invocation" >&2\nexit 1\n',
             'herdr': '''#!/usr/bin/env python3
@@ -109,16 +110,22 @@ else:
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.state.read_bytes(), before)
 
-    def test_check_detects_preferences_and_install_backs_up(self):
+    def test_check_detects_preferences_and_install_replaces_without_backup(self):
         self.install()
         config = self.home / '.config/herdr/plugins/config/hhdebb.herdr-radar/config.toml'
         config.write_text('group_gap = true\n')
         self.assertNotEqual(self.run_script('herdr/install-plugins.sh', '--check').returncode, 0)
         self.assertEqual(config.read_text(), 'group_gap = true\n')
         self.install()
-        backups = list(config.parent.glob('config.toml.backup.*'))
-        self.assertEqual(len(backups), 1)
-        self.assertEqual(backups[0].read_text(), 'group_gap = true\n')
+        self.assertEqual(config.read_bytes(), (self.scripts / 'herdr/radar.toml').read_bytes())
+        self.assertFalse(list(self.home.rglob('*.backup.*')))
+
+    def test_check_rejects_missing_fnm_default_even_when_shell_has_node(self):
+        self.install()
+        (self.bin / 'fnm').write_text('#!/bin/sh\nexit 1\n')
+        result = self.run_script('herdr/install-plugins.sh', '--check')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Falta Node.js predeterminado en fnm', result.stderr)
 
     def test_check_detects_missing_font(self):
         self.install()
@@ -137,10 +144,10 @@ else:
         self.assertEqual((self.scripts / 'herdr/radar.toml').read_text(), 'group_gap = true\n')
         self.assertNotIn(str(self.home), (self.scripts / 'herdr/config.toml').read_text())
         self.assertEqual(self.run_script('sync.sh', '--apply').returncode, 0)
-        self.assertTrue(list(radar.parent.glob('config.toml.backup.*')))
-        self.assertTrue(list((self.home / 'Library/Application Support/herdr-auto-title').glob('config.env.backup.*')))
+        self.assertFalse(list(self.root.rglob('*.backup.*')))
+        self.assertFalse(list(self.root.rglob('*.rollback.*')))
 
-    def test_md_function_round_trip_and_backup(self):
+    def test_md_function_round_trip_without_backup(self):
         result = self.run_script('sync.sh', '--apply')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         source = self.scripts / 'fish/functions/md.fish'
@@ -152,7 +159,8 @@ else:
         self.assertEqual(source.read_bytes(), target.read_bytes())
         target.write_text('local sentinel')
         self.assertEqual(self.run_script('sync.sh', '--apply').returncode, 0)
-        self.assertTrue(any(p.read_text() == 'local sentinel' for p in target.parent.glob('md.fish.backup.*')))
+        self.assertEqual(source.read_bytes(), target.read_bytes())
+        self.assertFalse(list(self.home.rglob('*.backup.*')))
 
     def test_missing_md_function_aborts_before_any_apply(self):
         sentinel = self.home / '.config/ghostty/config'

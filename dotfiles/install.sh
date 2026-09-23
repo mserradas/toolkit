@@ -161,32 +161,20 @@ copy_configs() {
     mkdir -p ~/.config/atuin
     mkdir -p ~/.config
 
-    # Función para copiar con backup
-    copy_with_backup() {
+    # Copiar directamente sin guardar versiones anteriores
+    copy_config() {
         local src="$1"
         local dst="$2"
-        local backup timestamp counter
-        if [[ -f "$dst" ]]; then
-            timestamp="$(date +%Y%m%d-%H%M%S)"
-            backup="${dst}.backup.${timestamp}"
-            counter=1
-            while [[ -e "$backup" ]]; do
-                backup="${dst}.backup.${timestamp}.${counter}"
-                counter=$((counter + 1))
-            done
-            cp -p "$dst" "$backup"
-            warn "Backup creado: $backup"
-        fi
         cp "$src" "$dst"
         success "$(basename "$dst") copiado"
     }
 
-    copy_with_backup "$DOTFILES_DIR/ghostty/config"       ~/.config/ghostty/config
-    copy_with_backup "$DOTFILES_DIR/fish/config.fish"     ~/.config/fish/config.fish
-    copy_with_backup "$DOTFILES_DIR/herdr/config.toml"     ~/.config/herdr/config.toml
-    copy_with_backup "$DOTFILES_DIR/starship/starship.toml" ~/.config/starship.toml
-    copy_with_backup "$DOTFILES_DIR/atuin/config.toml"     ~/.config/atuin/config.toml
-    copy_with_backup "$DOTFILES_DIR/fish/functions/md.fish" "$HOME/.config/fish/functions/md.fish"
+    copy_config "$DOTFILES_DIR/ghostty/config"       ~/.config/ghostty/config
+    copy_config "$DOTFILES_DIR/fish/config.fish"     ~/.config/fish/config.fish
+    copy_config "$DOTFILES_DIR/herdr/config.toml"     ~/.config/herdr/config.toml
+    copy_config "$DOTFILES_DIR/starship/starship.toml" ~/.config/starship.toml
+    copy_config "$DOTFILES_DIR/atuin/config.toml"     ~/.config/atuin/config.toml
+    copy_config "$DOTFILES_DIR/fish/functions/md.fish" "$HOME/.config/fish/functions/md.fish"
 }
 
 # --- INTEGRACIONES HERDR ---

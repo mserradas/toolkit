@@ -6,7 +6,6 @@ name = "catppuccin"
 auto_switch = false
 
 [keys]
-split_horizontal = ["prefix+h", "alt+enter"]
 focus_pane_left = "ctrl+alt+left"
 focus_pane_down = "ctrl+alt+down"
 focus_pane_up = "ctrl+alt+up"

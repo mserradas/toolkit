@@ -32,7 +32,7 @@ sys.exit(0 if matches else 1)
 }
 
 copy_preference() {
-    local src="$1" dst="$2" backup
+    local src="$1" dst="$2"
     if cmp -s "$src" "$dst"; then
         return
     fi
@@ -41,10 +41,6 @@ copy_preference() {
         return 1
     fi
     mkdir -p "$(dirname "$dst")"
-    if [[ -f "$dst" ]]; then
-        backup="$(mktemp "${dst}.backup.XXXXXX")"
-        cp -p "$dst" "$backup"
-    fi
     cp "$src" "$dst"
 }
 
@@ -52,11 +48,17 @@ copy_preference() {
 copy_preference "$SCRIPT_DIR/radar.toml" "$HOME/.config/herdr/plugins/config/hhdebb.herdr-radar/config.toml"
 copy_preference "$SCRIPT_DIR/auto-title.env" "$HOME/Library/Application Support/herdr-auto-title/config.env"
 
-if ! command -v node >/dev/null; then
-    [[ "$CHECK" -eq 0 ]] || { echo "Falta Node.js >=18 para Radar" >&2; exit 1; }
-    brew install node
+# Match Ghostty's Node selection; an interactive shell's Node is not evidence
+# that the Herdr server can start Radar.
+if ! command -v fnm >/dev/null; then
+    echo "Falta fnm: ejecuta install.sh para instalar las dependencias" >&2
+    exit 1
 fi
-node -e 'if (Number(process.versions.node.split(".")[0]) < 18) { console.error("Radar requiere Node.js >=18"); process.exit(1); }'
+if ! fnm exec --using default node --version >/dev/null 2>&1; then
+    [[ "$CHECK" -eq 0 ]] || { echo "Falta Node.js predeterminado en fnm" >&2; exit 1; }
+    fnm install --lts
+fi
+fnm exec --using default node -e 'if (Number(process.versions.node.split(".")[0]) < 18) { console.error("Radar requiere Node.js >=18 en fnm default"); process.exit(1); }'
 
 while read -r PLUGIN_ID PLUGIN_REPO PLUGIN_VERSION PLUGIN_REF; do
     [[ -n "$PLUGIN_ID" && "$PLUGIN_ID" != \#* ]] || continue

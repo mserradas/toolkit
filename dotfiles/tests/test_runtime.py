@@ -35,6 +35,12 @@ class RuntimeChecks(unittest.TestCase):
             self.assertEqual(runtime.server_problem(self.status(**{flag: True}))[0], 1)
         self.assertEqual(runtime.server_problem(self.status(compatible=False))[0], 1)
 
+    def test_radar_spawn_failure_is_reported_and_retry_clears_it(self):
+        failure = {"command": ["node", "bin/agent-state.js"], "status": "failed", "started_unix_ms": 1}
+        success = {**failure, "status": "completed", "started_unix_ms": 2}
+        self.assertEqual(runtime.radar_problem({"result": {"logs": [failure]}})[0], 1)
+        self.assertEqual(runtime.radar_problem({"result": {"logs": [success, failure]}})[0], 0)
+
     def test_nonempty_no_color_including_zero_disables_colors(self):
         for value in ("1", "true", "0"):
             self.assertTrue(runtime.colors_disabled({"NO_COLOR": value, "TERM": "xterm-256color"}))
@@ -45,14 +51,14 @@ class RuntimeChecks(unittest.TestCase):
             self.assertFalse(runtime.colors_disabled(env))
 
     def test_agent_environment_outside_herdr_is_not_treated_as_panel(self):
-        with patch.object(runtime, "capture", return_value=json.dumps(self.status())), \
+        with patch.object(runtime, "capture", side_effect=[json.dumps(self.status()), json.dumps({"result": {"logs": []}})]), \
                 patch.dict(runtime.os.environ, {"NO_COLOR": "1"}, clear=True), \
                 contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(runtime.main(), 2)
 
     def test_color_check_inside_herdr(self):
         for no_color, expected in (("", 0), ("1", 1)):
-            with patch.object(runtime, "capture", return_value=json.dumps(self.status())), \
+            with patch.object(runtime, "capture", side_effect=[json.dumps(self.status()), json.dumps({"result": {"logs": []}})]), \
                     patch.dict(runtime.os.environ, {"HERDR_ENV": "1", "NO_COLOR": no_color}, clear=True), \
                     contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(runtime.main(), expected)

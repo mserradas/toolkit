@@ -1,6 +1,6 @@
 # Dotfiles — entorno de terminal para macOS
 
-Instala y configura un entorno de terminal basado en Ghostty, Fish, Herdr, Starship y Atuin. El proceso es repetible y crea copias de seguridad versionadas antes de reemplazar configuraciones existentes.
+Instala y configura un entorno de terminal basado en Ghostty, Fish, Herdr, Starship y Atuin. El proceso es repetible y reemplaza configuraciones existentes sin crear backups.
 
 ## Responsabilidades
 
@@ -13,7 +13,7 @@ Instala y configura un entorno de terminal basado en Ghostty, Fish, Herdr, Stars
 | Starship | Mostrar el indicador de comandos con estado de Git, duración y versiones de entornos |
 | Herramientas | `eza`, `fzf`, `fd`, `bat`, `zoxide`, `fnm`, `git`, `pnpm` y `terminal-notifier` |
 
-Ghostty inicia Herdr por su nombre en `PATH`. Si Herdr no está disponible, muestra un aviso y abre Fish para que la terminal siga siendo utilizable. Ghostty no administra tabs, divisiones ni restauración de estado: esas funciones pertenecen únicamente a Herdr.
+Ghostty inicia Herdr mediante `fnm exec --using default herdr`, con las rutas de Homebrew en `PATH`. Así Radar recibe Node antes de que se abra Fish y no depende de la versión seleccionada por un proyecto. El instalador prepara Node LTS con fnm si no hay una versión predeterminada disponible. Ghostty administra la apariencia; Herdr administra Spaces, tabs, divisiones y procesos.
 
 ## Requisitos
 
@@ -54,7 +54,7 @@ La comprobación del servidor usa `python3`. Ejecuta `--check` directamente en F
 | 1 | Instala Homebrew | Se omite si ya existe |
 | 2 | Instala aplicaciones, paquetes y fuente | Homebrew conserva lo que ya está instalado |
 | 3 | Registra Fish en `/etc/shells` y lo configura como intérprete predeterminado | Solo cambia lo necesario |
-| 4 | Valida y copia las cinco configuraciones principales | Crea un backup versionado y reemplaza cada destino |
+| 4 | Valida y copia las cinco configuraciones principales | Reemplaza cada destino sin crear backups |
 | 5 | Instala Auto Title y Radar con sus preferencias y fuente | Conserva los commits fijados; añade Go o Node.js si faltan |
 | 6 | Instala los plugins Fish declarados en `fish/plugins.list` | Añade solo los ausentes; conserva otros plugins y las versiones instaladas |
 | 7 | Instala las integraciones de Herdr para OpenCode y Codex | Solo actúa cuando ya existe la carpeta de configuración del cliente |
@@ -74,22 +74,22 @@ Utilidades:   git, pnpm, terminal-notifier
 Pestañas:     kryptamine/herdr-auto-title v0.6.2
 Agentes:      hhdebb/herdr-radar v1.3.12
 Iconos:       Herdr Agent Icons Max (incluida en Radar)
-Plugins:      Go para compilar Auto Title; Node.js >=18 para Radar
+Plugins:      Go para compilar Auto Title; Node.js >=18 en `fnm default` para Radar
 ```
 
 ## Archivos administrados
 
-| Fuente del repositorio | Destino | Copia de seguridad previa |
-|---|---|---|
-| `ghostty/config` | `~/.config/ghostty/config` | `~/.config/ghostty/config.backup.<fecha>` |
-| `fish/config.fish` | `~/.config/fish/config.fish` | `~/.config/fish/config.fish.backup.<fecha>` |
-| `herdr/config.toml` | `~/.config/herdr/config.toml` | `~/.config/herdr/config.toml.backup.<fecha>` |
-| `starship/starship.toml` | `~/.config/starship.toml` | `~/.config/starship.toml.backup.<fecha>` |
-| `atuin/config.toml` | `~/.config/atuin/config.toml` | `~/.config/atuin/config.toml.backup.<fecha>` |
-| `herdr/radar.toml` | `~/.config/herdr/plugins/config/hhdebb.herdr-radar/config.toml` | Junto al destino, con sufijo `.backup.*` |
-| `herdr/auto-title.env` | `~/Library/Application Support/herdr-auto-title/config.env` | Junto al destino, con sufijo `.backup.*` |
+| Fuente del repositorio | Destino |
+|---|---|
+| `ghostty/config` | `~/.config/ghostty/config` |
+| `fish/config.fish` | `~/.config/fish/config.fish` |
+| `herdr/config.toml` | `~/.config/herdr/config.toml` |
+| `starship/starship.toml` | `~/.config/starship.toml` |
+| `atuin/config.toml` | `~/.config/atuin/config.toml` |
+| `herdr/radar.toml` | `~/.config/herdr/plugins/config/hhdebb.herdr-radar/config.toml` |
+| `herdr/auto-title.env` | `~/Library/Application Support/herdr-auto-title/config.env` |
 
-Los backups usan el formato `.backup.YYYYMMDD-HHMMSS`. Si dos ejecuciones coinciden en el mismo segundo, se añade un sufijo numérico; las versiones anteriores se conservan.
+`install.sh` y `sync.sh` reemplazan los destinos sin crear backups ni copias para deshacer cambios.
 
 ## Mantener las configuraciones
 
@@ -101,7 +101,7 @@ cd dotfiles
 git diff -- .
 ```
 
-`sync.sh` copia hacia el repositorio las configuraciones actuales de Ghostty, Fish, Herdr, Starship y Atuin, más las preferencias de Auto Title y Radar. Normaliza la ruta generada de la barra de Radar para resolverla mediante `XDG_STATE_HOME` o `$HOME` en cada equipo. Incluye también la función Fish `md`. Antes de escribir, comprueba las ocho fuentes y prepara todas las copias. Si una operación falla, restaura lo que ya hubiera cambiado.
+`sync.sh` copia hacia el repositorio las configuraciones actuales de Ghostty, Fish, Herdr, Starship y Atuin, más las preferencias de Auto Title y Radar. Normaliza la ruta generada de la barra de Radar para resolverla mediante `XDG_STATE_HOME` o `$HOME` en cada equipo. Incluye también la función Fish `md`. Antes de escribir, comprueba las ocho fuentes y prepara todas las copias. Si falla el reemplazo de un destino, los archivos ya reemplazados conservan los cambios.
 
 Sin argumentos, la sincronización se detiene si cualquiera de los siete archivos del repositorio ya tiene cambios locales. Para reemplazarlos deliberadamente:
 
@@ -115,7 +115,7 @@ Para aplicar en el usuario actual las configuraciones guardadas en el repositori
 ./sync.sh --apply
 ```
 
-Este modo crea un backup versionado de cada configuración activa antes de reemplazarla. No instala paquetes; en un ordenador nuevo ejecuta primero `./install.sh`.
+Este modo reemplaza cada configuración activa sin crear backups. No instala paquetes; en un ordenador nuevo ejecuta primero `./install.sh`.
 
 ## Ajustes locales por ordenador
 
@@ -184,7 +184,7 @@ bash herdr/install-plugins.sh
 bash herdr/install-plugins.sh --check
 ```
 
-El instalador guarda las preferencias antes de instalar o habilitar los plugins, e instala la fuente de Radar y su mapa de caracteres en Ghostty. Repetirlo conserva las versiones instaladas si coinciden con los commits fijados. Si reemplaza preferencias existentes, crea un backup `.backup.*`. `--check` solo comprueba los plugins, sus revisiones, las preferencias, Node.js y la fuente.
+El instalador guarda las preferencias antes de instalar o habilitar los plugins, e instala la fuente de Radar y su mapa de caracteres en Ghostty. Repetirlo conserva las versiones instaladas si coinciden con los commits fijados. Reemplaza las preferencias existentes sin crear backups. `--check` solo comprueba los plugins, sus revisiones, las preferencias, Node.js predeterminado de fnm y la fuente.
 
 Auto Title lee `~/Library/Application Support/herdr-auto-title/config.env` en macOS, **no** el directorio que muestra `herdr plugin config-dir`. Lee las preferencias al arrancar; cambiar el archivo de un plugin ya activo no reinicia sus procesos. Node.js >=18 debe estar disponible en el `PATH` del servidor Herdr para ejecutar Radar.
 
@@ -240,25 +240,17 @@ Los permisos de notificación de macOS son locales y no se sincronizan. Tras ins
 
 ## Recuperación
 
-Para localizar las copias de una configuración, de más reciente a más antigua:
+Para recuperar una configuración anterior, consulta su historial en Git y restaura la versión deseada en el repositorio. Después ejecuta `./sync.sh --apply` para aplicarla.
 
-```bash
-ls -1t ~/.config/herdr/config.toml.backup.*
-```
-
-Revisa la versión elegida y cópiala sobre el archivo activo:
-
-```bash
-cp ~/.config/herdr/config.toml.backup.YYYYMMDD-HHMMSS ~/.config/herdr/config.toml
-```
-
-Aplica el mismo patrón a Ghostty, Fish, Starship o Atuin. Después recarga Herdr con `Ctrl+A`, `Shift+R` o reinicia el servidor de manera controlada si fuera necesario. Los paquetes instalados con Homebrew se eliminan por separado mediante `brew uninstall` o `brew uninstall --cask`.
+Recarga Herdr con `Ctrl+A`, `Shift+R` o reinicia el servidor de manera controlada si fuera necesario. Los paquetes instalados con Homebrew se eliminan por separado mediante `brew uninstall` o `brew uninstall --cask`.
 
 ## Solución de problemas
 
 ### Atuin pierde los colores o Herdr sigue usando una versión anterior
 
 Ejecuta `./install.sh --check` directamente desde Fish dentro de Ghostty/Herdr. La comprobación contrasta el cliente con el servidor activo y consulta únicamente `NO_COLOR` y `TERM` del entorno heredado de ese panel. No lee el entorno de otros procesos ni verifica otros paneles.
+
+El healthcheck también revisa los fallos de ejecución de Node registrados por Radar en el servidor. Comprobar Node desde Fish no valida el entorno del servidor.
 
 Cerrar Ghostty solo desconecta el cliente: el servidor y los paneles pueden seguir vivos. Si el diagnóstico requiere un reinicio, termina primero el trabajo de los paneles y reinicia Herdr desde una sesión de terminal con los colores habilitados. No exportes `NO_COLOR` globalmente para toda la sesión.
 
